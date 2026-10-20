@@ -187,9 +187,38 @@ function learnedPayee(raw) {
   const m = A.plan.learned; if (!m) return null; const k = learnKey(raw); if (!k) return null;
   let name = m[k];
   if (!name) { const w = k.split(' '); for (let n = w.length; n >= 1 && !name; n--) { const pre = w.slice(0, n).join(' '); if (pre.length < 4) break; const hits = new Set(Object.entries(m).filter(([kk]) => kk === pre || kk.startsWith(pre + ' ')).map(([, v]) => v)); if (hits.size === 1) name = [...hits][0]; } }
+  if (!name) { // same family name as people you already classed (e.g. any “… Bouchenoire” → Famille)
+    const last = k.split(' ').slice(-1)[0];
+    if (last.length >= 4 && k.split(' ').length >= 2) { const hits = new Set(Object.entries(m).filter(([kk]) => kk.split(' ').length >= 2 && kk.split(' ').slice(-1)[0] === last).map(([, v]) => v)); if (hits.size === 1) name = [...hits][0]; }
+  }
   return name ? getPayee(name) : null;
 }
+/* common merchants → one of YOUR payees (the ones you used in YNAB), so new bank lines land where you'd have put them */
+const MERCHANTS = [
+  [/\b(lidl|carrefour|leclerc|auchan|intermarch|super ?u|hyper ?u|monoprix|franprix|casino|picard|aldi|netto|biocoop|grand frais|naturalia|spar|proxi|coccinelle)\b/i, ['courses', 'supermarche', 'alimentation', 'groceries']],
+  [/\b(mc ?do|mc ?donald'?s?|burger king|kfc|quick|subway|uber ?eats|deliveroo|o'?tacos|five guys|domino|pizza hut|just eat)\b/i, ['fast-food', 'fast food', 'restaurants', 'restaurant']],
+  [/\b(total|esso|shell|avia|bp|intermarche carbu|station|carburant|eni)\b(?!.*energies)/i, ['essence', 'carburant', 'fuel']],
+  [/\b(tisseo|sncf|ouigo|ratp|tcl|navigo|bolt|lime|uber(?! ?eats)|blablacar|flixbus|tier|dott)\b/i, ['transport', 'tisseo', 'transports']],
+  [/\b(vinci autoroutes|sanef|aprr|asf|cofiroute|peage|area)\b/i, ['peage', 'péage']],
+  [/\b(free|bouygues|orange|sfr|sosh|red by sfr|b ?& ?you)\b/i, ['telecoms', 'télécoms', 'telephone', 'internet']],
+  [/\b(totalenergies|edf|engie|ekwateur|enercoop)\b/i, ['total energies', 'energie', 'électricité', 'electricite']],
+  [/\b(spotify)\b/i, ['spotify', 'abonnements']], [/\b(netflix|disney|canal|prime video|deezer)\b/i, ['abonnements', 'streaming']],
+  [/\b(apple|icloud|google|microsoft|openai|anthropic|claude|adobe|notion|github)\b/i, ['abonnements tech', 'abonnements']],
+  [/\b(basic ?fit|fitness park|keepcool|on air|neoness|l'?orange bleue)\b/i, ['gym', 'sport', 'salle']],
+  [/\b(olivier|lolivier|maif|macif|axa|matmut|groupama|sogessur|spb|allianz|alan|harmonie)\b/i, ['olivier assurance', 'assurances', 'assurance', 'mutuelle']],
+  [/\b(amazon|zalando|fnac|darty|decathlon|ikea|action|h ?& ?m|zara|uniqlo|shein|vinted|leroy merlin|boulanger|sephora)\b/i, ['shopping', 'achats']],
+  [/\b(pharmacie|doctolib|medecin|dentiste|laboratoire)\b/i, ['santé', 'sante', 'pharmacie']],
+  [/\b(tabac|presse)\b/i, ['tabac']], [/\b(dgfip|impot|tresor public)\b/i, ['états', 'etat', 'impots', 'impôts']],
+];
+function merchantPayee(raw) {
+  const txt = ' ' + cleanPayee(raw) + ' ' + String(raw || '') + ' ';
+  for (const [re, names] of MERCHANTS) if (re.test(txt)) {
+    for (const n of names) { const y = A.plan.payees.find(p => p.lastCat && L.cat[p.lastCat] && norm(p.name.replace(/^\p{Extended_Pictographic}\s*/u, '')) === norm(n)); if (y) return y; }
+  }
+  return null;
+}
 function guessPayee(raw) {
+  const mp = merchantPayee(raw); if (mp) return mp;
   const n = norm(cleanPayee(raw)); if (n.length < 3) return null;
   const first = n.split(' ')[0];
   let best = null;
