@@ -1302,7 +1302,7 @@ async function diffSheet(acctId, bankV) {
     for (const r of booked) {
       const key = r.fitid ? 'eb:' + r.fitid : null;
       let m = key && here.find(t => !used.has(t.id) && t.importId === key);
-      if (!m) m = here.filter(t => !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 7).sort((p, q) => Math.abs(daysBetween(p.date, r.date)) - Math.abs(daysBetween(q.date, r.date)))[0];
+      if (!m) m = here.filter(t => !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 15).sort((p, q) => Math.abs(daysBetween(p.date, r.date)) - Math.abs(daysBetween(q.date, r.date)))[0];
       if (!m) { const pr = findPair(here.filter(t => !used.has(t.id)), r); if (pr) { used.add(pr[1].id); m = pr[0]; } }
       if (m) { used.add(m.id); if (key) here.filter(t => t.importId && t.importId.startsWith(key + '#')).forEach(t => used.add(t.id)); } else missing.push(r);
     }
@@ -1312,9 +1312,11 @@ async function diffSheet(acctId, bankV) {
     const bankBefore = bankV - sum(booked), appBefore = appV - sum(here);
     A.ui.diffMissing = missing; A.ui.diffAcct = acctId;
     const row = t => `<button class="li" data-a="txEdit" data-id="${t.id}"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></button>`;
-    const brow = (r, i) => `<div class="li"><span class="grow"><strong>${esc(r.payee)}</strong><div class="small muted">${esc(fmtDate(r.date))}</div></span><span class="num">${fmt(r.amount)}</span><button class="btn sm" data-a="diffAdd" data-i="${i}">Add</button></div>`;
+    const isCardDebit = r => /(DEBIT MENSUEL CARTE|RELEVE CARTE|FACTURE CARTE|DEBIT DIFFERE)/i.test(r.payee + ' ' + (r.memo || ''));
+    const brow = (r, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow"><strong>${esc(r.payee)}</strong><div class="small muted">${esc(fmtDate(r.date))}</div>${isCardDebit(r) ? `<div class="small amt-bad">Monthly card debit: don't add it if you typed these card purchases one by one in this account. From now on it is a transfer to your card account.</div>` : ''}</span><span class="num">${fmt(r.amount)}</span>${isCardDebit(r) ? '' : `<button class="btn sm" data-a="diffAdd" data-i="${i}">Add</button>`}</div>`;
     const body = `<p class="small muted" style="margin:0">Here ${fmt(appV)} · bank ${fmt(bankV)} · difference <strong>${fmt(appV - bankV)}</strong> (pending payments left out on both sides).</p>
       <div class="sec-t"><span>At the bank, missing here (${fmt(sum(missing))})</span></div>
+      <p class="small muted" style="margin:0">Add one only if you never recorded it at all (not even with another date or name).</p>
       <div class="card">${missing.map(brow).join('') || '<div class="li muted">None</div>'}</div>
       <div class="sec-t"><span>Here, not at the bank (${fmt(sum(extra))})</span></div>
       <p class="small muted" style="margin:0">Not found on your bank account in the last 60 days. Tap one to open it: delete it only if it really is not on your statement.</p>
