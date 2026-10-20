@@ -126,7 +126,7 @@ function bankWatchPending() {
 const BK_TYPE = { CACC: 'Current account', SVGS: 'Savings', LOAN: 'Loan', CARD: 'Card', CASH: 'Cash account', MOMA: 'Money market', TRAN: 'Transactional', OTHR: '' };
 function bankMapSheet(connId) {
   const c = A.plan.bank.conns.find(x => x.id === connId); if (!c) return;
-  const opts = sel => `<option value="">Don't import</option><option value="__new">+ Create a new account</option>` + A.plan.accounts.filter(a => !a.closed).map(a => `<option value="${a.id}" ${sel === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
+  const opts = sel => `<option value="">Don't import</option><option value="__new">+ Create a new account</option><option value="__newcc">+ Create a new credit card account</option>` + A.plan.accounts.filter(a => !a.closed).map(a => `<option value="${a.id}" ${sel === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
   const body = `<p style="margin:0" class="small muted">Choose where each bank account's transactions go. Imported transactions arrive unapproved, already matched with the ones you entered by hand.</p>
     <div class="card">${c.accounts.map((a, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow" style="min-width:150px"><strong>${esc(a.name)}</strong><div class="small muted">${esc([BK_TYPE[a.type] || '', a.product && a.product !== a.name ? a.product : '', a.iban ? '•••• ' + a.iban.slice(-4) : ''].filter(Boolean).join(' · '))}</div><div class="small muted" data-bkbal="${i}">Loading balance…</div></span>
       <select class="in" style="height:40px; width:auto; max-width:60%" data-bkmap="${i}" aria-label="Plan account for ${esc(a.name)}">${opts(a.acct)}</select></div>`).join('') || '<div class="li muted">The bank returned no accounts.</div>'}</div>
@@ -149,6 +149,7 @@ function bankMapSave(connId) {
     $$('[data-bkmap]').forEach(sel => {
       const a = c.accounts[+sel.dataset.bkmap]; let v = sel.value;
       if (v === '__new') { const na = addAccount({ name: a.name, type: 'checking', balance: 0 }); v = na.id; }
+      if (v === '__newcc') { const na = addAccount({ name: c.bank === 'Société Générale' ? 'SG Card' : c.bank + ' Card', type: 'credit', balance: 0 }); v = na.id; }
       a.acct = v || null; if (a.acct) a.from = from;
     });
   });
