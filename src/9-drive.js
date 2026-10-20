@@ -12,7 +12,8 @@ function proxyCfg() {
 const viaScript = () => !!proxyCfg();
 async function px(action, params = {}) {
   const c = proxyCfg(); if (!c) throw new Error('no proxy');
-  const r = await fetch(c.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: c.key, ...params }) });
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 60000);
+  const r = await fetch(c.url, { signal: ctl.signal, method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: c.key, ...params }) }).catch(e => { throw new Error(e.name === 'AbortError' ? 'script timeout' : 'script unreachable'); }).finally(() => clearTimeout(to));
   if (!r.ok) throw new Error('proxy ' + r.status);
   const j = await r.json(); if (j.error) { const e = new Error(j.error); e.code = j.error; throw e; } return j;
 }
@@ -76,7 +77,7 @@ async function gdPush() {
   } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : (e.code === 'unknown_action' ? 'update' : 'err')); }
   GD.busy = false;
 }
-function gdSchedule() { if (!gdOn() || (!GD.token && !viaScript())) return; clearTimeout(GD.timer); GD.timer = setTimeout(gdPush, 4000); }
+function gdSchedule() { if (!gdOn() || (!GD.token && !viaScript())) return; clearTimeout(GD.timer); GD.timer = setTimeout(gdPush, 10000); }
 async function gdSync() {
   if (!gdOn()) return;
   if (!GD.token && !viaScript()) {

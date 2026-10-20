@@ -82,6 +82,7 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
   .side-sec-h{display:flex; align-items:center; gap:6px; width:100%; border:none; background:transparent; color:var(--side-muted); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left}
   .side-sec-h .num{letter-spacing:0; font-size:13px; color:var(--side-fg)}
   .side-acct{display:flex; align-items:center; gap:8px; width:100%; border:none; background:transparent; color:inherit; padding:8px 10px 8px 32px; border-radius:9px; font-size:14px; font-weight:600; text-align:left}
+  .side-acct .linked{display:inline-flex; color:var(--good); opacity:.9} .side-acct .linked svg{width:13px; height:13px}
   .side-after{display:flex; gap:8px; padding:0 10px 6px 32px; margin-top:-4px; font-size:12.5px; opacity:.65} .side-after .num{font-size:12.5px}
   .side-acct:hover{background:rgba(255,255,255,.07)} .side-acct.dragging{opacity:.4} .side-acct.drop-over{box-shadow:inset 0 2px 0 var(--accent)} .side-acct.on{background:var(--side-on)} .side-acct .num{font-size:13.5px}
   .side .amt-bad{color:#F7A99E}
@@ -926,6 +927,7 @@ function payeeRuleApply(raw) {
 /* ================= Budget — UI: shell, plan, accounts, register ================= */
 const ico = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const I = {
+  link: ico('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>'),
   left: ico('<path d="M15 18l-6-6 6-6"/>'), right: ico('<path d="M9 18l6-6-6-6"/>'), down: ico('<path d="M6 9l6 6 6-6"/>'),
   plan: ico('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M9 10v10"/>'),
   accts: ico('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>'),
@@ -1012,7 +1014,7 @@ function deferredCards() {
   return out;
 }
 function sidebar() {
-  const p = A.plan, b = balances();
+  const p = A.plan, b = balances(); const linked = new Set((p.bank?.conns || []).flatMap(c => c.accounts.map(x => x.acct).filter(Boolean)));
   const sideNav = (v, l, icn, extra = '') => `<button class="snav ${A.view === v && (v !== 'accounts' || !A.acct) ? 'on' : ''}" data-a="nav" data-v="${v}" ${extra}>${icn}<span>${l}</span></button>`;
   let h = `<div class="side-head"><button class="side-plan" data-a="nav" data-v="settings"><span class="logo" aria-hidden="true">${I.plan}</span><span class="grow"><strong class="ellip" style="display:block">${esc(p.name)}</strong><span class="small muted syncState">${syncLabel()}</span></span></button></div>
     <nav class="side-nav">${sideNav('plan', 'Plan', I.plan)}${sideNav('reflect', 'Reflect', I.reflect)}${sideNav('tx', 'All Accounts', I.bank)}${sideNav('settings', 'Settings', I.gear)}</nav>`;
@@ -1021,7 +1023,7 @@ function sidebar() {
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
       const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); h += `<div class="side-after" title="Balance once the deferred card is debited"><span class="grow ellip">after card</span><span class="num ${after < 0 ? 'amt-bad' : ''}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
   }
@@ -1907,27 +1909,27 @@ function donut(items, total) {
 }
 function bars(months, series, opts = {}) {
   // series: [{key,label,color,values:[]}] stacked if opts.stack; line: opts.line values
-  const W = Math.max(320, months.length * 46), H = 220, pl = 54, pb = 26, pt = 10, ch = H - pb - pt, cw = W - pl - 8;
+  const avail = Math.max(300, Math.floor(DESK() ? innerWidth - 270 - (A.view === 'plan' ? 340 : 0) - 90 : innerWidth - 64)); const W = Math.max(avail, months.length * 16), H = 240, pl = 54, pb = 26, pt = 10, ch = H - pb - pt, cw = W - pl - 8;
   let max = 0, min = 0;
   months.forEach((_, i) => { let pos = 0, neg = 0; series.forEach(s => { const v = s.values[i] || 0; if (v > 0) pos += v; else neg += v; }); max = Math.max(max, pos); min = Math.min(min, neg); });
   if (opts.line) opts.line.forEach(v => { max = Math.max(max, v); min = Math.min(min, v); });
   if (max === min) max = min + 100;
   const raw = (max - min) / 4, p10 = Math.pow(10, Math.floor(Math.log10(raw || 1))); const step = [1, 2, 2.5, 5, 10].map(k => k * p10).find(k => k >= raw) || 10 * p10;
   max = Math.ceil(max / step) * step; min = Math.floor(min / step) * step; const nT = Math.round((max - min) / step);
-  const y = v => pt + (max - v) / (max - min) * ch; const bw = Math.min(28, cw / months.length * 0.6);
+  const y = v => pt + (max - v) / (max - min) * ch; const bw = Math.min(36, cw / months.length * 0.6); const lblEvery = Math.max(1, Math.ceil(46 / (cw / months.length)));
   let g = '';
   for (let k = 0; k <= nT; k++) { const v = min + step * k; g += `<line x1="${pl}" x2="${W - 8}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="10.5" fill="var(--muted)" font-family="Manrope, sans-serif">${esc(fmtS(v))}</text>`; }
   months.forEach((m, i) => {
     const cx = pl + cw * (i + 0.5) / months.length; let pos = 0, neg = 0;
     series.forEach(s => { const v = s.values[i] || 0; if (!v) return; let y0, y1; if (v > 0) { y0 = y(pos + v); y1 = y(pos); pos += v; } else { y0 = y(neg); y1 = y(neg + v); neg += v; } g += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, y1 - y0).toFixed(1)}" rx="3" fill="var(${s.color})"><title>${esc(s.label)} · ${esc(monthLabel(m))} : ${esc(fmt(v))}</title></rect>`; });
-    g += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="var(--muted)" font-family="Manrope, sans-serif">${esc(monthLabel(m, true))}</text>`;
+    if (i % lblEvery === 0) g += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="Manrope, sans-serif">${esc(monthLabel(m, true))}</text>`;
   });
   if (opts.line) {
     const pts = opts.line.map((v, i) => [pl + cw * (i + 0.5) / months.length, y(v)]);
     g += `<polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--fg)" stroke-width="2.2"/>` + pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 4.5 : 3}" fill="var(--fg)"><title>${esc(opts.lineLabel || '')} : ${esc(fmt(opts.line[i]))}</title></circle>`).join('');
   }
   if (min < 0) g += `<line x1="${pl}" x2="${W - 8}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--muted)" stroke-width="1"/>`;
-  return `<svg viewBox="0 0 ${W} ${H}" style="min-width:${Math.min(W, 640)}px" role="img" aria-label="${esc(opts.aria || 'Graphique')}">${g}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:${W}px; height:${H}px; max-width:none" role="img" aria-label="${esc(opts.aria || 'Graphique')}">${g}</svg>`;
 }
 function monthsBetween(a, b) { const out = []; for (let m = a; m <= b; m = addMonths(m, 1)) out.push(m); return out; }
 function viewReflect() {
@@ -2505,7 +2507,8 @@ function proxyCfg() {
 const viaScript = () => !!proxyCfg();
 async function px(action, params = {}) {
   const c = proxyCfg(); if (!c) throw new Error('no proxy');
-  const r = await fetch(c.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: c.key, ...params }) });
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 60000);
+  const r = await fetch(c.url, { signal: ctl.signal, method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: c.key, ...params }) }).catch(e => { throw new Error(e.name === 'AbortError' ? 'script timeout' : 'script unreachable'); }).finally(() => clearTimeout(to));
   if (!r.ok) throw new Error('proxy ' + r.status);
   const j = await r.json(); if (j.error) { const e = new Error(j.error); e.code = j.error; throw e; } return j;
 }
@@ -2569,7 +2572,7 @@ async function gdPush() {
   } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : (e.code === 'unknown_action' ? 'update' : 'err')); }
   GD.busy = false;
 }
-function gdSchedule() { if (!gdOn() || (!GD.token && !viaScript())) return; clearTimeout(GD.timer); GD.timer = setTimeout(gdPush, 4000); }
+function gdSchedule() { if (!gdOn() || (!GD.token && !viaScript())) return; clearTimeout(GD.timer); GD.timer = setTimeout(gdPush, 10000); }
 async function gdSync() {
   if (!gdOn()) return;
   if (!GD.token && !viaScript()) {
@@ -2641,7 +2644,8 @@ const bankCfg = () => (A.plan.bank ||= { url: '', key: '', conns: [], pending: n
 async function bk(action, params = {}) {
   const b = bankCfg(); if (!b.url) throw new Error('Bank connection is not set up');
   // key and parameters travel in the request body (never in the URL), over HTTPS, to the user's own script
-  const r = await fetch(b.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: b.key, ...params }) });
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 45000);
+  const r = await fetch(b.url, { signal: ctl.signal, method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: b.key, ...params }) }).catch(e => { throw new Error(e.name === 'AbortError' ? 'Your Apps Script did not answer in time. Try again in a minute.' : 'Could not reach your Apps Script.'); }).finally(() => clearTimeout(to));
   if (!r.ok) throw new Error('Proxy responded ' + r.status);
   const j = await r.json();
   if (j.error) { const e = new Error(j.error === 'unauthorized' ? 'The proxy refused the request (wrong key).' : j.error === 'not_configured' ? 'Add APP_ID and PRIVATE_KEY in the Apps Script properties.' : (j.error + (j.detail ? ': ' + JSON.stringify(j.detail).slice(0, 200) : ''))); e.code = j.error; throw e; }

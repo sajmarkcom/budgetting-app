@@ -196,27 +196,27 @@ function donut(items, total) {
 }
 function bars(months, series, opts = {}) {
   // series: [{key,label,color,values:[]}] stacked if opts.stack; line: opts.line values
-  const W = Math.max(320, months.length * 46), H = 220, pl = 54, pb = 26, pt = 10, ch = H - pb - pt, cw = W - pl - 8;
+  const avail = Math.max(300, Math.floor(DESK() ? innerWidth - 270 - (A.view === 'plan' ? 340 : 0) - 90 : innerWidth - 64)); const W = Math.max(avail, months.length * 16), H = 240, pl = 54, pb = 26, pt = 10, ch = H - pb - pt, cw = W - pl - 8;
   let max = 0, min = 0;
   months.forEach((_, i) => { let pos = 0, neg = 0; series.forEach(s => { const v = s.values[i] || 0; if (v > 0) pos += v; else neg += v; }); max = Math.max(max, pos); min = Math.min(min, neg); });
   if (opts.line) opts.line.forEach(v => { max = Math.max(max, v); min = Math.min(min, v); });
   if (max === min) max = min + 100;
   const raw = (max - min) / 4, p10 = Math.pow(10, Math.floor(Math.log10(raw || 1))); const step = [1, 2, 2.5, 5, 10].map(k => k * p10).find(k => k >= raw) || 10 * p10;
   max = Math.ceil(max / step) * step; min = Math.floor(min / step) * step; const nT = Math.round((max - min) / step);
-  const y = v => pt + (max - v) / (max - min) * ch; const bw = Math.min(28, cw / months.length * 0.6);
+  const y = v => pt + (max - v) / (max - min) * ch; const bw = Math.min(36, cw / months.length * 0.6); const lblEvery = Math.max(1, Math.ceil(46 / (cw / months.length)));
   let g = '';
   for (let k = 0; k <= nT; k++) { const v = min + step * k; g += `<line x1="${pl}" x2="${W - 8}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="10.5" fill="var(--muted)" font-family="Manrope, sans-serif">${esc(fmtS(v))}</text>`; }
   months.forEach((m, i) => {
     const cx = pl + cw * (i + 0.5) / months.length; let pos = 0, neg = 0;
     series.forEach(s => { const v = s.values[i] || 0; if (!v) return; let y0, y1; if (v > 0) { y0 = y(pos + v); y1 = y(pos); pos += v; } else { y0 = y(neg); y1 = y(neg + v); neg += v; } g += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, y1 - y0).toFixed(1)}" rx="3" fill="var(${s.color})"><title>${esc(s.label)} · ${esc(monthLabel(m))} : ${esc(fmt(v))}</title></rect>`; });
-    g += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="var(--muted)" font-family="Manrope, sans-serif">${esc(monthLabel(m, true))}</text>`;
+    if (i % lblEvery === 0) g += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="Manrope, sans-serif">${esc(monthLabel(m, true))}</text>`;
   });
   if (opts.line) {
     const pts = opts.line.map((v, i) => [pl + cw * (i + 0.5) / months.length, y(v)]);
     g += `<polyline points="${pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--fg)" stroke-width="2.2"/>` + pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 4.5 : 3}" fill="var(--fg)"><title>${esc(opts.lineLabel || '')} : ${esc(fmt(opts.line[i]))}</title></circle>`).join('');
   }
   if (min < 0) g += `<line x1="${pl}" x2="${W - 8}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--muted)" stroke-width="1"/>`;
-  return `<svg viewBox="0 0 ${W} ${H}" style="min-width:${Math.min(W, 640)}px" role="img" aria-label="${esc(opts.aria || 'Graphique')}">${g}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:${W}px; height:${H}px; max-width:none" role="img" aria-label="${esc(opts.aria || 'Graphique')}">${g}</svg>`;
 }
 function monthsBetween(a, b) { const out = []; for (let m = a; m <= b; m = addMonths(m, 1)) out.push(m); return out; }
 function viewReflect() {
