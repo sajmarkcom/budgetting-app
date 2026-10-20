@@ -142,6 +142,8 @@ const ACT = {
   bankMap: el => bankMapSheet(el.dataset.id), bankMapSave: el => bankMapSave(el.dataset.id), bankSyncNow: () => bankSync(true),
   bankCancel: () => { pendSave(pendAll().filter(x => x.plan !== A.plan.id)); clearInterval(bankPoll); bankPoll = null; render(); },
   bankCheck: () => bankCheckOnce(true),
+  dupReview: el => dupReviewSheet(el.dataset.id),
+  dupRemove: el => { const d = cardDups(el.dataset.id); mutate(`Removed ${d.length} duplicate${d.length > 1 ? 's' : ''}`, () => { for (const x of d) { if (!x.card.cat && x.main.cat) x.card.cat = x.main.cat; if (!x.card.cat && x.main.splits) x.card.splits = x.main.splits; if (x.card.memo === '' && x.main.memo) x.card.memo = x.main.memo; const i = A.tx.indexOf(x.main); if (i >= 0) A.tx.splice(i, 1); } }); closeSheet(); },
   bankRemove: el => confirmSheet('Disconnect bank', 'Stops importing from this bank and revokes the access at Enable Banking. Transactions already imported stay.', 'Disconnect', 'bankRemoveDo', { id: el.dataset.id }),
   bankRemoveDo: async el => { const c = A.plan.bank.conns.find(x => x.id === el.dataset.id); closeSheet(); if (!c) return; try { await bk('delete', { session: c.session }); } catch (e) { } mutate('Bank disconnected', () => { A.plan.bank.conns = A.plan.bank.conns.filter(x => x !== c); }); },
   yLoad: () => yLoad(), yPick: el => yPick(+el.dataset.i), yDo: () => yDo(),

@@ -181,7 +181,8 @@ function importRows(acct, rows, from) {
     const match = existing.find(t => !t.importId && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
     const y = getPayee(payeeRuleApply(r.payee) || r.payee);
-    const cat = y?.lastCat && L.cat[y.lastCat] && onBudget(L.acct[acct]) ? y.lastCat : null;
+    const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
+    if (!cat && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
     A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, ...(r.pending ? { pend: true } : {}) });
     if (r.pending) pendSeen.add(key);
     ids.add(key); nn++;

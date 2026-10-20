@@ -330,6 +330,25 @@ function txCatLabel(t) {
   if (onBudget(a)) return 'Category Needed';
   return '';
 }
+/* card purchases imported in the deferred card account that were also typed by hand in the current account */
+function cardDups(acctId) {
+  const dc = deferredCards(); let main = null, cards = [];
+  for (const [m, cs] of Object.entries(dc)) if (m === acctId || cs.includes(acctId)) { main = m; cards = cs; }
+  if (!main) return [];
+  const cardTx = A.tx.filter(t => cards.includes(t.acct) && t.importId && t.amount < 0).sort((a, b) => a.date < b.date ? -1 : 1);
+  if (!cardTx.length) return [];
+  const start = addDays(cardTx[0].date, -7), used = new Set(), out = [];
+  const manual = A.tx.filter(t => t.acct === main && !t.importId && !t.transferAcct && t.amount < 0 && t.date >= start && t.cleared !== 'r');
+  for (const c of cardTx) { const m = manual.find(t => !used.has(t.id) && t.amount === c.amount && Math.abs(daysBetween(t.date, c.date)) <= 7); if (m) { used.add(m.id); out.push({ card: c, main: m }); } }
+  return out;
+}
+function dupReviewSheet(id) {
+  const d = cardDups(id); if (!d.length) return;
+  const row = t => `${esc(fmtDate ? fmtDate(t.date) : t.date)} · ${esc(payeeName(t) || '—')}`;
+  openSheet('Duplicates', `<p class="small muted" style="margin:0">These purchases are in your card account (from the bank) and were also typed by hand in ${esc(L.acct[d[0].main.acct].name)}. Remove the hand-typed copies so they are not counted twice. Their category is kept on the card purchase.</p>
+    <div class="card">${d.map(x => `<div class="li"><span class="grow"><strong>${row(x.main)}</strong><div class="small muted">Card: ${row(x.card)}</div></span><span class="num">${fmt(x.main.amount)}</span></div>`).join('')}</div>`,
+    `<button class="btn pri block" data-a="dupRemove" data-id="${id}">Remove ${d.length} hand-typed cop${d.length > 1 ? 'ies' : 'y'}</button>`);
+}
 function viewRegister() {
   const id = A.acct, all = id === 'all', a = all ? null : L.acct[id], desk = DESK();
   if (!all && !a) { A.acct = null; return viewAccounts(); }
@@ -340,6 +359,8 @@ function viewRegister() {
     all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
   h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>`;
+  const dups = all ? [] : cardDups(id);
+  if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;
   h += `<div class="toolbar">
     ${desk ? `<button class="tbtn" data-a="newTx">${I.plus} Add Transaction</button>` : ''}
     ${!all ? `<button class="tbtn" data-a="reconcile" data-id="${id}">${I.lock} Reconcile</button>` : ''}
