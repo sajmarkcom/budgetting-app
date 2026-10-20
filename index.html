@@ -2694,7 +2694,7 @@ async function gdPush() {
       GD.fileId = (await r.json()).id;
     }
     gdPaint('ok');
-  } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : (e.code === 'unknown_action' ? 'update' : 'err')); }
+  } catch (e) { console.warn('gdPush', e); GD.lastErr = String(e?.message || e || '').slice(0, 80); gdPaint(e.message === 'auth' ? 'needlogin' : (e.code === 'unknown_action' ? 'update' : 'err')); clearTimeout(GD.retry); GD.retry = setTimeout(gdPush, 60000); }
   GD.busy = false;
 }
 function gdSchedule() { if (!gdOn() || (!GD.token && !viaScript())) return; clearTimeout(GD.timer); GD.timer = setTimeout(gdPush, 10000); }
