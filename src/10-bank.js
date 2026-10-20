@@ -4,7 +4,7 @@ async function bk(action, params = {}) {
   const b = bankCfg(); if (!b.url) throw new Error('Bank connection is not set up');
   // key and parameters travel in the request body (never in the URL), over HTTPS, to the user's own script
   const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 45000);
-  const r = await fetch(b.url, { signal: ctl.signal, method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: b.key, ...params }) }).catch(e => { throw new Error(e.name === 'AbortError' ? 'Your Apps Script did not answer in time. Try again in a minute.' : 'Could not reach your Apps Script.'); }).finally(() => clearTimeout(to));
+  const r = await fetch(b.url, { signal: ctl.signal, method: 'POST', redirect: 'follow', credentials: 'omit', cache: 'no-store', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, key: b.key, ...params }) }).catch(e => { throw new Error(e.name === 'AbortError' ? 'Your Apps Script did not answer in time. Try again in a minute.' : 'Could not reach your Apps Script.'); }).finally(() => clearTimeout(to));
   if (!r.ok) throw new Error('Proxy responded ' + r.status);
   const j = await r.json();
   if (j.error) { const e = new Error(j.error === 'unauthorized' ? 'The proxy refused the request (wrong key).' : j.error === 'not_configured' ? 'Add APP_ID and PRIVATE_KEY in the Apps Script properties.' : (j.error + (j.detail ? ': ' + JSON.stringify(j.detail).slice(0, 200) : ''))); e.code = j.error; throw e; }
