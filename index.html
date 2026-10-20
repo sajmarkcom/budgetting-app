@@ -2765,7 +2765,12 @@ function driveSettingsHtml() {
   </div>`;
 }
 /* ================= Budget — direct bank connection (Enable Banking through your own Apps Script proxy) ================= */
-const bankCfg = () => (A.plan.bank ||= { url: '', key: '', conns: [], pending: null });
+function bankCfg() {
+  const b = (A.plan.bank ||= { url: '', key: '', conns: [], pending: null }); b.conns ||= [];
+  // a device linked with a pairing code already knows your script: reuse it instead of asking again
+  if (!b.url) { try { const x = JSON.parse(localStorage.getItem('budget.proxy') || 'null'); if (x?.url && x?.key) { b.url = x.url; b.key = x.key; } } catch (e) { } }
+  return b;
+}
 async function bk(action, params = {}) {
   const b = bankCfg(); if (!b.url) throw new Error('Bank connection is not set up');
   // key and parameters travel in the request body (never in the URL), over HTTPS, to the user's own script
@@ -2780,7 +2785,7 @@ function randKey() { const a = new Uint8Array(24); crypto.getRandomValues(a); re
 
 /* ---------- settings block ---------- */
 function bankSettingsHtml() {
-  const b = A.plan.bank;
+  const b = bankCfg();
   if (!b?.url) return `<div class="sec-t"><span>Bank Connections</span></div><div class="card">
     <button class="li" data-a="bankSetup"><span class="ic">${I.bank}</span><span class="grow"><strong>Set up direct import</strong><div class="small muted">Import transactions from your bank automatically (free, via Enable Banking)</div></span>${I.right}</button></div>`;
   const rows = b.conns.map(c => {
