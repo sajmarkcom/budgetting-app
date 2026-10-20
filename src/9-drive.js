@@ -1,12 +1,12 @@
 /* ================= Budget — Google Drive sync (hidden app folder, only this app can see the file) ================= */
-const DRIVE_CLIENT_ID = '96837709976-v0bf7dogjp16furjcl8h92fm77rr14sc.apps.googleusercontent.com';           // filled once the Google Cloud client exists; can also be set from Réglages
+const DRIVE_CLIENT_ID = '96837709976-v0bf7dogjp16furjcl8h92fm77rr14sc.apps.googleusercontent.com';           // Google Cloud OAuth client (public identifier, not a secret)
 const DRIVE_FILE = 'budget-data.json';
 const GD = { token: null, exp: 0, fileId: null, busy: false, timer: null, status: 'off' };
 const gdClient = () => DRIVE_CLIENT_ID || (() => { try { return localStorage.getItem('budget.gclient') || ''; } catch (e) { return ''; } })();
 const gdOn = () => { try { return localStorage.getItem('budget.drive') === '1'; } catch (e) { return false; } };
 const gdRedirect = () => location.origin + location.pathname;
 function gdAuth(silent) {
-  const cid = gdClient(); if (!cid) { toast('Ajoute d\'abord l\'identifiant Google dans Réglages'); return; }
+  const cid = gdClient(); if (!cid) { toast('Add the Google client ID in Settings first'); return; }
   try { localStorage.setItem('budget.drive', '1'); localStorage.setItem('budget.gtry', String(Date.now())); } catch (e) { }
   const q = new URLSearchParams({ client_id: cid, redirect_uri: gdRedirect(), response_type: 'token', scope: 'https://www.googleapis.com/auth/drive.appdata', include_granted_scopes: 'true', state: silent ? 'gd-silent' : 'gd', prompt: silent ? 'none' : 'consent' });
   location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q;
@@ -69,31 +69,45 @@ async function gdSync() {
   try {
     const raw = await gdPull();
     const remote = raw ? JSON.parse(raw) : null;
-    const rU = remote?.index?.updatedAt || 0, lU = A.index?.updatedAt || 0;
-    if (remote && rU > lU) {
-      try { localStorage.setItem(LKEY, raw); } catch (e) { }
-      A.index = remote.index; const cur = remote.plans?.[A.index.current] || remote.plans?.[A.index.plans?.[0]?.id];
-      if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; } else { A.plan = null; A.tx = []; }
-      A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); if (A.plan) runScheduled(); render(); toast('Budget récupéré depuis Google Drive');
-      gdPaint('ok');
-    } else if (!remote || lU > rU) { await gdPush(); }
-    else gdPaint('ok');
+    if (!remote) { await gdPush(); return; }
+    // merge plan by plan: the most recently edited copy of each plan wins, nothing is ever dropped
+    let local = null; try { local = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { }
+    local ||= { index: { plans: [], current: null, updatedAt: 0 }, plans: {} };
+    const merged = { index: { plans: [], current: local.index?.current || remote.index?.current || null, updatedAt: Math.max(local.index?.updatedAt || 0, remote.index?.updatedAt || 0), deleted: [...new Set([...(local.index?.deleted || []), ...(remote.index?.deleted || [])])] }, plans: {} };
+    const ids = new Set([...Object.keys(local.plans || {}), ...Object.keys(remote.plans || {})]);
+    let pulled = false, pushNeeded = false;
+    for (const id of ids) {
+      if (merged.index.deleted.includes(id)) continue;
+      const l = local.plans?.[id], r = remote.plans?.[id];
+      const lu = l?.plan?.updatedAt || 0, ru = r?.plan?.updatedAt || 0;
+      if (r && (!l || ru > lu)) { merged.plans[id] = r; if (id === A.plan?.id || !l) pulled = true; if (!l) pulled = true; }
+      else { merged.plans[id] = l; if (!r || lu > ru) pushNeeded = true; }
+      const name = merged.plans[id].plan.name; merged.index.plans.push({ id, name });
+    }
+    if (!merged.plans[merged.index.current]) merged.index.current = merged.index.plans[0]?.id || null;
+    try { localStorage.setItem(LKEY, JSON.stringify(merged)); } catch (e) { }
+    A.index = merged.index;
+    const cur = merged.plans[merged.index.current];
+    if (cur && (pulled || !A.plan || A.plan.id !== cur.plan.id)) {
+      A.plan = cur.plan; A.tx = cur.tx; A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
+    } else render();
+    if (pushNeeded || JSON.stringify(Object.keys(remote.plans || {}).sort()) !== JSON.stringify(Object.keys(merged.plans).sort())) await gdPush(); else gdPaint('ok');
   } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); }
 }
 function gdDisconnect() {
   try { localStorage.removeItem('budget.drive'); sessionStorage.removeItem('budget.gtok'); } catch (e) { }
   if (GD.token) fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(GD.token), { method: 'POST' }).catch(() => { });
-  GD.token = null; GD.fileId = null; A.sync = 'local'; paintSync(); render(); toast('Synchro Google Drive désactivée');
+  GD.token = null; GD.fileId = null; A.sync = 'local'; paintSync(); render(); toast('Google Drive sync turned off');
 }
 function driveSettingsHtml() {
   const on = gdOn();
-  return `<div class="sec-t"><span>Synchro Google Drive</span></div>
+  return `<div class="sec-t"><span>Google Drive Sync</span></div>
   <div class="card">
-    <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong id="syncState">${syncLabel()}</strong><div class="small muted">${on ? 'Un fichier caché dans ton Drive, visible seulement par cette appli. Sauvegarde automatique à chaque changement.' : 'Retrouve ton budget sur ton tel et ton Mac, sauvegardé dans ton Drive.'}</div></span></div>
-    ${on ? `<button class="li" data-a="gdNow"><span class="ic">${I.sync}</span><span class="grow"><strong>Synchroniser maintenant</strong></span></button>
-      ${GD.status === 'needlogin' || !GD.token ? `<button class="li" data-a="gdLogin"><span class="ic">${I.lock}</span><span class="grow"><strong>Se reconnecter à Google</strong></span></button>` : ''}
-      <button class="li" data-a="gdOff"><span class="ic">${I.close}</span><span class="grow"><strong>Désactiver la synchro</strong><div class="small muted">Tes données restent sur cet appareil</div></span></button>`
-    : `<button class="li" data-a="gdLogin" ${gdClient() ? '' : 'disabled'}><span class="ic">${I.lock}</span><span class="grow"><strong>Connecter Google Drive</strong>${gdClient() ? '' : '<div class="small muted">Ajoute d\'abord l\'identifiant ci-dessous</div>'}</span></button>`}
-    ${!DRIVE_CLIENT_ID ? `<div class="li" style="flex-direction:column; align-items:stretch; gap:6px"><label class="lbl2" for="gClient">Identifiant client Google (OAuth)</label><input id="gClient" class="in" value="${esc(gdClient())}" placeholder="xxxx.apps.googleusercontent.com" data-c="gClient" autocomplete="off" spellcheck="false"></div>` : ''}
+    <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong class="syncState">${syncLabel()}</strong><div class="small muted">${on ? 'A hidden file in your Google Drive that only this app can see. Saved automatically after every change.' : 'Keep your plan on your phone and your computer, saved in your Google Drive.'}</div></span></div>
+    ${on ? `<button class="li" data-a="gdNow"><span class="ic">${I.sync}</span><span class="grow"><strong>Sync now</strong></span></button>
+      ${GD.status === 'needlogin' || !GD.token ? `<button class="li" data-a="gdLogin"><span class="ic">${I.lock}</span><span class="grow"><strong>Sign in to Google again</strong></span></button>` : ''}
+      <button class="li" data-a="gdOff"><span class="ic">${I.close}</span><span class="grow"><strong>Turn off sync</strong><div class="small muted">Your data stays on this device</div></span></button>`
+    : `<button class="li" data-a="gdLogin" ${gdClient() ? '' : 'disabled'}><span class="ic">${I.lock}</span><span class="grow"><strong>Connect Google Drive</strong>${gdClient() ? '' : '<div class="small muted">Add the client ID below first</div>'}</span></button>`}
+    ${!DRIVE_CLIENT_ID ? `<div class="li" style="flex-direction:column; align-items:stretch; gap:6px"><label class="lbl2" for="gClient">Google OAuth client ID</label><input id="gClient" class="in" value="${esc(gdClient())}" placeholder="xxxx.apps.googleusercontent.com" data-c="gClient" autocomplete="off" spellcheck="false"></div>` : ''}
   </div>`;
 }

@@ -12,16 +12,16 @@ function ynMonth(s) {
 }
 function ynSheet() {
   YN = { files: [], reg: null, plan: null };
-  const body = `<p style="margin:0">Importe ton historique YNAB complet : comptes, enveloppes, réparti mois par mois et toutes les opérations. Tout se passe sur ce téléphone, rien n'est envoyé nulle part.</p>
+  const body = `<p style="margin:0">Bring your full YNAB history over: accounts, categories, assigned money for every month and all transactions. Everything happens on this device; nothing is sent anywhere else.</p>
     ${yApiBox()}    <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:8px">
-      <strong>1. Exporter depuis YNAB (sur ordinateur)</strong>
-      <span class="small muted">app.ynab.com → menu du budget (en haut à gauche) → « Export Plan ». YNAB télécharge un fichier .zip. Range-le dans ton Google Drive.</span>
-      <strong>2. Le choisir ici</strong>
-      <span class="small muted">Sélectionne le .zip, ou les deux fichiers qu'il contient (Plan et Register).</span>
+      <strong>1. Export from YNAB (on a computer)</strong>
+      <span class="small muted">app.ynab.com → plan menu (top left) → “Export Plan”. YNAB downloads a .zip file.</span>
+      <strong>2. Choose it here</strong>
+      <span class="small muted">Pick the .zip, or the two files inside it (Plan and Register).</span>
     </div>
-    <label class="btn pri block" for="ynFile">${I.file} Choisir l'export YNAB</label><input id="ynFile" type="file" multiple accept=".zip,.csv,.tsv,.txt,application/zip,text/csv" hidden data-c="ynFile">
+    <label class="btn pri block" for="ynFile">${I.file} Choose YNAB export</label><input id="ynFile" type="file" multiple accept=".zip,.csv,.tsv,.txt,application/zip,text/csv" hidden data-c="ynFile">
     <div id="ynStep"></div>`;
-  openSheet('Importer depuis YNAB', body);
+  openSheet('Import from YNAB', body);
 }
 async function loadJSZip() {
   if (window.JSZip) return window.JSZip;
@@ -29,7 +29,7 @@ async function loadJSZip() {
   return window.JSZip;
 }
 async function ynFiles(fileList) {
-  const step = $('#ynStep'); step.innerHTML = `<div class="muted small">Lecture…</div>`;
+  const step = $('#ynStep'); step.innerHTML = `<div class="muted small">Reading…</div>`;
   const texts = [];
   try {
     for (const f of fileList) {
@@ -38,14 +38,14 @@ async function ynFiles(fileList) {
         for (const name of Object.keys(z.files)) { if (z.files[name].dir || !/\.(csv|tsv|txt)$/i.test(name)) continue; texts.push(decodeFile(await z.files[name].async('arraybuffer'))); }
       } else texts.push(decodeFile(await f.arrayBuffer()));
     }
-  } catch (e) { step.innerHTML = `<div class="banner bad">${I.info}<span>Impossible d'ouvrir le fichier. Si c'est un .zip, ouvre-le dans l'app Fichiers puis choisis les deux fichiers qu'il contient.</span></div>`; return; }
+  } catch (e) { step.innerHTML = `<div class="banner bad">${I.info}<span>Could not open the file. If it is a .zip, unzip it and choose the two files inside.</span></div>`; return; }
   for (const t of texts) {
     const rows = parseCSV(t); if (!rows.length) continue;
     const h = rows[0].map(norm);
     if (h.includes('payee') && h.includes('account')) YN.reg = rows;
     else if (h.includes('month') && (h.includes('assigned') || h.includes('budgeted'))) YN.plan = rows;
   }
-  if (!YN.reg) { step.innerHTML = `<div class="banner bad">${I.info}<span>Je ne trouve pas le fichier des opérations (Register). Vérifie que c'est bien l'export « Export Plan » de YNAB.</span></div>`; return; }
+  if (!YN.reg) { step.innerHTML = `<div class="banner bad">${I.info}<span>The transactions file (Register) is missing. Make sure this is YNAB's “Export Plan” file.</span></div>`; return; }
   ynAnalyse(); ynPreview();
 }
 function ynAnalyse() {
@@ -88,19 +88,19 @@ function ynPreview() {
   const A_ = Object.values(YN.accts);
   const mN = Object.keys(YN.months).length;
   const opts = sel => Object.entries(ACCT).map(([k, v]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${v.label}</option>`).join('');
-  $('#ynStep').innerHTML = `<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span>Opérations</span><b>${YN.tx.length}</b></div><div class="kpi"><span>Comptes</span><b>${A_.length}</b></div><div class="kpi"><span>Mois de budget</span><b>${mN || '—'}</b></div></div>
-    ${YN.plan ? '' : `<div class="banner warn">${I.info}<span>Fichier Plan absent : les opérations seront importées, mais pas le réparti mois par mois.</span></div>`}
-    <div class="sec-t"><span>Type de chaque compte</span></div>
-    <div class="small muted">Vérifie surtout les cartes de crédit (débit différé) et les comptes de suivi : ça change les calculs.</div>
-    <div class="card">${A_.map((a, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow" style="min-width:140px"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${a.n} opérations · ${fmt(a.bal)}</span></span>
-      <select class="in" style="height:40px; width:auto; max-width:55%" data-yn="${i}" aria-label="Type de ${esc(a.name)}">${opts(a.type)}</select></div>`).join('')}</div>
-    <div class="small muted">Dates lues au format ${YN.dfmt === 'mdy' ? 'MM/JJ/AAAA' : 'JJ/MM/AAAA'}. L'import crée un nouveau budget « Import YNAB » : ton budget actuel n'est pas touché.</div>
-    <button class="btn pri block" data-a="ynDo">Importer dans un nouveau budget</button>`;
+  $('#ynStep').innerHTML = `<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><span>Transactions</span><b>${YN.tx.length}</b></div><div class="kpi"><span>Accounts</span><b>${A_.length}</b></div><div class="kpi"><span>Months</span><b>${mN || '—'}</b></div></div>
+    ${YN.plan ? '' : `<div class="banner warn">${I.info}<span>No Plan file: transactions will be imported, but not the monthly assigned amounts.</span></div>`}
+    <div class="sec-t"><span>Account types</span></div>
+    <div class="small muted">Check credit cards and tracking accounts especially: they change the math.</div>
+    <div class="card">${A_.map((a, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow" style="min-width:140px"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${a.n} transactions · ${fmt(a.bal)}</span></span>
+      <select class="in" style="height:40px; width:auto; max-width:55%" data-yn="${i}" aria-label="Type of ${esc(a.name)}">${opts(a.type)}</select></div>`).join('')}</div>
+    <div class="small muted">Dates read as ${YN.dfmt === 'mdy' ? 'MM/DD/YYYY' : 'DD/MM/YYYY'}. The import creates a new plan, your current plan is untouched.</div>
+    <button class="btn pri block" data-a="ynDo">Import into a new plan</button>`;
   $$('[data-yn]').forEach(s => s.addEventListener('change', () => { A_[+s.dataset.yn].type = s.value; }));
 }
 function ynDo() {
   if (A.plan) localSaveAll();
-  const p = defaultPlan('Import YNAB'); p.groups = p.groups.filter(g => g.sys); p.cats = [];
+  const p = defaultPlan('YNAB Import'); p.groups = p.groups.filter(g => g.sys); p.cats = [];
   A.plan = p; A.tx = []; rebuildLookups();
   const isInflowGroup = g => /^inflow$|^revenus?$|^entrees?$/.test(norm(g));
   const isCcGroup = g => /credit card payments|paiements? (de )?carte/.test(norm(g));
@@ -118,7 +118,7 @@ function ynDo() {
     if (!c || isInflowGroup(g)) return null;
     if (isCcGroup(g)) { const acc = p.accounts.find(x => x.name === c); return acc ? L.ccCat[acc.id]?.id || null : null; }
     const key = g + '\u0001' + c; if (cId[key]) return cId[key];
-    const hidden = isHiddenGroup(g); const gname = hidden ? 'Enveloppes masquées' : (g || 'Divers');
+    const hidden = isHiddenGroup(g); const gname = hidden ? 'Hidden Categories' : (g || 'Other');
     if (!gId[gname]) { const ng = { id: uid(), name: gname, hidden: false }; p.groups.push(ng); gId[gname] = ng.id; }
     const nc = { id: uid(), gid: gId[gname], name: c, note: '', target: null, hidden }; p.cats.push(nc); cId[key] = nc.id; return nc.id;
   };
@@ -143,7 +143,7 @@ function ynDo() {
     }
     lastSplit = null;
     if (tm && acctId[tm[1].trim()]) out.push({ ...base, id: uid(), transferName: tm[1].trim(), cat: (cat === 'rta' || cat === '__start') ? null : cat, memo: r.memo });
-    else out.push({ ...base, id: uid(), payee: r.payee === 'Starting Balance' ? 'Solde initial' : r.payee, cat: r.payee === 'Starting Balance' && !cat ? (onBudget(a) && !isCredit(a) ? 'rta' : '__start') : cat, memo: r.memo });
+    else out.push({ ...base, id: uid(), payee: r.payee === 'Starting Balance' ? 'Starting Balance' : r.payee, cat: r.payee === 'Starting Balance' && !cat ? (onBudget(a) && !isCredit(a) ? 'rta' : '__start') : cat, memo: r.memo });
   }
   // pair transfers: each side appears once per account
   const pool = out.filter(t => t.transferName); const used = new Set();
@@ -179,12 +179,12 @@ function ynDo() {
   if (lm) for (const [key, v] of Object.entries(YN.avail[lm])) {
     const [g, c] = key.split('\u0001'); if (isInflowGroup(g)) continue;
     const id = isCcGroup(g) ? L.ccCat[p.accounts.find(x => x.name === c)?.id]?.id : cId[key]; if (!id) continue;
-    tot++; const mine = catM(lm, id).available; if (mine === v) ok++; else bad.push(`${c} : YNAB ${fmt(v)} / ici ${fmt(mine)}`);
+    tot++; const mine = catM(lm, id).available; if (mine === v) ok++; else bad.push(`${c} : YNAB ${fmt(v)} / here ${fmt(mine)}`);
   }
   YN.check = { ok, tot, bad, lm };
   scheduleSave(); watchCore(); A.view = 'plan'; A.month = curMonth(); closeSheet(); render();
-  const msg = tot ? `${A.tx.length} opérations importées · ${ok}/${tot} enveloppes identiques à YNAB (${monthLabel(lm)})` : `${A.tx.length} opérations importées`;
-  openSheet('Import terminé', `<p style="margin:0"><strong>${esc(msg)}</strong></p>
-    ${bad.length ? `<div class="banner warn">${I.info}<span>Écarts à vérifier (souvent un type de compte à corriger, par exemple une carte de crédit) :</span></div><div class="card">${bad.slice(0, 20).map(b => `<div class="li small">${esc(b)}</div>`).join('')}</div>` : (tot ? `<div class="banner info">${I.check}<span>Tous les soldes d'enveloppes correspondent à YNAB.</span></div>` : '')}
-    <div class="small muted">Les objectifs et les notes ne sont pas dans l'export YNAB : ajoute-les depuis chaque enveloppe.</div>`, `<button class="btn pri block" data-a="closeSheet">Voir mon budget</button>`);
+  const msg = tot ? `${A.tx.length} transactions imported · ${ok}/${tot} categories match YNAB (${monthLabel(lm)})` : `${A.tx.length} transactions imported`;
+  openSheet('Import Complete', `<p style="margin:0"><strong>${esc(msg)}</strong></p>
+    ${bad.length ? `<div class="banner warn">${I.info}<span>Differences to check (often an account type to fix, such as a credit card):</span></div><div class="card">${bad.slice(0, 20).map(b => `<div class="li small">${esc(b)}</div>`).join('')}</div>` : (tot ? `<div class="banner info">${I.check}<span>Every category balance matches YNAB.</span></div>` : '')}
+    <div class="small muted">Targets and notes are not in YNAB's export file: use the direct connection to get them.</div>`, `<button class="btn pri block" data-a="closeSheet">View my plan</button>`);
 }

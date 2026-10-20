@@ -29,34 +29,43 @@ const I = {
 const acctIcon = a => isCredit(a) ? I.card : ACCT[a.type]?.grp === 'loan' ? I.loan : a.type === 'savings' ? I.piggy : a.type === 'cash' ? I.cash : ACCT[a.type]?.grp === 'tracking' ? I.chart : I.bank;
 
 /* ---------- toast ---------- */
+
+/* ---------- toast ---------- */
 let toastTimer;
 function toast(msg, withUndo) {
   let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
-  t.innerHTML = `<span>${esc(msg)}</span>${withUndo ? `<button data-a="undo">Annuler</button>` : ''}`;
+  t.innerHTML = `<span>${esc(msg)}</span>${withUndo ? `<button data-a="undo">Undo</button>` : ''}`;
   t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3800);
 }
-function paintSync() { const el = $('#syncState'); if (el) el.innerHTML = syncLabel(); }
+function paintSync() { $$('.syncState').forEach(el => { el.textContent = syncLabel(); }); }
 function syncLabel() {
-  return { local: 'Stocké sur cet appareil', syncing: 'Synchronisation…', synced: 'Synchronisé sur tous tes appareils', error: 'Synchro en échec — données gardées sur cet appareil', quota: 'Espace de synchro plein — exporte une sauvegarde', 'drive-ok': 'Synchronisé avec Google Drive', 'drive-err': 'Synchro Drive en échec — réessaie plus tard', 'drive-login': 'Reconnexion à Google nécessaire' }[A.sync] || 'Stocké sur cet appareil';
+  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed — try again later', 'drive-login': 'Sign in to Google again' }[A.sync] || 'Saved on this device';
 }
+const DESK = () => window.matchMedia('(min-width: 1024px)').matches;
+let _wasDesk = null;
+window.addEventListener('resize', () => { const d = DESK(); if (_wasDesk !== null && d !== _wasDesk) render(); });
+
+/* ---------- account sections (YNAB order) ---------- */
+const SECTIONS = [['cash', 'Cash', a => ['checking', 'savings', 'cash'].includes(a.type)], ['credit', 'Credit', a => isCredit(a)], ['loan', 'Loans', a => ACCT[a.type].grp === 'loan'], ['tracking', 'Tracking', a => ACCT[a.type].grp === 'tracking']];
 
 /* ---------- shell ---------- */
 function render() {
-  const app = $('#app');
-  if (!A.plan) { app.innerHTML = viewOnboarding(); $('#nav').innerHTML = ''; return; }
+  const app = $('#app'); _wasDesk = DESK();
+  if (!A.plan) { app.innerHTML = viewOnboarding(); $('#nav').innerHTML = ''; $('#fab').hidden = true; return; }
   let html = '';
   if (A.view === 'plan') html = viewPlan();
   else if (A.view === 'accounts') html = A.acct ? viewRegister() : viewAccounts();
   else if (A.view === 'tx') { A.acct = 'all'; html = viewRegister(); }
   else if (A.view === 'reflect') html = viewReflect();
   else if (A.view === 'settings') html = viewSettings();
-  const y = window.scrollY;
-  app.innerHTML = html;
-  if (render._keepScroll) window.scrollTo(0, y); render._keepScroll = false;
-  $('#nav').innerHTML = `<div>
-    ${navBtn('plan', 'Budget', I.plan)}${navBtn('accounts', 'Comptes', I.accts)}${navBtn('tx', 'Opérations', I.list)}${navBtn('reflect', 'Bilan', I.reflect)}${navBtn('settings', 'Réglages', I.gear)}
+  const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
+  const insp = A.view === 'plan' && DESK() ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
+  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
+  if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
+  $('#nav').innerHTML = DESK() ? '' : `<div>
+    ${navBtn('plan', 'Plan', I.plan)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('tx', 'Transactions', I.list)}${navBtn('reflect', 'Reflect', I.reflect)}${navBtn('settings', 'Settings', I.gear)}
   </div>`;
-  const showFab = (A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
+  const showFab = !DESK() && (A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
   $('#fab').hidden = !showFab;
   if (A.ui.select && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
 }
@@ -64,161 +73,224 @@ const navBtn = (v, l, icn) => `<button data-a="nav" data-v="${v}" class="${A.vie
 function topBar(title, sub, left = '', right = '') {
   return `<div class="top wrap"><div class="top-bar">${left || '<span style="width:44px"></span>'}<div class="top-title"><h1>${title}</h1>${sub ? `<div class="sub">${sub}</div>` : ''}</div>${right || '<span style="width:44px"></span>'}</div></div>`;
 }
-const undoBtns = () => `<button class="ibtn" data-a="undo" aria-label="Annuler" ${A.undo.length ? '' : 'disabled'}>${I.undo}</button>`;
+const undoBtns = () => `<button class="ibtn" data-a="undo" aria-label="Undo" ${A.undo.length ? '' : 'disabled'}>${I.undo}</button>`;
+
+/* ---------- desktop sidebar ---------- */
+function sidebar() {
+  const p = A.plan, b = balances();
+  const sideNav = (v, l, icn, extra = '') => `<button class="snav ${A.view === v && (v !== 'accounts' || !A.acct) ? 'on' : ''}" data-a="nav" data-v="${v}" ${extra}>${icn}<span>${l}</span></button>`;
+  let h = `<div class="side-head"><button class="side-plan" data-a="nav" data-v="settings"><span class="logo" aria-hidden="true">${I.plan}</span><span class="grow"><strong class="ellip" style="display:block">${esc(p.name)}</strong><span class="small muted syncState">${syncLabel()}</span></span></button></div>
+    <nav class="side-nav">${sideNav('plan', 'Plan', I.plan)}${sideNav('reflect', 'Reflect', I.reflect)}${sideNav('tx', 'All Accounts', I.bank)}${sideNav('settings', 'Settings', I.gear)}</nav>`;
+  for (const [key, label, fn] of SECTIONS) {
+    const list = p.accounts.filter(a => !a.closed && fn(a)); if (!list.length) continue;
+    const col = !!A.ui.collapsed['s_' + key];
+    const tot = list.reduce((s, a) => s + b[a.id].working, 0);
+    h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
+    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    h += `</div>`;
+  }
+  const closed = p.accounts.filter(a => a.closed);
+  if (closed.length) {
+    const col = A.ui.collapsed.s_closed !== false;
+    h += `<div class="side-sec"><button class="side-sec-h" data-a="collapseClosed" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">Closed</span></button>`;
+    if (!col) for (const a of closed) h += `<button class="side-acct muted ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num">${fmt(b[a.id].working)}</span></button>`;
+    h += `</div>`;
+  }
+  h += `<div class="side-foot"><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
+  return h;
+}
 
 /* ---------- onboarding ---------- */
 function viewOnboarding() {
   return `<div class="wrap hero">
-    <h1>Mon budget</h1>
-    <p>Chaque euro reçoit une mission. Tu répartis l'argent que tu as vraiment, enveloppe par enveloppe, et tu sais à tout moment ce que tu peux dépenser.</p>
-    <div class="steps">
-      <div class="stepc"><b>1</b><div><strong>Ajoute tes comptes</strong><div class="muted small">Compte courant, épargne, carte, prêts — avec leur solde du jour.</div></div></div>
-      <div class="stepc"><b>2</b><div><strong>Répartis ce que tu as</strong><div class="muted small">Le montant « À répartir » va dans tes enveloppes jusqu'à zéro.</div></div></div>
-      <div class="stepc"><b>3</b><div><strong>Note ou importe tes dépenses</strong><div class="muted small">Saisie rapide ou import du relevé CSV / OFX / QIF de ta banque.</div></div></div>
+    <h1>Budget</h1>
+    <p>Give every euro a job. Assign the money you actually have, category by category, and always know what you can spend.</p>
+    <div class="card" style="padding:16px; display:flex; flex-direction:column; gap:10px">
+      <strong>Already using this app on another device?</strong>
+      <span class="small muted">Sign in with the Google account that holds your budget to get it back here.</span>
+      <button class="btn pri block" data-a="gdLogin">${I.sync} Restore from Google Drive</button>
     </div>
-    <div class="field"><label for="obName">Nom du budget</label><input id="obName" class="in" value="Mon budget" autocomplete="off"></div>
-    <button class="btn pri block" data-a="createPlan">Créer mon budget</button>
-    <button class="btn block" data-a="ynSheet">Importer mon budget YNAB</button>
-    <button class="btn block" data-a="demoPlan">Explorer avec un budget d'exemple</button>
-    <label class="btn ghost block" for="restoreFile">${I.upload} Restaurer une sauvegarde</label>
+    <div class="sec-t"><span>Or start here</span></div>
+    <button class="btn block" data-a="ynSheet">Import my YNAB plan</button>
+    <div class="field"><label for="obName">Plan name</label><input id="obName" class="in" value="My Plan" autocomplete="off"></div>
+    <button class="btn block" data-a="createPlan">Start a new plan</button>
+    <button class="btn block" data-a="demoPlan">Explore a sample plan</button>
+    <label class="btn ghost block" for="restoreFile">${I.upload} Restore a backup file</label>
     <input id="restoreFile" type="file" accept=".json,application/json" hidden data-c="restore">
   </div>`;
 }
 
+/* ---------- target text (YNAB wording) ---------- */
+function dueLabel(c, m) { const t = c.target; if (!t) return ''; const d = t.type === 'yearly' ? dueMonth(t, m) : t.date; return d && ['yearly', 'date', 'balance'].includes(t.type) ? ' by ' + monthLabel(d) : ' this month'; }
+function targetText(c, m, s) {
+  const x = s.x, ti = s.ti;
+  if (x.available < 0) return x.creditOver > 0 && !x.cashOver ? 'Overspent ' + fmt(x.creditOver) + ' on credit' : 'Overspent ' + fmt(-x.available);
+  if (c.cc) { const bal = -(balances()[c.cc]?.working || 0); return bal > x.available ? fmt(bal - x.available) + ' more needed to pay balance' : 'Paid in full'; }
+  if (!ti) { const spent = -Math.min(0, x.activity); return spent && x.available === 0 && x.assigned + x.carry > 0 ? 'Fully Spent' : ''; }
+  if (ti.snoozed) return 'Snoozed';
+  if (ti.under > 0) return fmt(ti.under) + ' more needed' + dueLabel(c, m);
+  const spent = -Math.min(0, x.activity);
+  if (spent > 0 && x.available === 0) return 'Fully Spent';
+  if (spent > 0) return 'Funded. Spent ' + fmt(spent) + ' of ' + fmt(x.carry + x.assigned);
+  return 'Funded';
+}
+
 /* ---------- PLAN ---------- */
+function planStats(m) {
+  let under = 0, cost = 0, overN = 0, overfunded = 0;
+  for (const c of A.plan.cats) { if (c.hidden) continue; const s = catStatus(c, m); if (s.ti) { under += s.ti.under; cost += s.ti.need; } if (s.x.available < 0) overN++; }
+  return { under, cost, overN };
+}
 function viewPlan() {
-  const m = A.month, md = monthData(m), p = A.plan;
+  const m = A.month, md = monthData(m), p = A.plan, desk = DESK();
   const rta = md.rta;
   const rtaCls = rta > 0 ? 'pos' : rta < 0 ? 'neg' : 'zero';
-  const rtaLbl = rta > 0 ? 'À répartir' : rta < 0 ? 'Trop réparti' : 'Tout est réparti';
-  let under = 0, cost = 0, overN = 0;
-  for (const c of p.cats) { if (c.hidden) continue; const s = catStatus(c, m); if (s.ti) { under += s.ti.under; cost += s.ti.need; } if (s.x.available < 0) overN++; }
+  const rtaLbl = rta > 0 ? 'Ready to Assign' : rta < 0 ? 'You assigned more than you have' : 'All Money Assigned';
+  const st = planStats(m);
   const aom = ageOfMoney().at(m === curMonth() ? '9999-12-31' : addMonths(m, 1) + '-00');
   const unapproved = A.tx.filter(t => t.approved === false).length;
   const uncatN = A.tx.filter(t => onBudget(L.acct[t.acct]) && !t.transferAcct && !(t.splits && t.splits.length) && !t.cat).length;
-  let h = topBar(monthLabel(m), esc(p.name),
-    `<button class="ibtn" data-a="month" data-d="-1" aria-label="Mois précédent">${I.left}</button>`,
-    `<button class="ibtn" data-a="month" data-d="1" aria-label="Mois suivant">${I.right}</button>`);
-  h += `<div class="wrap">
-    <button class="rta ${rtaCls}" data-a="rtaSheet" aria-label="Détail de l'argent à répartir">
+  let h;
+  if (desk) {
+    h = `<div class="dhead wrap"><div class="row">
+        <button class="ibtn round" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>
+        <div><h1 class="dmonth">${monthLabel(m, false, true)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
+        <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button></div>
+      <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
+        ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
+      <span></span></div>`;
+  } else {
+    h = topBar(monthLabel(m, false, true), esc(p.name),
+      `<button class="ibtn" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>`,
+      `<button class="ibtn" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>`);
+    h += `<div class="wrap"><button class="rta ${rtaCls}" data-a="rtaSheet">
       <div><div class="lbl">${rtaLbl}</div><div class="amt num">${fmt(rta)}</div></div>
-      ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Répartir' : 'Corriger'}</span>` : `<span class="cta" data-a="assignSheet">Auto-répartir</span>`}
+      ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : `<span class="cta" data-a="assignSheet">Auto-Assign</span>`}
     </button>
     <div class="stats">
-      <button class="stat" data-a="statInfo" data-k="aom"><span>Âge de l'argent</span><b class="num">${aom == null ? '—' : aom + ' j'}</b></button>
-      <button class="stat" data-a="statInfo" data-k="cost"><span>Coût de ma vie</span><b class="num">${fmt(cost)}</b></button>
-      <button class="stat" data-a="filter" data-f="under"><span>Sous-financé</span><b class="num">${fmt(under)}</b></button>
-      <button class="stat" data-a="nav" data-v="reflect"><span>Dépensé ce mois</span><b class="num">${fmt(-Math.min(0, md.activity))}</b></button>
-    </div>`;
-  if (overN) h += `<div class="banner bad">${I.info}<span>${overN} enveloppe${overN > 1 ? 's' : ''} en dépassement</span><button class="btn sm danger btn" data-a="filter" data-f="over">Voir</button></div>`;
-  if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} opération${unapproved > 1 ? 's' : ''} importée${unapproved > 1 ? 's' : ''} à valider</span><button class="btn sm" data-a="openAll" data-f="unapproved">Valider</button></div>`;
-  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} opération${uncatN > 1 ? 's' : ''} sans catégorie</span><button class="btn sm" data-a="openAll" data-f="uncat">Catégoriser</button></div>`;
-  if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Dépassement de ${monthLabel(addMonths(m, -1))} : ${fmt(md.prevCashOver)} retirés de l'argent à répartir</span></div>`;
+      <button class="stat" data-a="statInfo" data-k="aom"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></button>
+      <button class="stat" data-a="statInfo" data-k="cost"><span>Cost to Be Me</span><b class="num">${fmt(st.cost)}</b></button>
+      <button class="stat" data-a="filter" data-f="under"><span>Underfunded</span><b class="num">${fmt(st.under)}</b></button>
+    </div></div>`;
+  }
+  h += `<div class="wrap">`;
+  if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
+  if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></div>`;
+  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
+  if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
   const F = A.ui.filter;
-  h += `<div class="chips" role="toolbar" aria-label="Filtres">
-    ${chip('all', 'Tout')}${chip('under', 'Sous-financé')}${chip('over', 'Dépassé')}${chip('avail', 'Argent dispo')}${chip('snoozed', 'En pause')}
-    <span style="flex:1"></span>
-    <button class="chip" data-a="moves">${I.swap}Mouvements</button>
-    <button class="chip ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${I.edit}${A.ui.edit ? 'Terminer' : 'Modifier'}</button>
-    ${undoBtns()}
-  </div>`;
-  h += `<div class="colhead"><span class="c-name">Enveloppe</span><span class="w-ass">Réparti</span><span class="w-act hide-s">Activité</span><span class="w-av">Disponible</span></div>`;
+  h += `<div class="chips" role="toolbar" aria-label="Filters">
+    ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${F === 'over' ? chip('over', 'Overspent') : ''}</div>
+    <div class="toolbar">
+      <button class="tbtn" data-a="groupNew">${I.plus} Category Group</button>
+      <button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button>
+      <button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>
+      <button class="tbtn" data-a="moves">${I.swap} Recent Moves</button>
+      <button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${I.edit} ${A.ui.edit ? 'Done' : 'Edit'}</button>
+    </div>`;
+  h += `<div class="colhead"><span class="c-name">Category</span><span class="w-ass">Assigned</span><span class="w-act hide-s">Activity</span><span class="w-av">Available</span></div>`;
   const groups = p.groups.filter(g => g.sys !== 'cc' || p.cats.some(c => c.gid === g.id && !c.hidden));
   let shown = 0;
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
     let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.edit && A.ui.showHidden));
-    const st = c => catStatus(c, m);
-    if (F !== 'all') cats = cats.filter(c => { const s = st(c); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : true; });
+    if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
     if (!cats.length && (F !== 'all' || (!A.ui.edit && g.sys))) continue;
     const col = !!A.ui.collapsed[g.id] && F === 'all';
     let ga = 0, gact = 0, gav = 0; for (const c of cats) { const x = catM(m, c.id); ga += x.assigned; gact += x.activity; gav += x.available; }
     h += `<section class="group" aria-label="${esc(g.name)}">
       <div class="ghead ${col ? 'collapsed' : ''}">
-        <button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}">${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (masqué)' : ''}</span></button>
+        <button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}">${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>
         ${A.ui.edit && !g.sys ? `<div class="editrow">
-          <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="-1" aria-label="Monter le groupe">${I.up}</button>
-          <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="1" aria-label="Descendre le groupe">${I.down}</button>
-          <button class="ibtn" data-a="gEdit" data-g="${g.id}" aria-label="Modifier le groupe">${I.edit}</button></div>`
+          <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="-1" aria-label="Move group up">${I.up}</button>
+          <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="1" aria-label="Move group down">${I.down}</button>
+          <button class="ibtn" data-a="catNew" data-g="${g.id}" aria-label="Add category">${I.plus}</button>
+          <button class="ibtn" data-a="gEdit" data-g="${g.id}" aria-label="Edit group">${I.edit}</button></div>`
         : `<span class="gsum num w-ass">${fmt(ga)}</span><span class="gsum num w-act hide-s">${fmt(gact)}</span><span class="gsum num w-av">${fmt(gav)}</span>`}
       </div>`;
-    if (!col) {
-      for (const c of cats) { h += catRow(c, m); shown++; }
-      if (A.ui.edit && !g.sys) h += `<div class="addline"><button class="btn sm" data-a="catNew" data-g="${g.id}">${I.plus} Ajouter une enveloppe</button></div>`;
-    }
+    if (!col) for (const c of cats) { h += catRow(c, m); shown++; }
     h += `</section>`;
   }
-  if (F !== 'all' && !shown) h += `<div class="empty"><strong>Aucune enveloppe dans ce filtre</strong><button class="btn sm" data-a="filter" data-f="all">Tout afficher</button></div>`;
+  if (F !== 'all' && !shown) h += `<div class="empty"><strong>No categories match this filter</strong><button class="btn sm" data-a="filter" data-f="all">Show all</button></div>`;
   if (A.ui.edit) {
     const hid = p.cats.filter(c => c.hidden).length;
-    h += `<div class="row" style="margin-top:14px; flex-wrap:wrap">
-      <button class="btn" data-a="groupNew">${I.plus} Nouveau groupe</button>
-      ${hid ? `<button class="btn" data-a="toggleHidden">${A.ui.showHidden ? I.eyeoff : I.eye} ${A.ui.showHidden ? 'Cacher' : 'Afficher'} les enveloppes masquées (${hid})</button>` : ''}
-    </div>`;
+    if (hid) h += `<div class="row" style="margin-top:14px"><button class="btn" data-a="toggleHidden">${A.ui.showHidden ? I.eyeoff : I.eye} ${A.ui.showHidden ? 'Hide' : 'Show'} hidden categories (${hid})</button></div>`;
   }
-  if (!p.accounts.length) h += `<div class="banner info" style="margin-top:16px">${I.info}<span>Commence par ajouter ton compte courant avec son solde du jour.</span><button class="btn sm pri" data-a="acctNew">Ajouter</button></div>`;
-  h += `<p class="kbd-hint" style="margin-top:14px">Astuce : dans « Réparti », tape <b>+50</b> pour ajouter 50 € ou <b>120/3</b> pour calculer.</p>`;
-  h += `</div>`;
+  if (!p.accounts.length) h += `<div class="banner info" style="margin-top:16px">${I.info}<span>Start by adding your checking account with today's balance.</span><button class="btn sm pri" data-a="acctNew">Add Account</button></div>`;
+  h += `<p class="kbd-hint" style="margin-top:14px">Tip: in Assigned, type <b>+50</b> to add 50 or <b>120/3</b> to do the math.</p></div>`;
   return h;
 }
 const chip = (f, l) => `<button class="chip ${A.ui.filter === f ? 'on' : ''}" data-a="filter" data-f="${f}">${l}</button>`;
 function catRow(c, m) {
   const s = catStatus(c, m), x = s.x, ti = s.ti;
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
-  let note = '';
-  if (x.available < 0) note = x.creditOver > 0 && !x.cashOver ? 'Dépassé sur carte de crédit : ' + fmt(x.creditOver) : 'Dépassé de ' + fmt(-x.available);
-  else if (ti) note = ti.label;
-  else if (c.cc) note = 'Paiement de carte · solde ' + fmt(-(balances()[c.cc]?.working || 0));
+  const note = targetText(c, m, s);
+  const pillIcon = s.cls === 'good' && ti ? '✓ ' : s.cls === 'warn' ? '! ' : '';
   return `<div class="cat ${c.hidden ? 'muted' : ''}">
     <button class="cname" data-a="catSheet" data-c="${c.id}">
-      <span class="t">${c.emoji ? esc(c.emoji) + ' ' : ''}${esc(c.name)}${c.hidden ? ' (masquée)' : ''}</span>
+      <span class="ctop"><span class="t">${c.emoji ? esc(c.emoji) + ' ' : ''}${esc(c.name)}${c.hidden ? ' (hidden)' : ''}</span>${note ? `<span class="note">${esc(note)}</span>` : ''}</span>
       ${ti && ti.total > 0 ? `<span class="bar ${barCls}"><i style="width:${Math.round(ti.pct * 100)}%"></i></span>` : ''}
-      ${note ? `<span class="note ellip">${esc(note)}</span>` : ''}
     </button>
     ${A.ui.edit && !c.cc ? `<div class="editrow">
-      <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="-1" aria-label="Monter">${I.up}</button>
-      <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="1" aria-label="Descendre">${I.down}</button>
-      <button class="ibtn" data-a="cHide" data-c="${c.id}" aria-label="${c.hidden ? 'Afficher' : 'Masquer'}">${c.hidden ? I.eye : I.eyeoff}</button></div>` : `
-    <input class="ass-in w-ass" inputmode="decimal" enterkeyhint="done" aria-label="Réparti pour ${esc(c.name)}" data-assign="${c.id}" value="${fmtIn(x.assigned)}">
-    <span class="w-act hide-s num muted" style="font-weight:700; font-size:13.5px">${fmt(x.activity)}</span>
-    <span class="w-av"><button class="pill ${s.cls}" data-a="pillTap" data-c="${c.id}">${fmt(x.available)}</button></span>`}
+      <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="-1" aria-label="Move up">${I.up}</button>
+      <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="1" aria-label="Move down">${I.down}</button>
+      <button class="ibtn" data-a="cHide" data-c="${c.id}" aria-label="${c.hidden ? 'Unhide' : 'Hide'}">${c.hidden ? I.eye : I.eyeoff}</button></div>` : `
+    <input class="ass-in w-ass" inputmode="decimal" enterkeyhint="done" aria-label="Assigned to ${esc(c.name)}" data-assign="${c.id}" value="${fmtIn(x.assigned)}">
+    <span class="w-act hide-s num muted act">${fmt(x.activity)}</span>
+    <span class="w-av"><button class="pill ${s.cls}" data-a="pillTap" data-c="${c.id}">${pillIcon}${fmt(x.available)}</button></span>`}
   </div>`;
 }
+function inspector() {
+  const m = A.month, md = monthData(m), st = planStats(m), mn = MONTHS[+m.slice(5, 7) - 1];
+  const prevLeft = md.rtaBase - md.income + md.assigned + md.prevCashOver;
+  const income = A.plan.expectedIncome || 0;
+  const opts = autoOptions(m, A.plan.cats.filter(c => !c.hidden));
+  const aom = ageOfMoney().at(m === curMonth() ? '9999-12-31' : addMonths(m, 1) + '-00');
+  const pct = income ? Math.min(100, Math.round(st.cost / income * 100)) : 0;
+  return `<div class="ipanel"><h3>${cap(mn)}'s Summary</h3>
+      <div class="irow"><span>Left Over from Last Month</span><b class="num">${fmt(prevLeft)}</b></div>
+      <div class="irow"><span>Assigned in ${cap(mn)}</span><b class="num">${fmt(md.assigned)}</b></div>
+      <div class="irow"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div>
+      <div class="irow big"><span>Available</span><b class="num">${fmt(md.available)}</b></div>
+      <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div></div>
+    <div class="ipanel"><h3>Cost to Be Me</h3>
+      <div class="irow"><span>${cap(mn)}'s Targets</span><b class="num">${fmt(st.cost)}</b></div>
+      <div class="bar ${income && st.cost > income ? 'bad' : ''}" style="margin-top:6px"><i style="width:${income ? pct : 0}%"></i></div>
+      <div class="irow" style="margin-top:8px"><label for="expInc">Expected Income</label><input id="expInc" class="mini num" inputmode="decimal" value="${income ? fmtIn(income) : ''}" placeholder="0,00" data-set="expectedIncome"></div></div>
+    <div class="ipanel"><h3>${I.wand} Auto-Assign</h3>
+      ${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}</div>`;
+}
 
-/* ---------- ACCOUNTS ---------- */
+/* ---------- ACCOUNTS (mobile list) ---------- */
 function viewAccounts() {
   const p = A.plan, b = balances();
-  const sections = [['budget', 'Comptes du budget'], ['loan', 'Prêts'], ['tracking', 'Comptes de suivi']];
   let net = 0; for (const a of p.accounts) if (!a.closed) net += b[a.id].working;
-  let h = topBar('Comptes', 'Patrimoine net ' + fmt(net), undoBtns(), `<button class="ibtn" data-a="acctNew" aria-label="Ajouter un compte">${I.plus}</button>`);
+  let h = topBar('Accounts', 'Net Worth ' + fmt(net), undoBtns(), `<button class="ibtn" data-a="acctNew" aria-label="Add Account">${I.plus}</button>`);
   h += `<div class="wrap">`;
-  if (!p.accounts.length) {
-    h += `<div class="empty"><strong>Aucun compte pour l'instant</strong><span>Ajoute ton compte courant avec le solde affiché par ta banque aujourd'hui.</span><button class="btn pri" data-a="acctNew">${I.plus} Ajouter un compte</button></div></div>`;
-    return h;
-  }
-  for (const [grp, lbl] of sections) {
-    const list = p.accounts.filter(a => ACCT[a.type].grp === grp && !a.closed);
-    if (!list.length) continue;
+  if (!p.accounts.length) return h + `<div class="empty"><strong>No accounts yet</strong><span>Add your checking account with the balance your bank shows today.</span><button class="btn pri" data-a="acctNew">${I.plus} Add Account</button></div></div>`;
+  for (const [key, lbl, fn] of SECTIONS) {
+    const list = p.accounts.filter(a => fn(a) && !a.closed); if (!list.length) continue;
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="sec-t"><span>${lbl}</span><span class="num">${fmt(tot)}</span></div><div class="card">`;
     for (const a of list) {
       const x = b[a.id]; const unap = A.tx.filter(t => t.acct === a.id && t.approved === false).length;
       h += `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span>
-        <span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${ACCT[a.type].label}${unap ? ` · <b style="color:var(--info)">${unap} à valider</b>` : ''}${a.lastRec ? ' · rapproché le ' + fmtDate(a.lastRec) : ''}</span></span>
+        <span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${ACCT[a.type].label}${unap ? ` · <b style="color:var(--info)">${unap} to approve</b>` : ''}${a.lastRec ? ' · reconciled ' + fmtDate(a.lastRec) : ''}</span></span>
         <strong class="num ${x.working < 0 ? 'amt-bad' : ''}">${fmt(x.working)}</strong></button>`;
     }
     h += `</div>`;
   }
   const closed = p.accounts.filter(a => a.closed);
   if (closed.length) {
-    h += `<div class="sec-t"><span>Comptes clôturés</span></div><div class="card">`;
-    for (const a of closed) h += `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span><span class="grow muted">${esc(a.name)}</span><span class="num muted">${fmt(b[a.id].working)}</span></button>`;
-    h += `</div>`;
+    const col = A.ui.collapsed.s_closed !== false;
+    h += `<div class="sec-t"><button class="side-sec-h" style="padding:0" data-a="collapseClosed" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span>Closed (${closed.length})</span></button></div>`;
+    if (!col) h += `<div class="card">${closed.map(a => `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span><span class="grow muted">${esc(a.name)}</span><span class="num muted">${fmt(b[a.id].working)}</span></button>`).join('')}</div>`;
   }
-  h += `<div class="row" style="margin-top:16px; flex-wrap:wrap"><button class="btn" data-a="acctNew">${I.plus} Ajouter un compte</button><button class="btn" data-a="importSheet">${I.upload} Importer un relevé</button></div></div>`;
+  h += `<div class="row" style="margin-top:16px; flex-wrap:wrap"><button class="btn" data-a="acctNew">${I.plus} Add Account</button><button class="btn" data-a="importSheet">${I.upload} File Import</button></div></div>`;
   return h;
 }
 
+/* ---------- REGISTER ---------- */
 function regList() {
   const id = A.acct; const f = A.ui.regFilter; const q = A.ui.search.trim().toLowerCase();
   let list = id === 'all' ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id);
@@ -227,88 +299,104 @@ function regList() {
   else if (f === 'cleared') list = list.filter(t => t.cleared !== 'u');
   else if (f === 'flagged') list = list.filter(t => t.flag);
   else if (f === 'uncat') list = list.filter(t => onBudget(L.acct[t.acct]) && !t.transferAcct && !(t.splits && t.splits.length) && !t.cat);
-  if (q) list = list.filter(t => {
-    const hay = [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase();
-    return hay.includes(q);
-  });
+  if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
   return list.sort((a, b) => a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1);
 }
+function txCatLabel(t) {
+  const a = L.acct[t.acct];
+  if (t.splits && t.splits.length) return 'Split (Multiple Categories)';
+  if (t.cat === '__start') return 'Starting Balance';
+  if (t.cat) return catName(t.cat);
+  if (t.transferAcct) return onBudget(a) && onBudget(L.acct[t.transferAcct]) ? '' : '';
+  if (onBudget(a)) return 'Category Needed';
+  return '';
+}
 function viewRegister() {
-  const id = A.acct, all = id === 'all', a = all ? null : L.acct[id];
+  const id = A.acct, all = id === 'all', a = all ? null : L.acct[id], desk = DESK();
   if (!all && !a) { A.acct = null; return viewAccounts(); }
   const b = balances();
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
-  let h = topBar(all ? 'Opérations' : esc(a.name), all ? 'Comptes du budget · ' + fmt(bal.working) : ACCT[a.type].label,
-    A.view === 'tx' ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Retour aux comptes">${I.left}</button>`,
-    all ? (A.view === 'tx' ? `<button class="ibtn" data-a="importSheet" aria-label="Importer un relevé">${I.upload}</button>` : undoBtns()) : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Modifier le compte">${I.edit}</button>`);
+  let h = topBar(all ? 'All Accounts' : esc(a.name), all ? 'Budget accounts' : ACCT[a.type].label,
+    A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
+    all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
-  h += `<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-    <div class="kpi"><span>Pointé</span><b class="num" style="font-size:17px">${fmt(bal.cleared)}</b></div>
-    <div class="kpi"><span>Non pointé</span><b class="num" style="font-size:17px">${fmt(bal.uncleared)}</b></div>
-    <div class="kpi"><span>Solde</span><b class="num" style="font-size:17px">${fmt(bal.working)}</b></div></div>`;
-  h += `<div class="row" style="margin-top:10px; flex-wrap:wrap">
-    ${!all ? `<button class="btn sm" data-a="reconcile" data-id="${id}">${I.lock} Rapprocher</button>` : ''}
-    ${!all ? `<button class="btn sm" data-a="importSheet" data-id="${id}">${I.upload} Importer</button>` : ''}
-    ${!all && isDebt(a) ? `<button class="btn sm" data-a="loanPlanner" data-id="${id}">${I.target} Simulateur de remboursement</button>` : ''}
-    ${!all && isCredit(a) ? `<button class="btn sm" data-a="ccPay" data-id="${id}">${I.swap} Payer la carte</button>` : ''}
-    <button class="btn sm ${A.ui.select ? 'pri' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Terminer' : 'Sélectionner'}</button>
+  h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>`;
+  h += `<div class="toolbar">
+    ${desk ? `<button class="tbtn" data-a="newTx">${I.plus} Add Transaction</button>` : ''}
+    ${!all ? `<button class="tbtn" data-a="reconcile" data-id="${id}">${I.lock} Reconcile</button>` : ''}
+    <button class="tbtn" data-a="importSheet" data-id="${all ? '' : id}">${I.upload} File Import</button>
+    ${!all && isDebt(a) ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
+    ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
+    <button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>
   </div>`;
-  h += `<div class="row" style="margin-top:10px"><div class="grow" style="position:relative"><input id="regSearch" class="in" type="search" placeholder="Rechercher bénéficiaire, catégorie, montant…" value="${esc(A.ui.search)}" data-i="search" aria-label="Rechercher"></div></div>`;
+  h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
   const rf = (f, l) => `<button class="chip ${A.ui.regFilter === f ? 'on' : ''}" data-a="regFilter" data-f="${f}">${l}</button>`;
-  h += `<div class="chips">${rf('all', 'Toutes')}${rf('unapproved', 'À valider')}${rf('uncat', 'Sans catégorie')}${rf('uncleared', 'Non pointées')}${rf('cleared', 'Pointées')}${rf('flagged', 'Avec drapeau')}</div>`;
-  // scheduled
+  h += `<div class="chips">${rf('all', 'All')}${rf('unapproved', 'Unapproved')}${rf('uncat', 'Category Needed')}${rf('uncleared', 'Uncleared')}${rf('cleared', 'Cleared')}${rf('flagged', 'Flagged')}</div>`;
   const sch = A.plan.scheduled.filter(s => all || s.acct === id || s.transferAcct === id).sort((x, y) => x.next < y.next ? -1 : 1);
   if (sch.length && A.ui.regFilter === 'all' && !A.ui.search) {
-    h += `<div class="day">À venir</div><div class="card">`;
-    for (const s of sch.slice(0, 8)) h += `<div class="tx"><span class="ic" style="width:30px;color:var(--muted)">${I.repeat}</span>
-      <button class="main" data-a="schEdit" data-id="${s.id}"><span class="p ellip">${esc(s.transferAcct ? 'Virement → ' + (L.acct[s.transferAcct]?.name || '') : s.payee)}</span><span class="c">${fmtDate(s.next)} · ${FREQ[s.freq]}${s.cat ? ' · ' + esc(catName(s.cat)) : ''}</span></button>
+    h += `<div class="day">Scheduled</div><div class="card">`;
+    for (const s of sch.slice(0, 8)) h += `<div class="tx"><span style="width:30px;color:var(--muted)">${I.repeat}</span>
+      <button class="main-b" data-a="schEdit" data-id="${s.id}"><span class="p ellip">${esc(s.transferAcct ? 'Transfer : ' + (L.acct[s.transferAcct]?.name || '') : s.payee)}</span><span class="c">${fmtDate(s.next)} · ${FREQ[s.freq]}${s.cat ? ' · ' + esc(catName(s.cat)) : ''}</span></button>
       <span class="a num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</span>
-      <button class="btn sm" data-a="schNow" data-id="${s.id}">Saisir</button></div>`;
+      <button class="btn sm" data-a="schNow" data-id="${s.id}">Enter Now</button></div>`;
     h += `</div>`;
   }
   const list = regList();
   if (!list.length) {
-    h += `<div class="empty"><strong>${A.ui.search || A.ui.regFilter !== 'all' ? 'Aucune opération ne correspond' : 'Aucune opération'}</strong>${!A.ui.search && A.ui.regFilter === 'all' ? `<span>Ajoute une dépense avec le bouton + ou importe un relevé.</span>` : ''}</div>`;
+    h += `<div class="empty"><strong>${A.ui.search || A.ui.regFilter !== 'all' ? 'No matching transactions' : 'No transactions yet'}</strong>${!A.ui.search && A.ui.regFilter === 'all' ? `<span>Add a transaction or import a bank file.</span>` : ''}</div>`;
   } else {
-    // running balance (per account only, unfiltered)
     const run = {};
     if (!all) { let r = 0; const asc = A.tx.filter(t => t.acct === id).sort((x, y) => x.date === y.date ? (x.id < y.id ? -1 : 1) : x.date < y.date ? -1 : 1); for (const t of asc) { r += t.amount; run[t.id] = r; } }
-    let day = '';
     const lim = A.ui.regLimit || 150;
-    for (const t of list.slice(0, lim)) {
-      if (t.date !== day) { if (day) h += `</div>`; day = t.date; h += `<div class="day">${dayLabel(t.date)}</div><div class="card">`; }
-      h += txRow(t, all, run[t.id]);
+    if (desk) {
+      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}<th></th>${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${!all ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
+      for (const t of list.slice(0, lim)) h += txTr(t, all, run[t.id]);
+      h += `</tbody></table></div>`;
+    } else {
+      let day = '';
+      for (const t of list.slice(0, lim)) {
+        if (t.date !== day) { if (day) h += `</div>`; day = t.date; h += `<div class="day">${dayLabel(t.date)}</div><div class="card">`; }
+        h += txRow(t, all, run[t.id]);
+      }
+      h += `</div>`;
     }
-    h += `</div>`;
-    if (list.length > lim) h += `<div style="text-align:center; margin-top:12px"><button class="btn" data-a="more">Afficher plus (${list.length - lim})</button></div>`;
+    if (list.length > lim) h += `<div style="text-align:center; margin-top:12px"><button class="btn" data-a="more">Show more (${list.length - lim})</button></div>`;
   }
-  h += `</div>`;
-  return h;
+  return h + `</div>`;
+}
+function clrBtn(t) {
+  return t.approved === false ? `<button class="btn sm pri" data-a="approve" data-id="${t.id}">Approve</button>` :
+    `<button class="clr ${t.cleared}" data-a="clr" data-id="${t.id}" aria-label="${t.cleared === 'u' ? 'Uncleared' : t.cleared === 'c' ? 'Cleared' : 'Reconciled'}">${t.cleared === 'r' ? I.lock.replace('<svg', '<svg width="14" height="14"') : 'C'}</button>`;
+}
+function txTr(t, all, runBal) {
+  const cl = txCatLabel(t); const need = cl === 'Category Needed';
+  return `<tr class="${t.approved === false ? 'unapproved' : ''}">
+    ${A.ui.select ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
+    <td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>
+    ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
+    <td class="num">${fmtDate(t.date)}</td>
+    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button></td>
+    <td class="${need ? 'todo' : ''}">${esc(cl)}</td>
+    <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
+    <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>
+    <td class="r num amt-pos">${t.amount > 0 ? fmt(t.amount) : ''}</td>
+    ${runBal != null ? `<td class="r num muted">${fmt(runBal)}</td>` : ''}
+    <td class="r">${clrBtn(t)}</td></tr>`;
 }
 function txRow(t, showAcct, runBal) {
-  const a = L.acct[t.acct];
-  let c = '';
-  const todo = onBudget(a) && !t.transferAcct && !(t.splits && t.splits.length) && !t.cat;
-  if (t.splits && t.splits.length) c = 'Fractionnée · ' + t.splits.length + ' catégories';
-  else if (t.cat === '__start') c = 'Solde initial';
-  else if (t.cat) c = catName(t.cat);
-  else if (t.transferAcct) c = onBudget(a) && onBudget(L.acct[t.transferAcct]) ? 'Virement entre comptes du budget' : '';
-  else if (todo) c = 'À catégoriser';
-  if (showAcct) c = esc(a?.name || '') + (c ? ' · ' + c : '');
+  let c = txCatLabel(t); const todo = c === 'Category Needed';
+  if (showAcct) c = (L.acct[t.acct]?.name || '') + (c ? ' · ' + c : '');
   if (t.memo) c += (c ? ' · ' : '') + t.memo;
-  const sel = A.ui.select;
   return `<div class="tx ${t.approved === false ? 'unapproved' : ''}">
-    ${sel ? `<input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Sélectionner">` : ''}
-    ${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="Drapeau"></span>` : ''}
-    <button class="main" data-a="txEdit" data-id="${t.id}"><span class="p ellip">${esc(payeeName(t) || 'Sans bénéficiaire')}</span><span class="c ellip ${todo ? 'todo' : ''}">${esc(c)}</span></button>
+    ${A.ui.select ? `<input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select">` : ''}
+    ${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}
+    <button class="main-b" data-a="txEdit" data-id="${t.id}"><span class="p ellip">${esc(payeeName(t) || 'No payee')}</span><span class="c ellip ${todo ? 'todo' : ''}">${esc(c)}</span></button>
     <div><div class="a ${t.amount > 0 ? 'amt-pos' : ''}">${t.amount > 0 ? '+' : ''}${fmt(t.amount)}</div>${runBal != null ? `<div class="rb num">${fmt(runBal)}</div>` : ''}</div>
-    ${t.approved === false ? `<button class="btn sm pri" data-a="approve" data-id="${t.id}" aria-label="Valider">${I.check}</button>` :
-      `<button class="clr ${t.cleared}" data-a="clr" data-id="${t.id}" aria-label="${t.cleared === 'u' ? 'Non pointée' : t.cleared === 'c' ? 'Pointée' : 'Rapprochée'}">${t.cleared === 'r' ? I.lock.replace('<svg', '<svg width="14" height="14"') : 'P'}</button>`}
-  </div>`;
+    ${clrBtn(t)}</div>`;
 }
 function actionBar() {
   const n = A.ui.selected.size;
-  return `<div role="toolbar" aria-label="Actions groupées"><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n}</span>
-    <button data-a="bulk" data-k="cat">Catégoriser</button><button data-a="bulk" data-k="approve">Valider</button><button data-a="bulk" data-k="clear">Pointer</button>
-    <button data-a="bulk" data-k="flag">Drapeau</button><button data-a="bulk" data-k="date">Date</button><button data-a="bulk" data-k="del">Supprimer</button><button data-a="bulk" data-k="none" aria-label="Tout désélectionner">${I.close.replace('<svg', '<svg width="18" height="18"')}</button></div>`;
+  return `<div role="toolbar" aria-label="Bulk actions"><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n} selected</span>
+    <button data-a="bulk" data-k="cat">Categorize</button><button data-a="bulk" data-k="approve">Approve</button><button data-a="bulk" data-k="clear">Clear</button>
+    <button data-a="bulk" data-k="flag">Flag</button><button data-a="bulk" data-k="date">Date</button><button data-a="bulk" data-k="del">Delete</button><button data-a="bulk" data-k="none" aria-label="Deselect all">${I.close.replace('<svg', '<svg width="18" height="18"')}</button></div>`;
 }

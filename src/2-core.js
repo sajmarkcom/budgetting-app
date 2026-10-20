@@ -11,9 +11,9 @@ const curMonth = () => todayISO().slice(0, 7);
 const monthOf = iso => iso.slice(0, 7);
 function addMonths(m, n) { let [y, mo] = m.split('-').map(Number); mo += n; y += Math.floor((mo - 1) / 12); mo = ((mo - 1) % 12 + 12) % 12 + 1; return y + '-' + pad(mo); }
 function monthDiff(a, b) { const [ay, am] = a.split('-').map(Number), [by, bm] = b.split('-').map(Number); return (by - ay) * 12 + (bm - am); }
-const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-const MSHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const MSHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 function monthLabel(m, short) { const [y, mo] = m.split('-').map(Number); return short ? MSHORT[mo - 1] + ' ' + String(y).slice(2) : cap(MONTHS[mo - 1]) + ' ' + y; }
 function parseISO(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); }
@@ -21,11 +21,11 @@ function addDays(iso, n) { const d = parseISO(iso); d.setDate(d.getDate() + n); 
 function daysBetween(a, b) { return Math.round((parseISO(b) - parseISO(a)) / 86400000); }
 function dayLabel(iso) {
   const t = todayISO();
-  if (iso === t) return "Aujourd'hui";
-  if (iso === addDays(t, -1)) return 'Hier';
-  if (iso === addDays(t, 1)) return 'Demain';
+  if (iso === t) return 'Today';
+  if (iso === addDays(t, -1)) return 'Yesterday';
+  if (iso === addDays(t, 1)) return 'Tomorrow';
   const d = parseISO(iso);
-  return cap(DAYS[d.getDay()]) + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : '');
+  return cap(DAYS[d.getDay()]) + ', ' + cap(MONTHS[d.getMonth()]) + ' ' + d.getDate() + (d.getFullYear() !== new Date().getFullYear() ? ', ' + d.getFullYear() : '');
 }
 function fmtDate(iso) {
   if (!iso) return '';
@@ -60,28 +60,28 @@ function evalExpr(raw) {
 
 /* ---------- account types ---------- */
 const ACCT = {
-  checking: { label: 'Compte courant', grp: 'budget' },
-  savings: { label: 'Épargne', grp: 'budget' },
-  cash: { label: 'Espèces', grp: 'budget' },
-  credit: { label: 'Carte de crédit', grp: 'budget', credit: true },
-  loc: { label: 'Ligne de crédit / découvert', grp: 'budget', credit: true },
-  mortgage: { label: 'Prêt immobilier', grp: 'loan', debt: true },
-  auto: { label: 'Prêt auto', grp: 'loan', debt: true },
-  student: { label: 'Prêt étudiant', grp: 'loan', debt: true },
-  personal: { label: 'Prêt personnel', grp: 'loan', debt: true },
-  medical: { label: 'Dette médicale', grp: 'loan', debt: true },
-  otherdebt: { label: 'Autre dette', grp: 'loan', debt: true },
-  asset: { label: 'Actif (suivi)', grp: 'tracking' },
-  liability: { label: 'Passif (suivi)', grp: 'tracking', debt: true },
+  checking: { label: 'Checking', grp: 'budget' },
+  savings: { label: 'Savings', grp: 'budget' },
+  cash: { label: 'Cash', grp: 'budget' },
+  credit: { label: 'Credit Card', grp: 'budget', credit: true },
+  loc: { label: 'Line of Credit', grp: 'budget', credit: true },
+  mortgage: { label: 'Mortgage', grp: 'loan', debt: true },
+  auto: { label: 'Auto Loan', grp: 'loan', debt: true },
+  student: { label: 'Student Loan', grp: 'loan', debt: true },
+  personal: { label: 'Personal Loan', grp: 'loan', debt: true },
+  medical: { label: 'Medical Debt', grp: 'loan', debt: true },
+  otherdebt: { label: 'Other Debt', grp: 'loan', debt: true },
+  asset: { label: 'Asset (Tracking)', grp: 'tracking' },
+  liability: { label: 'Liability (Tracking)', grp: 'tracking', debt: true },
 };
 const onBudget = a => !!a && ACCT[a.type]?.grp === 'budget';
 const isCredit = a => !!a && !!ACCT[a.type]?.credit;
 const isDebt = a => !!a && !!ACCT[a.type]?.debt;
 
 const FREQ = {
-  never: 'Jamais', daily: 'Chaque jour', weekly: 'Chaque semaine', biweekly: 'Toutes les 2 semaines', twicemonth: 'Deux fois par mois',
-  every4w: 'Toutes les 4 semaines', monthly: 'Chaque mois', bimonthly: 'Tous les 2 mois', quarterly: 'Chaque trimestre', every4m: 'Tous les 4 mois',
-  semiannual: 'Deux fois par an', yearly: 'Chaque année', every2y: 'Tous les 2 ans'
+  never: 'Never', daily: 'Daily', weekly: 'Weekly', biweekly: 'Every other week', twicemonth: 'Twice a month',
+  every4w: 'Every 4 weeks', monthly: 'Monthly', bimonthly: 'Every other month', quarterly: 'Every 3 months', every4m: 'Every 4 months',
+  semiannual: 'Twice a year', yearly: 'Yearly', every2y: 'Every other year'
 };
 function nextDate(iso, f) {
   const d = parseISO(iso);
@@ -104,7 +104,7 @@ function nextDate(iso, f) {
   return isoOf(d);
 }
 
-const FLAGS = [['red', 'Rouge'], ['orange', 'Orange'], ['yellow', 'Jaune'], ['green', 'Vert'], ['blue', 'Bleu'], ['purple', 'Violet']];
+const FLAGS = [['red', 'Red'], ['orange', 'Orange'], ['yellow', 'Yellow'], ['green', 'Green'], ['blue', 'Blue'], ['purple', 'Purple']];
 
 /* ---------- app state ---------- */
 const A = {
@@ -121,14 +121,14 @@ const A = {
 function defaultPlan(name) {
   const g = (n, cats) => ({ id: uid(), name: n, cats });
   const groups = [
-    g('Charges fixes', ['Loyer', 'Électricité & gaz', 'Internet & mobile', 'Assurances', 'Abonnements']),
-    g('Quotidien', ['Courses', 'Transport', 'Restaurants & sorties', 'Santé', 'Shopping']),
-    g('Objectifs', ['Épargne de précaution', 'Vacances', 'Cadeaux']),
-    g('Plaisirs', ['Loisirs', 'Imprévus']),
+    g('Bills', ['Rent', 'Utilities', 'Phone & Internet', 'Insurance', 'Subscriptions']),
+    g('Needs', ['Groceries', 'Transportation', 'Dining Out', 'Health', 'Shopping']),
+    g('Goals', ['Emergency Fund', 'Vacation', 'Gifts']),
+    g('Fun Money', ['Hobbies', 'Stuff I Forgot to Budget For']),
   ];
   const p = {
-    id: uid(), name: name || 'Mon budget', currency: 'EUR', dateFmt: 'dmy', startMonth: curMonth(), createdAt: Date.now(), updatedAt: Date.now(), rev: '',
-    accounts: [], groups: [{ id: 'g_cc', name: 'Paiements carte de crédit', sys: 'cc' }], cats: [], assigned: {}, moves: [], payees: [], rules: [], scheduled: [], notes: {},
+    id: uid(), name: name || 'My Plan', currency: 'EUR', dateFmt: 'dmy', startMonth: curMonth(), createdAt: Date.now(), updatedAt: Date.now(), rev: '',
+    accounts: [], groups: [{ id: 'g_cc', name: 'Credit Card Payments', sys: 'cc' }], cats: [], assigned: {}, moves: [], payees: [], rules: [], scheduled: [], notes: {},
   };
   for (const gr of groups) { p.groups.push({ id: gr.id, name: gr.name }); for (const c of gr.cats) p.cats.push({ id: uid(), gid: gr.id, name: c, note: '', target: null }); }
   return p;
@@ -144,9 +144,9 @@ function rebuildLookups() {
   for (const c of p.cats) { L.cat[c.id] = c; if (c.cc) L.ccCat[c.cc] = c; }
   for (const y of p.payees) { L.payee[y.id] = y; L.payeeByName[y.name.toLowerCase()] = y; }
 }
-const catName = id => id === 'rta' ? 'Revenu à répartir' : (L.cat[id] ? ((L.cat[id].emoji ? L.cat[id].emoji + ' ' : '') + L.cat[id].name) : '');
+const catName = id => id === 'rta' ? 'Inflow: Ready to Assign' : (L.cat[id] ? ((L.cat[id].emoji ? L.cat[id].emoji + ' ' : '') + L.cat[id].name) : '');
 function payeeName(t) {
-  if (t.transferAcct) return 'Virement ' + (t.amount < 0 ? '→ ' : '← ') + (L.acct[t.transferAcct]?.name || 'compte supprimé');
+  if (t.transferAcct) return 'Transfer : ' + (L.acct[t.transferAcct]?.name || 'deleted account');
   return L.payee[t.payee]?.name || '';
 }
 function getPayee(name, create = true) {
@@ -261,7 +261,7 @@ function catM(m, id) { return monthData(m).cats[id] || { carry: 0, assigned: 0, 
 
 /* ---------- targets ---------- */
 const TARGET_TYPES = {
-  monthly: 'Chaque mois', weekly: 'Chaque semaine', yearly: 'Chaque année', date: 'À une date', balance: 'Avoir un solde de', debt: 'Remboursement mensuel'
+  monthly: 'Monthly', weekly: 'Weekly', yearly: 'Yearly', date: 'By date', balance: 'Have a balance of', debt: 'Monthly debt payment'
 };
 function countWeekday(m, wd) { const [y, mo] = m.split('-').map(Number); const n = new Date(y, mo, 0).getDate(); let k = 0; for (let d = 1; d <= n; d++) if (new Date(y, mo - 1, d).getDay() === wd) k++; return k; }
 function dueMonth(t, m) {
@@ -294,10 +294,10 @@ function targetInfo(c, m, x) {
   let pct;
   if (['yearly', 'date', 'balance'].includes(t.type)) pct = t.amount ? Math.min(1, Math.max(0, (x.carry + x.assigned) / t.amount)) : 1;
   else pct = total ? Math.min(1, Math.max(0, funded / total)) : 1;
-  if (snoozed) label = 'Objectif en pause ce mois-ci';
-  else if (under > 0) label = 'Encore ' + fmt(under) + ' ce mois-ci';
-  else if (['yearly', 'date', 'balance'].includes(t.type) && x.carry + x.assigned >= t.amount) label = 'Objectif atteint';
-  else label = 'Financé pour ce mois-ci';
+  if (snoozed) label = 'Snoozed';
+  else if (under > 0) label = fmt(under) + ' more needed';
+  else if (['yearly', 'date', 'balance'].includes(t.type) && x.carry + x.assigned >= t.amount) label = 'Funded';
+  else label = 'Funded';
   return { need, funded, under, pct, label, snoozed, total };
 }
 function catStatus(c, m) {
@@ -315,12 +315,12 @@ function ageOfMoney() {
   // budget accounts (card payments included, transfers between cash accounts excluded); average of the last 10 outflows.
   if (_aom && _aomV === A.calcV) return _aom;
   const inflows = [], outflows = [];
-  const startId = L.payeeByName['solde initial']?.id;
+  const startIds = new Set([L.payeeByName['solde initial']?.id, L.payeeByName['starting balance']?.id].filter(Boolean));
   for (const t of A.tx) {
     const a = L.acct[t.acct]; if (!onBudget(a) || isCredit(a)) continue;
     const ta = t.transferAcct ? L.acct[t.transferAcct] : null;
     if (ta && onBudget(ta) && !isCredit(ta)) continue;
-    if (startId && t.payee === startId) continue;
+    if (startIds.has(t.payee)) continue;
     for (const ln of txLines(t)) {
       if (ln.amount > 0) { if (ln.cat === 'rta') inflows.push({ date: t.date, left: ln.amount }); }
       else if (ln.amount < 0) outflows.push({ date: t.date, amt: -ln.amount });
@@ -400,7 +400,7 @@ function watchCore() {
     const d = snap.data();
     if (d.rev && d.rev !== A.plan.rev && d.rev !== lastRev && (d.updatedAt || 0) > (A.plan.updatedAt || 0)) {
       const got = await dbLoadPlan(id); if (!got || A.plan?.id !== id) return;
-      A.plan = got.plan; A.tx = got.tx; A.calcV++; rebuildLookups(); localSaveAll(); render(); toast('Mis à jour depuis un autre appareil');
+      A.plan = got.plan; A.tx = got.tx; A.calcV++; rebuildLookups(); localSaveAll(); render(); toast('Updated from another device');
     }
   }, () => { });
 }
@@ -425,7 +425,7 @@ async function switchPlan(id) {
   let got = null;
   if (DB) { try { got = await dbLoadPlan(id); } catch (e) { } }
   if (!got) got = localGetPlan(id);
-  if (!got) { toast('Budget introuvable'); return; }
+  if (!got) { toast('Plan not found'); return; }
   A.plan = got.plan; A.tx = got.tx; A.index.current = id; A.undo = []; A.redo = [];
   A.month = curMonth(); A.view = 'plan'; A.acct = null;
   rebuildLookups(); A.calcV++; runScheduled(); scheduleSave(); watchCore(); render();
@@ -445,12 +445,12 @@ function mutate(label, fn, opts = {}) {
 function undo() {
   const u = A.undo.pop(); if (!u) return;
   A.redo.push({ snap: snapshot(), label: u.label });
-  const s = JSON.parse(u.snap); A.plan = s.plan; A.tx = s.tx; scheduleSave(); render(); toast('Annulé : ' + u.label);
+  const s = JSON.parse(u.snap); A.plan = s.plan; A.tx = s.tx; scheduleSave(); render(); toast('Undone: ' + u.label);
 }
 function redo() {
   const r = A.redo.pop(); if (!r) return;
   A.undo.push({ snap: snapshot(), label: r.label });
-  const s = JSON.parse(r.snap); A.plan = s.plan; A.tx = s.tx; scheduleSave(); render(); toast('Rétabli : ' + r.label);
+  const s = JSON.parse(r.snap); A.plan = s.plan; A.tx = s.tx; scheduleSave(); render(); toast('Redone: ' + r.label);
 }
 
 /* ---------- domain operations ---------- */
@@ -466,7 +466,7 @@ function addAccount({ name, type, balance, date, rate, minPay }) {
   A.plan.accounts.push(a); L.acct[a.id] = a; ensureCcCat(a);
   if (balance) {
     const cat = onBudget(a) && !isCredit(a) ? 'rta' : '__start';
-    A.tx.push({ id: uid(), acct: a.id, date: date || todayISO(), payee: getPayee('Solde initial').id, cat, memo: '', amount: balance, cleared: 'c', flag: null, approved: true });
+    A.tx.push({ id: uid(), acct: a.id, date: date || todayISO(), payee: getPayee('Starting Balance').id, cat, memo: '', amount: balance, cleared: 'c', flag: null, approved: true });
   }
   return a;
 }

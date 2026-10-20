@@ -3,43 +3,43 @@ const YAPI = 'https://api.ynab.com/v1';
 let YA = null;
 async function yGet(path, token) {
   const r = await fetch(YAPI + path, { headers: { Authorization: 'Bearer ' + token } });
-  if (r.status === 401) throw new Error('Jeton refusé par YNAB : vérifie-le ou crées-en un nouveau.');
-  if (r.status === 429) throw new Error('Trop de requêtes vers YNAB : réessaie dans une heure.');
-  if (!r.ok) throw new Error('YNAB a répondu ' + r.status);
+  if (r.status === 401) throw new Error('YNAB rejected the token: check it or create a new one.');
+  if (r.status === 429) throw new Error('Too many requests to YNAB: try again in an hour.');
+  if (!r.ok) throw new Error('YNAB responded ' + r.status);
   return (await r.json()).data;
 }
 function yApiBox() {
   return `<div class="card" style="padding:14px; display:flex; flex-direction:column; gap:10px">
-    <strong>Méthode recommandée : connexion directe</strong>
-    <span class="small muted">Récupère tout : comptes (y compris clôturés, prêts et suivi), enveloppes avec leurs objectifs et notes, réparti mois par mois, opérations, fractionnements, virements et opérations programmées.</span>
-    <span class="small muted">Sur app.ynab.com → Account Settings → Developer Settings → « New Token ». Colle le jeton ici : il sert une seule fois, n'est jamais enregistré et ne quitte pas ce téléphone (sauf vers YNAB). Tu pourras le supprimer chez YNAB juste après.</span>
-    <input id="yTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Jeton YNAB" aria-label="Jeton d'accès YNAB">
-    <button class="btn pri block" data-a="yLoad">Me connecter à YNAB</button>
+    <strong>Recommended: direct connection</strong>
+    <span class="small muted">Gets everything: accounts (closed, loans and tracking included), categories with targets and notes, assigned money for every month, transactions, splits, transfers and scheduled transactions.</span>
+    <span class="small muted">On app.ynab.com → Account Settings → Developer Settings → “New Token”. Paste it here: it is used once, never saved, and only sent to YNAB. Delete it in YNAB right after.</span>
+    <input id="yTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="YNAB personal access token" aria-label="YNAB personal access token">
+    <button class="btn pri block" data-a="yLoad">Connect to YNAB</button>
     <div id="yStep"></div></div>
     <div class="sec-t"><span>Ou avec le fichier d'export</span></div>`;
 }
 async function yLoad() {
-  const tok = ($('#yTok')?.value || '').trim(); if (!tok) return toast('Colle ton jeton YNAB');
-  const st = $('#yStep'); st.innerHTML = `<div class="small muted">Connexion…</div>`;
+  const tok = ($('#yTok')?.value || '').trim(); if (!tok) return toast('Paste your YNAB token');
+  const st = $('#yStep'); st.innerHTML = `<div class="small muted">Connecting…</div>`;
   try {
     let d; try { d = await yGet('/plans', tok); } catch (e) { if (/401|429/.test(e.message) || /Jeton|Trop/.test(e.message)) throw e; d = await yGet('/budgets', tok); }
     const list = d.plans || d.budgets || [];
     YA = { tok, list };
-    st.innerHTML = list.length ? `<div class="card">${list.map((b, i) => `<button class="li" data-a="yPick" data-i="${i}"><span class="grow"><strong>${esc(b.name)}</strong><div class="small muted">Modifié le ${esc((b.last_modified_on || '').slice(0, 10))}</div></span>${I.right}</button>`).join('')}</div>` : `<div class="banner warn">${I.info}<span>Aucun budget trouvé sur ce compte.</span></div>`;
-  } catch (e) { st.innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message || 'Connexion impossible')}</span></div>`; }
+    st.innerHTML = list.length ? `<div class="card">${list.map((b, i) => `<button class="li" data-a="yPick" data-i="${i}"><span class="grow"><strong>${esc(b.name)}</strong><div class="small muted">Last modified ${esc((b.last_modified_on || '').slice(0, 10))}</div></span>${I.right}</button>`).join('')}</div>` : `<div class="banner warn">${I.info}<span>No plans found on this account.</span></div>`;
+  } catch (e) { st.innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message || 'Could not connect')}</span></div>`; }
 }
 async function yPick(i) {
-  const b = YA.list[i]; const st = $('#yStep'); st.innerHTML = `<div class="small muted">Téléchargement de « ${esc(b.name)} »…</div>`;
+  const b = YA.list[i]; const st = $('#yStep'); st.innerHTML = `<div class="small muted">Downloading “${esc(b.name)}”…</div>`;
   try {
     let d; try { d = await yGet('/plans/' + b.id, YA.tok); } catch (e) { if (/Jeton|Trop/.test(e.message)) throw e; d = await yGet('/budgets/' + b.id, YA.tok); }
     YA.b = d.plan || d.budget; YA.tok = null; const yt = $('#yTok'); if (yt) yt.value = '';
     const B = YA.b, live = x => !x.deleted;
     st.innerHTML = `<div class="kpis" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-      <div class="kpi"><span>Comptes</span><b>${B.accounts.filter(live).length}</b></div><div class="kpi"><span>Enveloppes</span><b>${B.categories.filter(live).length}</b></div>
-      <div class="kpi"><span>Opérations</span><b>${B.transactions.filter(live).length}</b></div><div class="kpi"><span>Mois</span><b>${(B.months || []).length}</b></div></div>
-      <div class="small muted">L'import crée un nouveau budget « ${esc(B.name)} » : ton budget actuel n'est pas touché.</div>
-      <button class="btn pri block" data-a="yDo">Importer tout</button>`;
-  } catch (e) { st.innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message || 'Téléchargement impossible')}</span></div>`; }
+      <div class="kpi"><span>Accounts</span><b>${B.accounts.filter(live).length}</b></div><div class="kpi"><span>Categories</span><b>${B.categories.filter(live).length}</b></div>
+      <div class="kpi"><span>Transactions</span><b>${B.transactions.filter(live).length}</b></div><div class="kpi"><span>Months</span><b>${(B.months || []).length}</b></div></div>
+      <div class="small muted">The import creates a new plan “${esc(B.name)}”; your current plan is untouched.</div>
+      <button class="btn pri block" data-a="yDo">Import everything</button>`;
+  } catch (e) { st.innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message || 'Download failed')}</span></div>`; }
 }
 function yDo() {
   const B = YA.b; const live = x => !x.deleted; const c = v => Math.round((v || 0) / 10); // milliunits → cents
@@ -77,7 +77,7 @@ function yDo() {
   const catOf = (id, accId) => { if (!id) return null; if (id === rtaId) return onBudget(L.acct[accId]) ? 'rta' : null; return cMap[id] || null; };
   // payees
   const yName = {}; for (const y of (B.payees || [])) yName[y.id] = y.name;
-  const pay = id => { const n = yName[id]; if (!n || /^transfer\s*:/i.test(n)) return null; return getPayee(n === 'Starting Balance' ? 'Solde initial' : n).id; };
+  const pay = id => { const n = yName[id]; if (!n || /^transfer\s*:/i.test(n)) return null; return getPayee(n === 'Starting Balance' ? 'Starting Balance' : n).id; };
   // transactions
   const subs = {}; for (const s of (B.subtransactions || []).filter(live)) (subs[s.transaction_id] ||= []).push(s);
   const tId = {}; const ytx = B.transactions.filter(live).filter(t => aId[t.account_id]);
@@ -118,7 +118,7 @@ function yDo() {
   // transfers whose other side was not exported: create it so both registers balance
   for (const tx of A.tx.slice()) if (tx.transferAcct && !tx.transferId) { const m = { id: uid(), acct: tx.transferAcct, date: tx.date, amount: -tx.amount, memo: tx.memo, cleared: 'u', flag: null, approved: true, transferAcct: tx.acct, transferId: tx.id, payee: null, cat: null }; tx.transferId = m.id; A.tx.push(m); }
   // off-budget accounts (loans, tracking): YNAB can hold a balance not explained by transactions (accrued interest) — align it
-  { const bal = balances(); for (const a of B.accounts.filter(live)) { const id = aId[a.id]; if (!id || onBudget(L.acct[id])) continue; const diff = c(a.balance) - bal[id].working; if (diff) A.tx.push({ id: uid(), acct: id, date: todayISO(), payee: getPayee('Ajustement YNAB (intérêts)').id, cat: '__start', memo: '', amount: diff, cleared: 'c', flag: null, approved: true }); } }
+  { const bal = balances(); for (const a of B.accounts.filter(live)) { const id = aId[a.id]; if (!id || onBudget(L.acct[id])) continue; const diff = c(a.balance) - bal[id].working; if (diff) A.tx.push({ id: uid(), acct: id, date: todayISO(), payee: getPayee('YNAB balance adjustment (interest)').id, cat: '__start', memo: '', amount: diff, cleared: 'c', flag: null, approved: true }); } }
   // assigned per month + month notes
   let first = curMonth();
   for (const mo of (B.months || [])) {
@@ -143,17 +143,17 @@ function yDo() {
   // verification against YNAB's balances for the current month
   const cm = curMonth(); const ym = (B.months || []).find(mo => mo.month.slice(0, 7) === cm);
   let ok = 0, tot = 0; const bad = [];
-  if (ym) for (const k of ym.categories || []) { if (k.deleted) continue; const id = cMap[k.id]; if (!id) continue; tot++; const mine = catM(cm, id).available, theirs = c(k.balance); if (mine === theirs) ok++; else bad.push(`${k.name} : YNAB ${fmt(theirs)} / ici ${fmt(mine)}`); }
+  if (ym) for (const k of ym.categories || []) { if (k.deleted) continue; const id = cMap[k.id]; if (!id) continue; tot++; const mine = catM(cm, id).available, theirs = c(k.balance); if (mine === theirs) ok++; else bad.push(`${k.name}: YNAB ${fmt(theirs)} / here ${fmt(mine)}`); }
   let accOk = 0, accTot = 0; const bal = balances();
-  for (const a of B.accounts.filter(live)) { const id = aId[a.id]; if (!id) continue; accTot++; if (bal[id].working === c(a.balance)) accOk++; else bad.unshift(`Compte ${a.name} : YNAB ${fmt(c(a.balance))} / ici ${fmt(bal[id].working)}`); }
+  for (const a of B.accounts.filter(live)) { const id = aId[a.id]; if (!id) continue; accTot++; if (bal[id].working === c(a.balance)) accOk++; else bad.unshift(`Account ${a.name}: YNAB ${fmt(c(a.balance))} / here ${fmt(bal[id].working)}`); }
   const rtaY = ym && typeof ym.to_be_budgeted === 'number' ? c(ym.to_be_budgeted) : null;
   YA = null;
   scheduleSave(); watchCore(); A.view = 'plan'; A.month = cm; closeSheet(); render();
   const rtaMine = monthData(cm).rta;
-  openSheet('Import terminé', `<p style="margin:0"><strong>${A.tx.length} opérations · ${accOk}/${accTot} comptes et ${ok}/${tot} enveloppes identiques à YNAB</strong></p>
-    ${rtaY != null ? `<div class="small">À répartir : YNAB ${fmt(rtaY)} · ici ${fmt(rtaMine)} ${rtaY === rtaMine ? '✓' : ''}</div>` : ''}
-    ${bad.length ? `<div class="banner warn">${I.info}<span>Écarts à vérifier :</span></div><div class="card">${bad.slice(0, 25).map(x => `<div class="li small">${esc(x)}</div>`).join('')}</div>` : `<div class="banner info">${I.check}<span>Tout correspond à YNAB.</span></div>`}
-    <div class="small muted">Pense à supprimer le jeton chez YNAB (Developer Settings).</div>`, `<button class="btn pri block" data-a="closeSheet">Voir mon budget</button>`);
+  openSheet('Import Complete', `<p style="margin:0"><strong>${A.tx.length} transactions · ${accOk}/${accTot} accounts and ${ok}/${tot} categories match YNAB</strong></p>
+    ${rtaY != null ? `<div class="small">Ready to Assign: YNAB ${fmt(rtaY)} · here ${fmt(rtaMine)} ${rtaY === rtaMine ? '✓' : ''}</div>` : ''}
+    ${bad.length ? `<div class="banner warn">${I.info}<span>Differences to check:</span></div><div class="card">${bad.slice(0, 25).map(x => `<div class="li small">${esc(x)}</div>`).join('')}</div>` : `<div class="banner info">${I.check}<span>Everything matches YNAB.</span></div>`}
+    <div class="small muted">Delete the token in YNAB now (Developer Settings).</div>`, `<button class="btn pri block" data-a="closeSheet">View my plan</button>`);
 }
 function yGoal(k) {
   if (!k.goal_type) return null;
