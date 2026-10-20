@@ -2650,7 +2650,7 @@ function bankSettingsHtml() {
       <button class="btn sm" data-a="bankMap" data-id="${c.id}">Accounts</button>${days < 30 ? `<button class="btn sm" data-a="bankLink" data-bank="${esc(c.bank)}">Reconnect</button>` : ''}<button class="ibtn" data-a="bankRemove" data-id="${c.id}" aria-label="Disconnect ${esc(c.bank)}">${I.trash}</button></div>`;
   }).join('');
   return `<div class="sec-t"><span>Bank Connections</span></div><div class="card">${rows}
-    ${b.pending ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(b.pending.bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
+    ${pendList().length ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(pendList().slice(-1)[0].bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCheck">Check now</button><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
     <button class="li" data-a="bankLinkSheet"><span class="ic">${I.plus}</span><span class="grow"><strong>Link a bank</strong></span></button>
     ${b.conns.length ? `<button class="li" data-a="bankSyncNow"><span class="ic">${I.download}</span><span class="grow"><strong>Import now</strong><div class="small muted">Imports run automatically when you open the app (at most every 6 hours)</div></span></button>` : ''}
     <button class="li" data-a="bankSetup"><span class="ic">${I.gear}</span><span class="grow"><strong>Proxy settings</strong></span></button></div>`;
@@ -2708,34 +2708,44 @@ async function bankLink(name) {
   const state = 'eb-' + uid() + uid();
   try {
     const r = await bk('start', { bank: name, country: 'FR', validUntil, state });
-    b.pending = { state, bank: name, at: Date.now(), validUntil };
-    mutate('Bank login started', () => { }, { silent: true }); await persistNow(); try { if (gdOn()) await gdPush(); } catch (e) { }
+    pendSave([...pendList(), { state, bank: name, at: Date.now(), validUntil, plan: A.plan.id }]);
+    await persistNow(); try { if (gdOn()) await gdPush(); } catch (e) { }
     location.href = r.url;
   } catch (e) { toast(e.message); }
 }
-let bankPoll = null;
-function bankWatchPending() {
-  // always read the CURRENT plan: a sync from Drive can replace A.plan while we wait
-  const cur = () => A.plan?.bank?.pending ? A.plan.bank : null;
-  const b0 = cur(); if (!b0 || bankPoll) return;
-  if (Date.now() - b0.pending.at > 30 * 60000) { b0.pending = null; scheduleSave(); render(); return; }
-  bankPoll = setInterval(async () => {
-    const b = cur(); if (!b) { clearInterval(bankPoll); bankPoll = null; return; }
-    try {
-      const r = await bk('pending', { state: b.pending.state });
-      if (r.pending) return;
-      clearInterval(bankPoll); bankPoll = null;
-      const bb = cur(); if (!bb || !r.session) { render(); return; }
-      const s = r.session; const p = bb.pending;
-      if (bb.conns.some(c => c.session === s.session_id)) { bb.pending = null; scheduleSave(); render(); return; }
+/* bank logins in progress live on THIS device only (never synced: another device's copy can't overwrite them) */
+const PEND_KEY = 'budget.bankPending';
+function pendAll() { try { return JSON.parse(localStorage.getItem(PEND_KEY) || '[]').filter(x => Date.now() - x.at < 60 * 60000); } catch (e) { return []; } }
+function pendSave(l) { try { localStorage.setItem(PEND_KEY, JSON.stringify(l)); } catch (e) { } }
+function pendList() { return A.plan ? pendAll().filter(x => x.plan === A.plan.id) : []; }
+function pendDrop(state) { pendSave(pendAll().filter(x => x.state !== state)); }
+let bankPoll = null, pendBusy = false;
+async function bankCheckOnce(manual) {
+  if (pendBusy || !A.plan?.bank?.url) return; pendBusy = true;
+  try {
+    const list = pendList(); if (!list.length) { clearInterval(bankPoll); bankPoll = null; return; }
+    for (const p of list) {
+      const r = await bk('pending', { state: p.state });
+      if (r.pending || !r.session) continue;
+      const s = r.session; pendDrop(p.state);
+      const B = A.plan.bank; if (B.pending) B.pending = null;
+      if (B.conns.some(c => c.session === s.session_id)) continue;
       const conn = { id: uid(), bank: p.bank, session: s.session_id, validUntil: s.access?.valid_until || p.validUntil, accounts: (s.accounts || []).map(a => ({ uid: a.uid, name: a.name || a.product || a.account_id?.iban || 'Account', iban: a.account_id?.iban || '', currency: a.currency || '', acct: null })), lastSync: 0 };
-      const old = bb.conns.find(c => c.bank === p.bank);
+      const old = B.conns.find(c => c.bank === p.bank);
       if (old) for (const a of conn.accounts) { const prev = old.accounts.find(x => (x.iban && x.iban === a.iban) || x.name === a.name); if (prev) a.acct = prev.acct; }
-      mutate('Bank connected', () => { const B = A.plan.bank; B.pending = null; B.conns = B.conns.filter(c => c.id !== old?.id); B.conns.push(conn); });
+      mutate('Bank connected', () => { const BB = A.plan.bank; BB.conns = BB.conns.filter(c => c.id !== old?.id); BB.conns.push(conn); });
       await persistNow(); try { if (gdOn()) await gdPush(); } catch (e) { }
-      bankMapSheet(conn.id);
-    } catch (e) { clearInterval(bankPoll); bankPoll = null; toast(e.message); }
-  }, 3000);
+      pendSave(pendAll().filter(x => !(x.plan === A.plan.id && x.bank === p.bank)));
+      bankMapSheet(conn.id); return;
+    }
+    if (manual) toast('Not received yet: finish the login at your bank until you see "Bank connected".');
+  } catch (e) { toast(e.message); }
+  finally { pendBusy = false; if (!pendList().length) { clearInterval(bankPoll); bankPoll = null; if (A.view === 'settings') render(); } }
+}
+function bankWatchPending() {
+  if (A.plan?.bank?.pending) { A.plan.bank.pending = null; } // old synced field: ignored now
+  if (!pendList().length || bankPoll) return;
+  bankCheckOnce(); bankPoll = setInterval(() => bankCheckOnce(), 3000);
 }
 
 /* ---------- map bank accounts to plan accounts ---------- */
@@ -2954,7 +2964,8 @@ const ACT = {
   gdLogin: () => gdAuth(false), gdNow: () => gdSync(), gdOff: () => gdDisconnect(),
   bankSetup: () => bankSetupSheet(), bankConnect: () => bankConnect(), bankLinkSheet: () => bankLinkSheet(), bankLink: el => bankLink(el.dataset.bank),
   bankMap: el => bankMapSheet(el.dataset.id), bankMapSave: el => bankMapSave(el.dataset.id), bankSyncNow: () => bankSync(true),
-  bankCancel: () => { mutate('Bank login cancelled', () => { A.plan.bank.pending = null; }, { silent: true }); },
+  bankCancel: () => { pendSave(pendAll().filter(x => x.plan !== A.plan.id)); clearInterval(bankPoll); bankPoll = null; render(); },
+  bankCheck: () => bankCheckOnce(true),
   bankRemove: el => confirmSheet('Disconnect bank', 'Stops importing from this bank and revokes the access at Enable Banking. Transactions already imported stay.', 'Disconnect', 'bankRemoveDo', { id: el.dataset.id }),
   bankRemoveDo: async el => { const c = A.plan.bank.conns.find(x => x.id === el.dataset.id); closeSheet(); if (!c) return; try { await bk('delete', { session: c.session }); } catch (e) { } mutate('Bank disconnected', () => { A.plan.bank.conns = A.plan.bank.conns.filter(x => x !== c); }); },
   yLoad: () => yLoad(), yPick: el => yPick(+el.dataset.i), yDo: () => yDo(),
@@ -3104,6 +3115,8 @@ document.addEventListener('drop', e => { const el = e.target.closest?.('[data-dr
 document.addEventListener('dragend', () => { dragAcct = null; $$('.drop-over,.dragging').forEach(x => x.classList.remove('drop-over', 'dragging')); });
 
 window.addEventListener('pagehide', () => { if (A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
+window.addEventListener('pageshow', () => { if (A.plan) bankWatchPending(); });
+window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
