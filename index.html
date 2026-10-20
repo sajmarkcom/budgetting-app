@@ -891,10 +891,13 @@ function saveTx(d) {
   } else {
     if (old.transferId) { A.tx = A.tx.filter(x => x.id !== old.transferId); }
     t.transferAcct = null; t.transferId = null;
+    const prevName = L.payee[t.payee]?.name; if (!t.rawPayee && t.importId && /^ebp?:/.test(t.importId) && prevName) t.rawPayee = prevName;
     const y = getPayee(d.payee); t.payee = y ? y.id : null;
     if (d.splits && d.splits.length > 1) { t.splits = d.splits.map(s => ({ cat: s.cat || null, amount: s.amount, memo: s.memo || '' })); t.cat = null; }
     else { t.splits = null; t.cat = onBudget(a) ? (d.splits?.length === 1 ? d.splits[0].cat : d.cat) || null : (d.cat === '__start' ? '__start' : null); }
     if (y && t.cat && t.cat !== '__start') y.lastCat = t.cat;
+    // remember the payee you chose for this bank label: the next payment with a different reference gets it too
+    if (y && t.rawPayee && typeof learnKey === 'function') { const k = learnKey(t.rawPayee); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
   }
   if (isNew) A.tx.push(t);
   return t;
@@ -2930,10 +2933,17 @@ function ebRow(t) {
 }
 /* free auto-categorisation: tidy the bank's label, then reuse a payee you already have (and its last category) */
 function cleanPayee(raw) {
-  let x = ' ' + (raw || '') + ' ';
-  x = x.replace(/\s(CB|CARTE|PRLV|SEPA|VIR|VIREMENT|INST|INSTANTANE|RECU|EMIS|PAIEMENT|ACHAT|RETRAIT|DAB|FACTURE|PAYPAL \*|SUMUP \*|ZETTLE_\*)(?=\s)/gi, ' ')
-    .replace(/\sX\d{3,}/gi, ' ').replace(/\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?/g, ' ').replace(/\b\d{3,}\b/g, ' ').replace(/[*_#]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!x) return (raw || '').trim();
+  // bank labels change at every payment (dates, references, card numbers): keep only the merchant / person
+  let x = ' ' + String(raw || '').replace(/\s+/g, ' ') + ' ';
+  const m = x.match(/\s(?:DE|POUR)\s?:\s*(.+?)(?=\s(?:ID|MOTIF|REF|DATE|IBAN|BQ|CPT|LIB|LIBELLE|NUM)\s?:|\s\d{2}\s\d{2}\sBQ\s|\sBQ\s|$)/i);
+  if (m) x = ' ' + m[1] + ' ';
+  else {
+    const c = x.match(/\sCARTE\s+X\d{3,}\s+(?:REMBT\s+)?(?:\d{2}\/\d{2}\s+)?(.+)$/i); if (c) x = ' ' + c[1] + ' ';
+  }
+  x = x.replace(/\s(CB|CARTE|PRLV|PRELEVEMENT|EUROPEEN|SEPA|VIR|VIREMENT|INST|INSTANTANE|RE|RECU|EMIS|LOGITEL|WERO|PERM|PAIEMENT|ACHAT|RETRAIT|DAB|FACTURE|COMMERCE|ELECTRONIQUE|REMBT|TRANSF|PAYPAL \*|SUMUP \*|ZETTLE_\*)(?=\s)/gi, ' ')
+    .replace(/\s(M|MME|MLLE|MR|MRS)\.?(?=\s)/gi, ' ')
+    .replace(/\sX\d{3,}/gi, ' ').replace(/\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?/g, ' ').replace(/\*+\d*\**/g, ' ').replace(/\S*\d\S*/g, ' ').replace(/[*_#:]+/g, ' ').replace(/(^|\s)[^\p{L}\s]+(?=\s|$)/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!x) return String(raw || '').trim();
   const words = x.split(' ').slice(0, 3).join(' ');
   return words === words.toUpperCase() ? words.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, m => m.toUpperCase()) : words;
 }
@@ -3005,7 +3015,7 @@ function importRows(acct, rows, from) {
     const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
     if (!cat && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
-    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, ...(r.pending ? { pend: true } : {}) });
+    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(r.pending ? { pend: true } : {}) });
     if (r.pending) pendSeen.add(key);
     ids.add(key); nn++;
   }

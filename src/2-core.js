@@ -556,10 +556,13 @@ function saveTx(d) {
   } else {
     if (old.transferId) { A.tx = A.tx.filter(x => x.id !== old.transferId); }
     t.transferAcct = null; t.transferId = null;
+    const prevName = L.payee[t.payee]?.name; if (!t.rawPayee && t.importId && /^ebp?:/.test(t.importId) && prevName) t.rawPayee = prevName;
     const y = getPayee(d.payee); t.payee = y ? y.id : null;
     if (d.splits && d.splits.length > 1) { t.splits = d.splits.map(s => ({ cat: s.cat || null, amount: s.amount, memo: s.memo || '' })); t.cat = null; }
     else { t.splits = null; t.cat = onBudget(a) ? (d.splits?.length === 1 ? d.splits[0].cat : d.cat) || null : (d.cat === '__start' ? '__start' : null); }
     if (y && t.cat && t.cat !== '__start') y.lastCat = t.cat;
+    // remember the payee you chose for this bank label: the next payment with a different reference gets it too
+    if (y && t.rawPayee && typeof learnKey === 'function') { const k = learnKey(t.rawPayee); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
   }
   if (isNew) A.tx.push(t);
   return t;
