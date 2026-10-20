@@ -203,7 +203,7 @@ const MERCHANTS = [
   [/\b(lidl|carrefour|leclerc|auchan|intermarch|super ?u|hyper ?u|monoprix|franprix|casino|picard|aldi|netto|biocoop|grand frais|naturalia|spar|proxi|coccinelle)\b/i, ['courses', 'supermarche', 'alimentation', 'groceries']],
   [/\b(mc ?do|mc ?donald'?s?|burger king|kfc|quick|subway|uber ?eats|deliveroo|o'?tacos|five guys|domino|pizza hut|just eat)\b/i, ['fast-food', 'fast food', 'restaurants', 'restaurant']],
   [/\b(total|esso|shell|avia|bp|intermarche carbu|station|carburant|eni)\b(?!.*energies)/i, ['essence', 'carburant', 'fuel']],
-  [/\b(tisseo|sncf|ouigo|ratp|tcl|navigo|bolt|lime|uber(?! ?eats)|blablacar|flixbus|tier|dott)\b/i, ['transport', 'tisseo', 'transports']],
+  [/\b(tisseo|sncf|ouigo|ratp|tcl|navigo|bolt|lime|uber(?! ?eats)|blablacar|flixbus|tier|dott|v[eé]l[oô]|velib|velov|bicloo|cityscoot|indigo|parking|stationnement|onepark|zenpark|trainline|ter|tram|metro|bus|taxi|g7|heetch|free ?now)\b/i, ['transport', 'tisseo', 'tisséo', 'transports']],
   [/\b(vinci autoroutes|sanef|aprr|asf|cofiroute|peage|area)\b/i, ['peage', 'péage']],
   [/\b(free|bouygues|orange|sfr|sosh|red by sfr|b ?& ?you)\b/i, ['telecoms', 'télécoms', 'telephone', 'internet']],
   [/\b(totalenergies|edf|engie|ekwateur|enercoop)\b/i, ['total energies', 'energie', 'électricité', 'electricite']],
@@ -213,7 +213,14 @@ const MERCHANTS = [
   [/\b(olivier|lolivier|maif|macif|axa|matmut|groupama|sogessur|spb|allianz|alan|harmonie)\b/i, ['olivier assurance', 'assurances', 'assurance', 'mutuelle']],
   [/\b(amazon|zalando|fnac|darty|decathlon|ikea|action|h ?& ?m|zara|uniqlo|shein|vinted|leroy merlin|boulanger|sephora)\b/i, ['shopping', 'achats']],
   [/\b(pharmacie|doctolib|medecin|dentiste|laboratoire)\b/i, ['santé', 'sante', 'pharmacie']],
-  [/\b(tabac|presse)\b/i, ['tabac']], [/\b(dgfip|impot|tresor public)\b/i, ['états', 'etat', 'impots', 'impôts']],
+  [/\b(tabac|presse)\b/i, ['tabac']],
+  [/\b(bar|pub|brasserie|le comptoir|cafe|café|biere|bière)\b/i, ['bar', 'bars', 'sorties']],
+  [/\b(restaurant|resto|sushi|pizzeria|pizza|kebab|bistro|creperie|crêperie|thefork|lafourchette)\b/i, ['restaurants', 'restaurant', 'fast-food']],
+  [/\b(cinema|cinéma|pathe|pathé|ugc|cgr|gaumont|fnac spectacles|ticketmaster|billetreduc|shotgun|dice)\b/i, ['loisirs', 'sorties', 'cinema']],
+  [/\b(coiffeur|barber|barbier)\b/i, ['coiffeur', 'beauté', 'soins']],
+  [/\b(ionos|ovh|o2switch|squarespace|wix|godaddy|gandi|hostinger|canva|figma|shopify)\b/i, ['abonnements tech', 'abonnements', 'pro']],
+  [/\b(airbnb|booking|hotel|hôtel|ibis|accor|easyjet|ryanair|vueling|transavia|air france|volotea)\b/i, ['vacances', 'voyages', 'voyage']],
+  [/\b(loyer|foncia|nexity|citya)\b/i, ['loyers', 'loyer']], [/\b(dgfip|impot|tresor public)\b/i, ['états', 'etat', 'impots', 'impôts']],
 ];
 /* your own name, as the banks report it on your accounts (e.g. “BOUCHENOIRE Sullivan”) */
 function ownerNames() {

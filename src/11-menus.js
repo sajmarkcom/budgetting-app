@@ -134,6 +134,11 @@ function suggestCats(t) {
   if (t.amount > 0 && onBudget(a) && !isCredit(a)) add('rta');
   try { const g = (typeof learnedPayee === 'function' && learnedPayee(raw)) || (typeof guessPayee === 'function' && guessPayee(raw)); add(g?.lastCat); } catch (e) { }
   add(y?.lastCat);
+  // a category whose name appears in the bank label (e.g. “PHARMACIE …” → Santé/Pharmacie)
+  const words = new Set(norm(raw + ' ' + (y?.name || '')).split(/[^\p{L}]+/u).filter(w => w.length >= 4));
+  for (const c of A.plan.cats) if (!c.cc && !c.hidden && norm(c.name).split(/[^\p{L}]+/u).some(w => w.length >= 4 && words.has(w))) add(c.id);
+  // past payees whose name appears in the label (e.g. a payee “IONOS” you used before)
+  for (const p of A.plan.payees) { const pn = norm(p.name.replace(/^\p{Extended_Pictographic}\s*/u, '')); if (p.lastCat && pn.length >= 4 && (words.has(pn) || norm(raw).includes(pn))) add(p.lastCat); }
   // what you chose for similar payees, then your most used categories lately
   const key = norm((typeof cleanPayee === 'function' ? cleanPayee(raw) : raw)).split(' ')[0] || '';
   const cnt = {}, recent = {}; const since = addDays(todayISO(), -120);
@@ -170,8 +175,8 @@ Object.assign(ACT, {
   },
   catPickDo: el => {
     const t = A.tx.find(x => x.id === el.dataset.id); const c = el.dataset.c; if (!t) return;
-    mutate('Categorized: ' + (c === 'rta' ? 'Ready to Assign' : catName(c)), () => {
-      t.cat = c; t.splits = null;
+    mutate('Categorized and approved: ' + (c === 'rta' ? 'Ready to Assign' : catName(c)), () => {
+      t.cat = c; t.splits = null; t.approved = true;
       const y = L.payee[t.payee]; if (y && c !== 'rta') y.lastCat = c;
       if (y && t.importId && /^ebp?:/.test(t.importId) && typeof learnKey === 'function') { const k = learnKey(t.rawPayee || y.name); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
     });
