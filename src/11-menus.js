@@ -126,3 +126,54 @@ function dropFutureBankLines() {
   if (fut.length) { A.tx = A.tx.filter(t => !fut.includes(t.id)); scheduleSave(); render(); }
 }
 setTimeout(dropFutureBankLines, 1500);
+
+/* ---------- click on a category in the register: quick picker, best guesses first ---------- */
+function suggestCats(t) {
+  const out = [], add = c => { if (c && c !== '__start' && (c === 'rta' || (L.cat[c] && !L.cat[c].cc && !L.cat[c].hidden)) && !out.includes(c)) out.push(c); };
+  const a = L.acct[t.acct]; const y = L.payee[t.payee]; const raw = t.rawPayee || y?.name || '';
+  if (t.amount > 0 && onBudget(a) && !isCredit(a)) add('rta');
+  try { const g = (typeof learnedPayee === 'function' && learnedPayee(raw)) || (typeof guessPayee === 'function' && guessPayee(raw)); add(g?.lastCat); } catch (e) { }
+  add(y?.lastCat);
+  // what you chose for similar payees, then your most used categories lately
+  const key = norm((typeof cleanPayee === 'function' ? cleanPayee(raw) : raw)).split(' ')[0] || '';
+  const cnt = {}, recent = {}; const since = addDays(todayISO(), -120);
+  for (const x of A.tx) {
+    if (!x.cat || x === t) continue;
+    const n = norm(payeeName(x) || '');
+    if (key.length >= 3 && n.split(' ')[0] === key) cnt[x.cat] = (cnt[x.cat] || 0) + 3;
+    if (x.date >= since && Math.sign(x.amount) === Math.sign(t.amount)) recent[x.cat] = (recent[x.cat] || 0) + 1;
+  }
+  Object.entries(cnt).sort((p, q) => q[1] - p[1]).forEach(([c]) => add(c));
+  Object.entries(recent).sort((p, q) => q[1] - p[1]).forEach(([c]) => add(c));
+  return out;
+}
+function catPickList(t, q) {
+  q = norm(q || '');
+  const sug = q ? [] : suggestCats(t).slice(0, 5);
+  const row = c => `<button class="pm-i" data-a="catPickDo" data-c="${c}" data-id="${t.id}"><span class="grow">${esc(c === 'rta' ? 'Inflow: Ready to Assign' : catName(c))}</span>${c !== 'rta' ? `<span class="small muted num">${fmt(catM(monthOf(t.date), c).available)}</span>` : ''}</button>`;
+  let h = sug.length ? `<div class="pm-h">Suggested</div>` + sug.map(row).join('') + msep : '';
+  for (const g of A.plan.groups) {
+    if (g.sys === 'cc') continue;
+    const cats = A.plan.cats.filter(c => c.gid === g.id && !c.hidden && (!q || norm(catName(c.id)).includes(q) || norm(g.name).includes(q)));
+    if (cats.length) h += `<div class="pm-h">${esc(g.name)}</div>` + cats.map(c => row(c.id)).join('');
+  }
+  if (!q || 'inflow ready to assign'.includes(q)) h += msep + row('rta');
+  return h || '<div class="pm-h">No category found</div>';
+}
+Object.assign(ACT, {
+  catPick: (el, e) => {
+    const t = A.tx.find(x => x.id === el.dataset.id); if (!t) return; const r = el.getBoundingClientRect();
+    const d = popMenu(r.left, r.bottom + 4, `<div style="padding:4px 4px 6px"><input id="catPickQ" class="in" placeholder="Search categories" autocomplete="off" aria-label="Search categories"></div><div id="catPickL">${catPickList(t, '')}</div>`, 'pm-pick');
+    const inp = d.querySelector('#catPickQ');
+    inp.addEventListener('input', () => { d.querySelector('#catPickL').innerHTML = catPickList(t, inp.value); });
+    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); d.querySelector('#catPickL [data-a=catPickDo]')?.click(); } });
+  },
+  catPickDo: el => {
+    const t = A.tx.find(x => x.id === el.dataset.id); const c = el.dataset.c; if (!t) return;
+    mutate('Categorized: ' + (c === 'rta' ? 'Ready to Assign' : catName(c)), () => {
+      t.cat = c; t.splits = null;
+      const y = L.payee[t.payee]; if (y && c !== 'rta') y.lastCat = c;
+      if (y && t.importId && /^ebp?:/.test(t.importId) && typeof learnKey === 'function') { const k = learnKey(t.rawPayee || y.name); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
+    });
+  },
+});

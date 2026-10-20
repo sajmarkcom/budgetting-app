@@ -179,7 +179,7 @@ function cleanPayee(raw) {
   else {
     const c = x.match(/\sCARTE\s+X\d{3,}\s+(?:REMBT\s+)?(?:\d{2}\/\d{2}\s+)?(.+)$/i); if (c) x = ' ' + c[1] + ' ';
   }
-  x = x.replace(/\s(CB|CARTE|PRLV|PRELEVEMENT|EUROPEEN|SEPA|VIR|VIREMENT|INST|INSTANTANE|RE|RECU|EMIS|LOGITEL|WERO|PERM|PAIEMENT|ACHAT|RETRAIT|DAB|FACTURE|COMMERCE|ELECTRONIQUE|REMBT|TRANSF|PAYPAL \*|SUMUP \*|ZETTLE_\*)(?=\s)/gi, ' ')
+  x = x.replace(/\s(CB|CARTE|PRLV|PRELEVEMENT|EUROPEEN|SEPA|VIR|VIREMENT|INST|INSTANTANE|RE|RECU|EMIS|LOGITEL|WERO|PERM|PAIEMENT|ACHAT|RETRAIT|DAB|FACTURE|COMMERCE|ELECTRONIQUE|REMBT|TRANSF|COMPTABILISE|COMPTABILISÉ|AUTORISATION|EN COURS|PAYPAL \*|SUMUP \*|ZETTLE_\*)(?=\s)/gi, ' ')
     .replace(/\s(M|MME|MLLE|MR|MRS)\.?(?=\s)/gi, ' ')
     .replace(/\sX\d{3,}/gi, ' ').replace(/\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?/g, ' ').replace(/\*+\d*\**/g, ' ').replace(/\S*\d\S*/g, ' ').replace(/[*_#:]+/g, ' ').replace(/(^|\s)[^\p{L}\s]+(?=\s|$)/gu, ' ').replace(/\s+/g, ' ').trim();
   if (!x) return String(raw || '').trim();

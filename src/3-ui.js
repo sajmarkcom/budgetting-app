@@ -474,7 +474,7 @@ function txTr(t, all, runBal) {
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
     <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button></td>
-    <td class="${need ? 'todo' : ''}">${esc(cl)}</td>
+    <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${esc(cl || '—')}</button>`}</td>
     <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
     <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>
     <td class="r num amt-pos">${t.amount > 0 ? fmt(t.amount) : ''}</td>
