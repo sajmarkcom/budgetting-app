@@ -188,3 +188,55 @@ Object.assign(ACT, {
     });
   },
 });
+
+/* ---------- Apple Pay: an iPhone Shortcut sends each payment to your script; the app picks them up ---------- */
+function apParseAmount(v) { let s = String(v || '').replace(/[^\d,.\-]/g, ''); if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(',', '.'); const n = Math.round(parseFloat(s) * 100); return isFinite(n) ? n : 0; }
+function apAccount(card) {
+  const w = new Set(norm(card || '').split(/[^\p{L}\p{N}]+/u).filter(x => x.length >= 2));
+  const open = A.plan.accounts.filter(a => !a.closed && onBudget(a));
+  let best = null, score = 0;
+  for (const a of open) { const s = norm(a.name).split(/[^\p{L}\p{N}]+/u).filter(x => w.has(x)).length; if (s > score) { best = a; score = s; } }
+  if (best) return best.id;
+  try { const last = localStorage.getItem('budget.apAcct'); if (last && L.acct[last]) return last; } catch (e) { }
+  return (open.find(a => isCredit(a)) || open[0])?.id;
+}
+let apBusy = false;
+async function applePayPull() {
+  if (apBusy || !A.plan || typeof viaScript !== 'function' || !viaScript()) return; apBusy = true;
+  try {
+    const r = await px('inboxTake'); const items = r.items || []; if (!items.length) return;
+    let last = null;
+    mutate(items.length > 1 ? items.length + ' Apple Pay payments added' : 'Apple Pay payment added', () => {
+      for (const it of items) {
+        const amt = -Math.abs(apParseAmount(it.amount)); if (!amt) continue;
+        const acct = apAccount(it.card); if (!acct) continue;
+        const raw = it.payee || 'Apple Pay';
+        const y = (typeof learnedPayee === 'function' && learnedPayee(raw)) || (typeof guessPayee === 'function' && guessPayee(raw)) || getPayee(typeof cleanPayee === 'function' ? cleanPayee(raw) : raw);
+        const t = { id: uid(), acct, date: isoOf(new Date(it.at || Date.now())), payee: y.id, cat: y.lastCat && L.cat[y.lastCat] ? y.lastCat : null, memo: 'Apple Pay' + (it.card ? ' · ' + it.card : ''), amount: amt, cleared: 'u', flag: null, approved: false, rawPayee: raw };
+        A.tx.push(t); last = t;
+      }
+    });
+    if (last && document.visibilityState === 'visible') setTimeout(() => txSheet(last.id), 200);
+  } catch (e) { if (e.code !== 'unknown_action') console.warn('applePay', e); }
+  finally { apBusy = false; }
+}
+setTimeout(applePayPull, 2500);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(applePayPull, 800); });
+Object.assign(ACT, {
+  apSetup: () => {
+    const c = typeof proxyCfg === 'function' ? proxyCfg() : null;
+    if (!c) return toast('Connect your Apps Script first (Bank Connections)');
+    openSheet('Apple Pay shortcut', `<p class="small muted" style="margin:0">Each Apple Pay payment on your iPhone is sent to your own script; the app adds it here (unapproved, category guessed) and opens it so you can check it. The bank line that arrives later is matched with it, not duplicated.</p>
+      <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:8px">
+      <strong>On your iPhone: Shortcuts → Automation → + → Transaction</strong>
+      <span class="small">1. Choose your cards, “Is tapped”, then <b>Run Immediately</b>.</span>
+      <span class="small">2. New blank automation → add <b>Get Contents of URL</b>.</span>
+      <span class="small">3. URL: tap Copy below and paste it.</span>
+      <span class="small">4. Method <b>POST</b>, Request Body <b>JSON</b>, add 5 Text fields:<br>action = <b>inboxAdd</b> · key = <i>Copy key below</i> · amount = <i>Amount</i> · payee = <i>Merchant</i> · card = <i>Card or Pass</i> (the last three come from “Shortcut Input”).</span>
+      </div>
+      <div class="row" style="gap:8px"><button class="btn grow" data-a="apCopy" data-v="url">Copy URL</button><button class="btn grow" data-a="apCopy" data-v="key">Copy key</button></div>
+      <p class="small muted" style="margin:0">The key is your private password for the script: don't share it.</p>`, `<button class="btn pri block" data-a="apTest">Check for payments now</button>`);
+  },
+  apCopy: async el => { const c = proxyCfg(); const v = el.dataset.v === 'url' ? c.url : c.key; try { await navigator.clipboard.writeText(v); toast(el.dataset.v === 'url' ? 'URL copied' : 'Key copied'); } catch (e) { toast('Copy failed'); } },
+  apTest: () => { closeSheet(); applePayPull().then(() => toast('Checked')); },
+});

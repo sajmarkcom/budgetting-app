@@ -37,6 +37,16 @@ function handle(p) {
       if (f) f.setContent(p.content); else { f = DriveApp.createFile('budget-data.json', p.content, 'application/json'); P.setProperty('FILE_ID', f.getId()); }
       return { ok: true };
     }
+    if (p.action === 'inboxAdd') { // a payment sent by your iPhone Shortcut (Apple Pay automation)
+      const lock = LockService.getScriptLock(); lock.waitLock(10000);
+      try { const box = JSON.parse(P.getProperty('INBOX') || '[]'); box.push({ amount: String(p.amount || ''), payee: String(p.payee || '').slice(0, 120), card: String(p.card || '').slice(0, 80), at: Date.now() }); P.setProperty('INBOX', JSON.stringify(box.slice(-200))); }
+      finally { lock.releaseLock(); }
+      return { ok: true };
+    }
+    if (p.action === 'inboxTake') {
+      const lock = LockService.getScriptLock(); lock.waitLock(10000);
+      try { const box = JSON.parse(P.getProperty('INBOX') || '[]'); P.deleteProperty('INBOX'); return { items: box }; } finally { lock.releaseLock(); }
+    }
     switch (p.action) {
       case 'ping': if (!P.getProperty('APP_ID') || !P.getProperty('PRIVATE_KEY')) return { ok: true, bank: false }; return { ok: true, redirect: ScriptApp.getService().getUrl() };
       case 'banks': if (!P.getProperty('APP_ID')) return { error: 'not_configured' }; return api('GET', '/aspsps?country=' + encodeURIComponent(p.country || 'FR'));
