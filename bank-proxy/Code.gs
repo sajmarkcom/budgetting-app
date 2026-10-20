@@ -117,3 +117,9 @@ function test() {
   const r = api('GET', '/aspsps?country=FR');
   Logger.log(r.error ? JSON.stringify(r) : (r.aspsps || []).map(a => a.name).join(', '));
 }
+
+/** Run once from the editor (select "authorize" → Run) so the script may save your budget in your Google Drive. */
+function authorize() {
+  const f = DriveApp.createFile('budget-auth-check.txt', 'ok'); f.setTrashed(true);
+  Logger.log('Drive access OK');
+}
