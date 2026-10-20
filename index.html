@@ -564,12 +564,20 @@ function catStatus(c, m) {
 /* ---------- age of money ---------- */
 let _aom = null, _aomV = -1;
 function ageOfMoney() {
+  // Same rules as YNAB: income to "À répartir" (no starting balances) is spent first-in first-out by the cash outflows of
+  // budget accounts (card payments included, transfers between cash accounts excluded); average of the last 10 outflows.
   if (_aom && _aomV === A.calcV) return _aom;
   const inflows = [], outflows = [];
+  const startId = L.payeeByName['solde initial']?.id;
   for (const t of A.tx) {
     const a = L.acct[t.acct]; if (!onBudget(a) || isCredit(a)) continue;
-    if (t.transferAcct && onBudget(L.acct[t.transferAcct]) && !isCredit(L.acct[t.transferAcct])) continue;
-    if (t.amount > 0) inflows.push({ date: t.date, left: t.amount }); else if (t.amount < 0) outflows.push({ date: t.date, amt: -t.amount });
+    const ta = t.transferAcct ? L.acct[t.transferAcct] : null;
+    if (ta && onBudget(ta) && !isCredit(ta)) continue;
+    if (startId && t.payee === startId) continue;
+    for (const ln of txLines(t)) {
+      if (ln.amount > 0) { if (ln.cat === 'rta') inflows.push({ date: t.date, left: ln.amount }); }
+      else if (ln.amount < 0) outflows.push({ date: t.date, amt: -ln.amount });
+    }
   }
   inflows.sort((a, b) => a.date < b.date ? -1 : 1); outflows.sort((a, b) => a.date < b.date ? -1 : 1);
   let qi = 0; const ages = [];
@@ -579,9 +587,9 @@ function ageOfMoney() {
       const inf = inflows[qi]; if (inf.date > o.date) break;
       const take = Math.min(need, inf.left); w += take * daysBetween(inf.date, o.date); got += take; need -= take; inf.left -= take; if (inf.left <= 0) qi++;
     }
-    if (got > 0) ages.push({ date: o.date, age: w / got });
+    ages.push({ date: o.date, age: got > 0 ? w / got : 0 });
   }
-  const at = upto => { const s = ages.filter(a => a.date <= upto).slice(-10); return s.length ? Math.round(s.reduce((x, y) => x + y.age, 0) / s.length) : null; };
+  const at = upto => { const s = ages.filter(a => a.date <= upto).slice(-10); return s.length >= 10 ? Math.round(s.reduce((x, y) => x + y.age, 0) / s.length) : null; };
   _aom = { now: at('9999-12-31'), at }; _aomV = A.calcV;
   return _aom;
 }
