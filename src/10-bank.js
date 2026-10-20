@@ -164,6 +164,27 @@ function ebRow(t) {
   const info = (Array.isArray(t.remittance_information) ? t.remittance_information.join(' ') : t.remittance_information || '').replace(/\s+/g, ' ').trim();
   return { date: t.booking_date || t.value_date || t.transaction_date, amount: amt, payee: (party || info || 'Bank transaction').slice(0, 80), memo: party && info ? info.slice(0, 140) : '', fitid: t.entry_reference || t.transaction_id || null, pending: t.status && t.status !== 'BOOK' };
 }
+/* free auto-categorisation: tidy the bank's label, then reuse a payee you already have (and its last category) */
+function cleanPayee(raw) {
+  let x = ' ' + (raw || '') + ' ';
+  x = x.replace(/\s(CB|CARTE|PRLV|SEPA|VIR|VIREMENT|INST|INSTANTANE|RECU|EMIS|PAIEMENT|ACHAT|RETRAIT|DAB|FACTURE|PAYPAL \*|SUMUP \*|ZETTLE_\*)(?=\s)/gi, ' ')
+    .replace(/\sX\d{3,}/gi, ' ').replace(/\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?/g, ' ').replace(/\b\d{3,}\b/g, ' ').replace(/[*_#]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!x) return (raw || '').trim();
+  const words = x.split(' ').slice(0, 3).join(' ');
+  return words === words.toUpperCase() ? words.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, m => m.toUpperCase()) : words;
+}
+function guessPayee(raw) {
+  const n = norm(cleanPayee(raw)); if (n.length < 3) return null;
+  const first = n.split(' ')[0];
+  let best = null;
+  for (const y of A.plan.payees) {
+    if (!y.lastCat || !L.cat[y.lastCat] || /^(starting balance|transfer)/i.test(y.name)) continue;
+    const pn = norm(y.name.replace(/^\p{Extended_Pictographic}\s*/u, '')); if (pn.length < 3) continue;
+    const hit = n === pn || n.startsWith(pn + ' ') || pn.startsWith(n + ' ') || (first.length >= 4 && pn.split(' ')[0] === first);
+    if (hit && (!best || pn.length > norm(best.name).length)) best = y;
+  }
+  return best;
+}
 function importRows(acct, rows, from) {
   const existing = A.tx.filter(t => t.acct === acct);
   const ids = new Set(existing.map(t => t.importId).filter(Boolean)); const used = new Set(), pendSeen = new Set();
@@ -180,7 +201,7 @@ function importRows(acct, rows, from) {
     }
     const match = existing.find(t => !t.importId && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
-    const y = getPayee(payeeRuleApply(r.payee) || r.payee);
+    const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
     if (!cat && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
     A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, ...(r.pending ? { pend: true } : {}) });
@@ -226,4 +247,17 @@ function bankAutoSync() {
   const b = A.plan?.bank; if (!b?.conns?.length) return;
   const last = Math.min(...b.conns.map(c => c.lastSync || 0));
   if (Date.now() - last > 6 * 3600000) bankSync(false);
+}
+
+function autoCategorize() {
+  let n = 0;
+  mutate('Auto-categorize', () => {
+    for (const t of A.tx) {
+      const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !t.importId) continue;
+      if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
+      const cur = L.payee[t.payee]; const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
+      if (g) { t.payee = g.id; t.cat = g.lastCat; n++; }
+    }
+  });
+  toast(n ? `${n} transaction${n > 1 ? 's' : ''} categorized: check them, then approve` : 'Nothing recognised: categorize a few by hand and the app learns them');
 }

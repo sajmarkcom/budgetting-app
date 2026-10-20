@@ -190,7 +190,7 @@ function viewPlan() {
   h += `<div class="wrap">`;
   if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
   if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></div>`;
-  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
+  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
   if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
@@ -349,6 +349,32 @@ function dupReviewSheet(id) {
     <div class="card">${d.map(x => `<div class="li"><span class="grow"><strong>${row(x.main)}</strong><div class="small muted">Card: ${row(x.card)}</div></span><span class="num">${fmt(x.main.amount)}</span></div>`).join('')}</div>`,
     `<button class="btn pri block" data-a="dupRemove" data-id="${id}">Remove ${d.length} hand-typed cop${d.length > 1 ? 'ies' : 'y'}</button>`);
 }
+/* compare with the balance the bank reports (linked accounts only) */
+function bankAcctOf(acctId) { for (const c of A.plan.bank?.conns || []) for (const x of c.accounts) if (x.acct === acctId) return x; return null; }
+function bankBalLine(acctId, bal) {
+  const x = bankAcctOf(acctId); if (!x) return '';
+  const c = (A.ui.bankBal ||= {})[acctId];
+  if (!c || Date.now() - c.at > 5 * 60000) { if (!c?.busy) { A.ui.bankBal[acctId] = { ...(c || {}), busy: true, at: c?.at || 0 }; bk('balances', { uid: x.uid }).then(r => { const list = (r.balances || []).map(b => ({ v: Math.round(parseFloat(b.balance_amount.amount) * 100), type: b.balance_type || '' })); A.ui.bankBal[acctId] = { list, at: Date.now() }; if (A.acct === acctId) render(); }).catch(e => { A.ui.bankBal[acctId] = { err: e.message, at: Date.now() }; if (A.acct === acctId) render(); }); } }
+  if (!c || !c.list) return c?.err ? `<div class="small muted" style="padding:6px 2px">Bank balance unavailable: ${esc(c.err)}</div>` : `<div class="small muted" style="padding:6px 2px">Checking the bank balance…</div>`;
+  const pick = c.list.find(b => /CLBD|ITBD|CLAV|ITAV/.test(b.type)) || c.list[0]; if (!pick) return '';
+  const diffW = bal.working - pick.v, diffC = bal.cleared - pick.v;
+  const ok = !diffW || !diffC;
+  return `<div class="banner ${ok ? '' : 'warn'}" style="margin-top:8px">${I.bank}<span>Bank balance <strong class="num">${fmt(pick.v)}</strong>${ok ? ' · matches ✓' : ` · here <strong class="num">${fmt(bal.working)}</strong> · difference <strong class="num">${fmt(diffW)}</strong>`}</span>${ok ? '' : `<button class="btn sm" data-a="diffSheet" data-id="${acctId}" data-v="${pick.v}">Find it</button>`}</div>`;
+}
+function diffSheet(acctId, bankV) {
+  const a = L.acct[acctId], b = balances()[acctId];
+  const imp = A.tx.filter(t => t.acct === acctId && t.importId && /^ebp?:/.test(t.importId)).map(t => t.date).sort();
+  const since = imp.length ? addDays(imp[0], -3) : addDays(todayISO(), -60);
+  const hand = A.tx.filter(t => t.acct === acctId && !t.importId && t.date >= since && L.payee[t.payee]?.name !== 'Starting Balance').sort((x, y) => x.date < y.date ? 1 : -1);
+  const sumHand = hand.reduce((s, t) => s + t.amount, 0);
+  const pend = A.tx.filter(t => t.acct === acctId && t.pend); const sumPend = pend.reduce((s, t) => s + t.amount, 0);
+  const row = t => `<div class="li"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></div>`;
+  openSheet('Find the difference', `<p class="small muted" style="margin:0">Here ${fmt(b.working)} · bank ${fmt(bankV)} · difference <strong>${fmt(b.working - bankV)}</strong>.</p>
+    <div class="sec-t"><span>Typed by hand since the bank link (${fmt(sumHand)})</span></div>
+    <p class="small muted" style="margin:0">The bank never sent these. If one is not on your bank statement (already counted elsewhere, or a duplicate), delete it.</p>
+    <div class="card">${hand.map(row).join('') || '<div class="li muted">None</div>'}</div>
+    ${pend.length ? `<div class="sec-t"><span>Pending at the bank (${fmt(sumPend)})</span></div><p class="small muted" style="margin:0">Payments the bank has not booked yet; some banks leave them out of the balance.</p><div class="card">${pend.map(row).join('')}</div>` : ''}`, '');
+}
 function viewRegister() {
   const id = A.acct, all = id === 'all', a = all ? null : L.acct[id], desk = DESK();
   if (!all && !a) { A.acct = null; return viewAccounts(); }
@@ -358,7 +384,8 @@ function viewRegister() {
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
     all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
-  h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>`;
+  const bk0 = all ? null : bankBalLine(id, bal);
+  h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>${bk0 || ''}`;
   const dups = all ? [] : cardDups(id);
   if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;
   h += `<div class="toolbar">
