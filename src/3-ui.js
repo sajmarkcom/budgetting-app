@@ -209,7 +209,7 @@ function viewPlan() {
   let shown = 0;
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
-    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.edit && A.ui.showHidden));
+    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden));
     if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
     if (!cats.length && (F !== 'all' || (!A.ui.edit && g.sys))) continue;
     const col = !!A.ui.collapsed[g.id] && F === 'all';
@@ -228,7 +228,7 @@ function viewPlan() {
     h += `</section>`;
   }
   if (F !== 'all' && !shown) h += `<div class="empty"><strong>No categories match this filter</strong><button class="btn sm" data-a="filter" data-f="all">Show all</button></div>`;
-  if (A.ui.edit) {
+  {
     const hid = p.cats.filter(c => c.hidden).length;
     if (hid) h += `<div class="row" style="margin-top:14px"><button class="btn" data-a="toggleHidden">${A.ui.showHidden ? I.eyeoff : I.eye} ${A.ui.showHidden ? 'Hide' : 'Show'} hidden categories (${hid})</button></div>`;
   }

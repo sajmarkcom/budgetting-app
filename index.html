@@ -1156,7 +1156,7 @@ function viewPlan() {
   let shown = 0;
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
-    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.edit && A.ui.showHidden));
+    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden));
     if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
     if (!cats.length && (F !== 'all' || (!A.ui.edit && g.sys))) continue;
     const col = !!A.ui.collapsed[g.id] && F === 'all';
@@ -1175,7 +1175,7 @@ function viewPlan() {
     h += `</section>`;
   }
   if (F !== 'all' && !shown) h += `<div class="empty"><strong>No categories match this filter</strong><button class="btn sm" data-a="filter" data-f="all">Show all</button></div>`;
-  if (A.ui.edit) {
+  {
     const hid = p.cats.filter(c => c.hidden).length;
     if (hid) h += `<div class="row" style="margin-top:14px"><button class="btn" data-a="toggleHidden">${A.ui.showHidden ? I.eyeoff : I.eye} ${A.ui.showHidden ? 'Hide' : 'Show'} hidden categories (${hid})</button></div>`;
   }
@@ -3484,7 +3484,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   initDb().then(() => gdSync()).then(() => { if (A.plan) { bankWatchPending(); bankAutoSync(); } });
 })();
 /* ================= Budget — menus: right-click on transactions, plan menu, quick category rename ================= */
-function closePop() { $$('.pmenu').forEach(e => e.remove()); }
+let POP_TRIGGER = null, POP_SWALLOW = false;
+function closePop() { $$('.pmenu').forEach(e => e.remove()); POP_TRIGGER = null; }
 function popMenu(x, y, html, cls = '') {
   closePop();
   const d = document.createElement('div'); d.className = 'pmenu ' + cls; d.setAttribute('role', 'menu'); d.innerHTML = html;
@@ -3493,12 +3494,17 @@ function popMenu(x, y, html, cls = '') {
   d.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
   d.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
   d.querySelector('input')?.focus(); d.querySelector('input')?.select?.();
+  POP_TRIGGER = popMenu._trigger || null; popMenu._trigger = null;
   return d;
 }
 const mi = (icon, label, act, data = '', kbd = '', off = false, danger = false) =>
   `<button class="pm-i ${danger ? 'danger' : ''}" role="menuitem" data-a="${act}" ${data} ${off ? 'disabled' : ''}><span class="pm-ic">${icon || ''}</span><span class="grow">${label}</span>${kbd ? `<kbd>${kbd}</kbd>` : ''}</button>`;
 const msep = '<div class="pm-sep"></div>';
-document.addEventListener('mousedown', e => { if (!e.target.closest('.pmenu')) closePop(); }, true);
+// clicking the button that opened a menu closes it (instead of reopening it), like YNAB
+document.addEventListener('mousedown', e => { if (e.target.closest('.pmenu')) return; const trig = POP_TRIGGER; if ($('.pmenu') && trig && trig.contains(e.target)) POP_SWALLOW = true; closePop(); }, true);
+document.addEventListener('click', e => { if (POP_SWALLOW) { POP_SWALLOW = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+// remember which element opened the menu
+document.addEventListener('click', e => { const el = e.target.closest('[data-a]'); if (el && !el.closest('.pmenu')) popMenu._trigger = el; }, true);
 document.addEventListener('click', e => { if (e.target.closest('.pmenu [data-a]:not([data-keep])')) setTimeout(closePop, 0); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
 window.addEventListener('resize', closePop);

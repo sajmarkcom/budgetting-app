@@ -1,5 +1,6 @@
 /* ================= Budget — menus: right-click on transactions, plan menu, quick category rename ================= */
-function closePop() { $$('.pmenu').forEach(e => e.remove()); }
+let POP_TRIGGER = null, POP_SWALLOW = false;
+function closePop() { $$('.pmenu').forEach(e => e.remove()); POP_TRIGGER = null; }
 function popMenu(x, y, html, cls = '') {
   closePop();
   const d = document.createElement('div'); d.className = 'pmenu ' + cls; d.setAttribute('role', 'menu'); d.innerHTML = html;
@@ -8,12 +9,17 @@ function popMenu(x, y, html, cls = '') {
   d.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
   d.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
   d.querySelector('input')?.focus(); d.querySelector('input')?.select?.();
+  POP_TRIGGER = popMenu._trigger || null; popMenu._trigger = null;
   return d;
 }
 const mi = (icon, label, act, data = '', kbd = '', off = false, danger = false) =>
   `<button class="pm-i ${danger ? 'danger' : ''}" role="menuitem" data-a="${act}" ${data} ${off ? 'disabled' : ''}><span class="pm-ic">${icon || ''}</span><span class="grow">${label}</span>${kbd ? `<kbd>${kbd}</kbd>` : ''}</button>`;
 const msep = '<div class="pm-sep"></div>';
-document.addEventListener('mousedown', e => { if (!e.target.closest('.pmenu')) closePop(); }, true);
+// clicking the button that opened a menu closes it (instead of reopening it), like YNAB
+document.addEventListener('mousedown', e => { if (e.target.closest('.pmenu')) return; const trig = POP_TRIGGER; if ($('.pmenu') && trig && trig.contains(e.target)) POP_SWALLOW = true; closePop(); }, true);
+document.addEventListener('click', e => { if (POP_SWALLOW) { POP_SWALLOW = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+// remember which element opened the menu
+document.addEventListener('click', e => { const el = e.target.closest('[data-a]'); if (el && !el.closest('.pmenu')) popMenu._trigger = el; }, true);
 document.addEventListener('click', e => { if (e.target.closest('.pmenu [data-a]:not([data-keep])')) setTimeout(closePop, 0); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
 window.addEventListener('resize', closePop);
