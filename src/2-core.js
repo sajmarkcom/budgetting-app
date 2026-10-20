@@ -39,7 +39,7 @@ function fmt(c, opts = {}) {
   const key = cur + (opts.short ? 's' : '');
   if (_nfKey !== key) { _nf = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: opts.short ? 0 : 2, maximumFractionDigits: opts.short ? 0 : 2 }); _nfKey = key; }
   const v = (c || 0) / 100;
-  return _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−');
+  return _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
 }
 const fmtS = c => fmt(c, { short: true });
 const fmtIn = c => (c / 100).toFixed(2).replace('.', ',');

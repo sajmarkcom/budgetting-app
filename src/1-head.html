@@ -91,6 +91,7 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
   .cat .cname .note{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .w-ass{width:120px} .w-act{width:120px} .w-av{width:130px} .ass-in{width:120px}
   .hide-s{display:block}
+  .hint-box{background:var(--surface-2); border-radius:12px; padding:10px 12px; margin-top:10px; font-size:13px; color:var(--muted); text-align:center}
   .ipanel{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-l); padding:16px; margin-bottom:14px}
   .ipanel h3{font-size:16px; display:flex; align-items:center; gap:8px; margin-bottom:10px} .ipanel h3 svg{width:18px; height:18px}
   .irow{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:5px 0; font-size:14px} .irow span, .irow label{color:var(--muted); font-weight:600}
@@ -161,7 +162,9 @@ button > svg, label > svg, a > svg, .li > svg{width:20px; height:20px; flex:none
 @media (min-width:640px){ .hide-s{display:block} }
 .group{background:var(--surface); border-radius:var(--r-l); margin-top:10px; overflow:hidden; border:1px solid var(--line)}
 .ghead{display:flex; align-items:center; gap:8px; padding:6px 12px 6px 6px; min-height:48px; background:var(--surface)}
-.ghead .gname{font-family:var(--f-display); font-weight:600; font-size:15.5px; flex:1; min-width:0; text-align:left; border:none; background:none; display:flex; align-items:center; gap:4px; padding:6px}
+.gadd{width:26px; height:26px; border-radius:999px; border:none; background:var(--accent); color:var(--accent-ink); display:inline-flex; align-items:center; justify-content:center; flex:none; opacity:.85}
+.gadd svg{width:15px; height:15px}
+.ghead .gname{font-family:var(--f-display); font-weight:600; font-size:15.5px; flex:0 1 auto; min-width:0; text-align:left; border:none; background:none; display:flex; align-items:center; gap:4px; padding:6px}
 .ghead .gname svg{width:18px; height:18px; transition:transform .15s}
 .ghead.collapsed .gname svg{transform:rotate(-90deg)}
 .ghead .gsum{font-size:12.5px; color:var(--muted); font-weight:700}
@@ -240,9 +243,13 @@ button.li:hover{background:var(--surface-2)}
 .tx .a{font-weight:800; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
 .tx .rb{font-size:11.5px; color:var(--muted); font-weight:600; text-align:right}
 .tx.unapproved{background:color-mix(in srgb, var(--info-soft) 60%, transparent)}
-.clr{width:30px; height:30px; border-radius:999px; border:2px solid var(--line); background:transparent; font-size:12px; font-weight:800; color:var(--muted); flex:none; display:flex; align-items:center; justify-content:center}
-.clr.c{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
-.clr.r{background:var(--fg); border-color:var(--fg); color:var(--bg)}
+.clr{position:relative; width:32px; height:32px; border:none; background:transparent; padding:0; flex:none; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; line-height:1; color:var(--muted)}
+.clr::before{content:""; position:absolute; inset:8px; border-radius:999px; border:1.5px solid var(--line)}
+.clr span{position:relative}
+.clr.c{color:var(--good)} .clr.c::before{border-color:var(--good); background:var(--good-soft)}
+.clr.r{color:var(--good)} .clr.r::before{display:none}
+.clr svg{width:14px; height:14px}
+.clr:hover::before{border-color:var(--good)}
 .flag{width:8px; height:28px; border-radius:4px; flex:none}
 .chk{width:22px; height:22px; accent-color:var(--accent); flex:none}
 .day{font-size:12px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); padding:14px 4px 6px}

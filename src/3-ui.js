@@ -155,7 +155,7 @@ function viewPlan() {
   if (desk) {
     h = `<div class="dhead wrap"><div class="row">
         <button class="ibtn round" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>
-        <div><h1 class="dmonth">${monthLabel(m, false, true)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
+        <div><h1 class="dmonth">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
         <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button></div>
       <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
         ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
@@ -201,7 +201,7 @@ function viewPlan() {
     let ga = 0, gact = 0, gav = 0; for (const c of cats) { const x = catM(m, c.id); ga += x.assigned; gact += x.activity; gav += x.available; }
     h += `<section class="group" aria-label="${esc(g.name)}">
       <div class="ghead ${col ? 'collapsed' : ''}">
-        <button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}">${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>
+        <button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}">${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>${!g.sys && !A.ui.edit ? `<button class="gadd" data-a="catNew" data-g="${g.id}" aria-label="Add a category to ${esc(g.name)}">${I.plus}</button>` : ''}<span style="flex:1"></span>
         ${A.ui.edit && !g.sys ? `<div class="editrow">
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="-1" aria-label="Move group up">${I.up}</button>
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="1" aria-label="Move group down">${I.down}</button>
@@ -257,6 +257,7 @@ function inspector() {
     <div class="ipanel"><h3>Cost to Be Me</h3>
       <div class="irow"><span>${cap(mn)}'s Targets</span><b class="num">${fmt(st.cost)}</b></div>
       <div class="bar ${income && st.cost > income ? 'bad' : ''}" style="margin-top:6px"><i style="width:${income ? pct : 0}%"></i></div>
+      ${(() => { const nm = addMonths(m, 1); let nc = 0; for (const c of A.plan.cats) { if (c.hidden) continue; const ti = targetInfo(c, nm); if (ti) nc += ti.need; } return nc > st.cost ? `<div class="hint-box">Next month's targets could increase your total to ${fmt(nc)}</div>` : ''; })()}
       <div class="irow" style="margin-top:8px"><label for="expInc">Expected Income</label><input id="expInc" class="mini num" inputmode="decimal" value="${income ? fmtIn(income) : ''}" placeholder="0,00" data-set="expectedIncome"></div></div>
     <div class="ipanel"><h3>${I.wand} Auto-Assign</h3>
       ${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}</div>`;
@@ -369,7 +370,7 @@ function viewRegister() {
 }
 function clrBtn(t) {
   return t.approved === false ? `<button class="btn sm pri" data-a="approve" data-id="${t.id}">Approve</button>` :
-    `<button class="clr ${t.cleared}" data-a="clr" data-id="${t.id}" aria-label="${t.cleared === 'u' ? 'Uncleared' : t.cleared === 'c' ? 'Cleared' : 'Reconciled'}">${t.cleared === 'r' ? I.lock.replace('<svg', '<svg width="14" height="14"') : 'C'}</button>`;
+    `<button class="clr ${t.cleared}" data-a="clr" data-id="${t.id}" aria-label="${t.cleared === 'u' ? 'Uncleared' : t.cleared === 'c' ? 'Cleared' : 'Reconciled'}">${t.cleared === 'r' ? I.lock : '<span>C</span>'}</button>`;
 }
 function txTr(t, all, runBal) {
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
