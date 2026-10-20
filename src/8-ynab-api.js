@@ -16,7 +16,7 @@ function yApiBox() {
     <input id="yTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="YNAB personal access token" aria-label="YNAB personal access token">
     <button class="btn pri block" data-a="yLoad">Connect to YNAB</button>
     <div id="yStep"></div></div>
-    <div class="sec-t"><span>Ou avec le fichier d'export</span></div>`;
+    <div class="sec-t"><span>Or with the export file</span></div>`;
 }
 async function yLoad() {
   const tok = ($('#yTok')?.value || '').trim(); if (!tok) return toast('Paste your YNAB token');
@@ -175,4 +175,44 @@ function yGoal(k) {
     }
   }
   return null;
+}
+
+/* ---------- learn payee names from YNAB: bank label → your payee (YNAB keeps the bank's original text) ---------- */
+let YL = null;
+function yLearnSheet() {
+  openSheet('Payee names from YNAB', `<p class="small muted" style="margin:0">Reads how you renamed each bank label in YNAB (e.g. “CB LIDL 1234” → your payee) so imports here get the same payee and category. On app.ynab.com → Account Settings → Developer Settings → New Token. The token is used once, never saved, only sent to YNAB. Delete it in YNAB afterwards.</p>
+    <input id="ylTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="YNAB personal access token" aria-label="YNAB personal access token">
+    <button class="btn pri block" data-a="yLearnGo">Learn my payees</button><div id="ylStep"></div>`, '');
+}
+async function yLearnGo(i) {
+  const st = $('#ylStep');
+  try {
+    if (i == null) {
+      const tok = ($('#ylTok')?.value || '').trim(); if (!tok) return toast('Paste your YNAB token');
+      st.innerHTML = '<div class="small muted">Connecting…</div>';
+      let d, kind = 'plans'; try { d = await yGet('/plans', tok); } catch (e) { if (/rejected|Too many/.test(e.message)) throw e; d = await yGet('/budgets', tok); kind = 'budgets'; }
+      YL = { tok, kind, list: d.plans || d.budgets || [] };
+      if (YL.list.length > 1) { st.innerHTML = `<div class="card">${YL.list.map((b, k) => `<button class="li" data-a="yLearnGo" data-i="${k}"><span class="grow"><strong>${esc(b.name)}</strong></span>${I.right}</button>`).join('')}</div>`; return; }
+      i = 0;
+    }
+    const b = YL.list[i]; st.innerHTML = '<div class="small muted">Reading your transactions…</div>';
+    const d = await yGet(`/${YL.kind}/${b.id}/transactions`, YL.tok);
+    const n = learnFromYnab(d.transactions || []);
+    YL = null; closeSheet();
+    const r = autoCategorize(true);
+    toast(`Learned ${n} bank label${n > 1 ? 's' : ''} · ${r} transaction${r > 1 ? 's' : ''} updated. Delete the token in YNAB now.`);
+  } catch (e) { st.innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message || 'Could not connect')}</span></div>`; }
+}
+function learnFromYnab(list) {
+  const votes = {};
+  for (const t of list) {
+    const raw = t.import_payee_name_original || t.import_payee_name; const pn = t.payee_name;
+    if (!raw || !pn || t.transfer_account_id || /^(transfer|starting balance|reconciliation)/i.test(pn)) continue;
+    const k = learnKey(raw); if (!k) continue;
+    ((votes[k] ||= {})[pn] = (votes[k][pn] || 0) + 1);
+  }
+  const map = {};
+  for (const [k, v] of Object.entries(votes)) map[k] = Object.entries(v).sort((a, b) => b[1] - a[1])[0][0];
+  mutate('Payee names learned', () => { A.plan.learned = { ...(A.plan.learned || {}), ...map }; });
+  return Object.keys(map).length;
 }

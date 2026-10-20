@@ -28,6 +28,7 @@ function bankSettingsHtml() {
     ${pendList().length ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(pendList().slice(-1)[0].bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCheck">Check now</button><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
     <button class="li" data-a="bankLinkSheet"><span class="ic">${I.plus}</span><span class="grow"><strong>Link a bank</strong></span></button>
     ${b.conns.length ? `<button class="li" data-a="bankSyncNow"><span class="ic">${I.download}</span><span class="grow"><strong>Import now</strong><div class="small muted">Imports run automatically when you open the app (at most every 6 hours)</div></span></button>` : ''}
+    <button class="li" data-a="yLearn"><span class="ic">${I.download}</span><span class="grow"><strong>Payee names from YNAB</strong><div class="small muted">${A.plan.learned ? Object.keys(A.plan.learned).length + ' bank labels learned · update' : 'Give imported transactions the payees you used in YNAB'}</div></span></button>
     <button class="li" data-a="bankSetup"><span class="ic">${I.gear}</span><span class="grow"><strong>Proxy settings</strong></span></button></div>`;
 }
 
@@ -173,6 +174,14 @@ function cleanPayee(raw) {
   const words = x.split(' ').slice(0, 3).join(' ');
   return words === words.toUpperCase() ? words.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, m => m.toUpperCase()) : words;
 }
+function learnKey(raw) { return norm(cleanPayee(raw)).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim(); }
+/* payee you gave this bank label before (learned from YNAB) */
+function learnedPayee(raw) {
+  const m = A.plan.learned; if (!m) return null; const k = learnKey(raw); if (!k) return null;
+  let name = m[k];
+  if (!name) { const w = k.split(' '); for (let n = w.length; n >= 1 && !name; n--) { const pre = w.slice(0, n).join(' '); if (pre.length < 4) break; const hits = new Set(Object.entries(m).filter(([kk]) => kk === pre || kk.startsWith(pre + ' ')).map(([, v]) => v)); if (hits.size === 1) name = [...hits][0]; } }
+  return name ? getPayee(name) : null;
+}
 function guessPayee(raw) {
   const n = norm(cleanPayee(raw)); if (n.length < 3) return null;
   const first = n.split(' ')[0];
@@ -201,7 +210,7 @@ function importRows(acct, rows, from) {
     }
     const match = existing.find(t => !t.importId && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
-    const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
+    const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
     if (!cat && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
     A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, ...(r.pending ? { pend: true } : {}) });
@@ -249,15 +258,18 @@ function bankAutoSync() {
   if (Date.now() - last > 6 * 3600000) bankSync(false);
 }
 
-function autoCategorize() {
+function autoCategorize(quiet) {
   let n = 0;
   mutate('Auto-categorize', () => {
     for (const t of A.tx) {
       const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !t.importId) continue;
       if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
-      const cur = L.payee[t.payee]; const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
+      const cur = L.payee[t.payee]; const lp = learnedPayee(cur?.name || '');
+      if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) t.cat = lp.lastCat; n++; continue; }
+      const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
       if (g) { t.payee = g.id; t.cat = g.lastCat; n++; }
     }
   });
+  if (quiet) return n;
   toast(n ? `${n} transaction${n > 1 ? 's' : ''} categorized: check them, then approve` : 'Nothing recognised: categorize a few by hand and the app learns them');
 }

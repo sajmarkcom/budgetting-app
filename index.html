@@ -1116,7 +1116,7 @@ function viewPlan() {
   h += `<div class="wrap">`;
   if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
   if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></div>`;
-  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
+  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span>${A.plan.learned ? '' : `<button class="btn sm" data-a="yLearn">Use my YNAB payees</button>`}<button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
   if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
@@ -1287,19 +1287,37 @@ function bankBalLine(acctId, bal) {
   const ok = !diffW || !diffC;
   return `<div class="banner ${ok ? '' : 'warn'}" style="margin-top:8px">${I.bank}<span>Bank balance <strong class="num">${fmt(pick.v)}</strong>${ok ? ' · matches ✓' : ` · here <strong class="num">${fmt(bal.working)}</strong> · difference <strong class="num">${fmt(diffW)}</strong>`}</span>${ok ? '' : `<button class="btn sm" data-a="diffSheet" data-id="${acctId}" data-v="${pick.v}">Find it</button>`}</div>`;
 }
-function diffSheet(acctId, bankV) {
-  const a = L.acct[acctId], b = balances()[acctId];
-  const imp = A.tx.filter(t => t.acct === acctId && t.importId && /^ebp?:/.test(t.importId)).map(t => t.date).sort();
-  const since = imp.length ? addDays(imp[0], -3) : addDays(todayISO(), -60);
-  const hand = A.tx.filter(t => t.acct === acctId && !t.importId && t.date >= since && L.payee[t.payee]?.name !== 'Starting Balance').sort((x, y) => x.date < y.date ? 1 : -1);
-  const sumHand = hand.reduce((s, t) => s + t.amount, 0);
-  const pend = A.tx.filter(t => t.acct === acctId && t.pend); const sumPend = pend.reduce((s, t) => s + t.amount, 0);
-  const row = t => `<div class="li"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></div>`;
-  openSheet('Find the difference', `<p class="small muted" style="margin:0">Here ${fmt(b.working)} · bank ${fmt(bankV)} · difference <strong>${fmt(b.working - bankV)}</strong>.</p>
-    <div class="sec-t"><span>Typed by hand since the bank link (${fmt(sumHand)})</span></div>
-    <p class="small muted" style="margin:0">The bank never sent these. If one is not on your bank statement (already counted elsewhere, or a duplicate), delete it.</p>
-    <div class="card">${hand.map(row).join('') || '<div class="li muted">None</div>'}</div>
-    ${pend.length ? `<div class="sec-t"><span>Pending at the bank (${fmt(sumPend)})</span></div><p class="small muted" style="margin:0">Payments the bank has not booked yet; some banks leave them out of the balance.</p><div class="card">${pend.map(row).join('')}</div>` : ''}`, '');
+async function diffSheet(acctId, bankV) {
+  const x = bankAcctOf(acctId); if (!x) return;
+  openSheet('Find the difference', `<div class="small muted">Comparing with your bank's last 60 days…</div>`, '');
+  try {
+    const from = addDays(todayISO(), -60), rows = []; let ck = null, guard = 0;
+    do { const r = await bk('tx', { uid: x.uid, from, ...(ck ? { ck } : {}) }); for (const t of r.transactions || []) rows.push(ebRow(t)); ck = r.continuation_key || null; } while (ck && guard++ < 20);
+    const booked = rows.filter(r => !r.pending && r.date && r.amount && r.date >= from);
+    const here = A.tx.filter(t => t.acct === acctId && !t.pend && t.date >= from);
+    const used = new Set(), missing = [];
+    for (const r of booked) {
+      const key = r.fitid ? 'eb:' + r.fitid : null;
+      let m = key && here.find(t => !used.has(t.id) && t.importId === key);
+      if (!m) m = here.filter(t => !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 7).sort((p, q) => Math.abs(daysBetween(p.date, r.date)) - Math.abs(daysBetween(q.date, r.date)))[0];
+      if (m) used.add(m.id); else missing.push(r);
+    }
+    const extra = here.filter(t => !used.has(t.id));
+    const sum = l => l.reduce((s, t) => s + t.amount, 0);
+    const appV = balances()[acctId].working - sum(A.tx.filter(t => t.acct === acctId && t.pend));
+    const bankBefore = bankV - sum(booked), appBefore = appV - sum(here);
+    A.ui.diffMissing = missing; A.ui.diffAcct = acctId;
+    const row = t => `<button class="li" data-a="txEdit" data-id="${t.id}"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></button>`;
+    const brow = (r, i) => `<div class="li"><span class="grow"><strong>${esc(r.payee)}</strong><div class="small muted">${esc(fmtDate(r.date))}</div></span><span class="num">${fmt(r.amount)}</span><button class="btn sm" data-a="diffAdd" data-i="${i}">Add</button></div>`;
+    const body = `<p class="small muted" style="margin:0">Here ${fmt(appV)} · bank ${fmt(bankV)} · difference <strong>${fmt(appV - bankV)}</strong> (pending payments left out on both sides).</p>
+      <div class="sec-t"><span>At the bank, missing here (${fmt(sum(missing))})</span></div>
+      <div class="card">${missing.map(brow).join('') || '<div class="li muted">None</div>'}</div>
+      <div class="sec-t"><span>Here, not at the bank (${fmt(sum(extra))})</span></div>
+      <p class="small muted" style="margin:0">Not found on your bank account in the last 60 days. Tap one to open it: delete it only if it really is not on your statement.</p>
+      <div class="card">${extra.map(row).join('') || '<div class="li muted">None</div>'}</div>
+      ${bankBefore !== appBefore ? `<div class="banner warn">${I.info}<span>Before ${esc(fmtDate(from))} the balances already differ by ${fmt(appBefore - bankBefore)}: that part is older than 60 days (use Reconcile to fix it with one adjustment).</span></div>` : ''}`;
+    $('.sheet-b') && ($('.sheet-b').innerHTML = body);
+  } catch (e) { $('.sheet-b') && ($('.sheet-b').innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message)}</span></div>`); }
 }
 function viewRegister() {
   const id = A.acct, all = id === 'all', a = all ? null : L.acct[id], desk = DESK();
@@ -2381,7 +2399,7 @@ function yApiBox() {
     <input id="yTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="YNAB personal access token" aria-label="YNAB personal access token">
     <button class="btn pri block" data-a="yLoad">Connect to YNAB</button>
     <div id="yStep"></div></div>
-    <div class="sec-t"><span>Ou avec le fichier d'export</span></div>`;
+    <div class="sec-t"><span>Or with the export file</span></div>`;
 }
 async function yLoad() {
   const tok = ($('#yTok')?.value || '').trim(); if (!tok) return toast('Paste your YNAB token');
@@ -2540,6 +2558,46 @@ function yGoal(k) {
     }
   }
   return null;
+}
+
+/* ---------- learn payee names from YNAB: bank label → your payee (YNAB keeps the bank's original text) ---------- */
+let YL = null;
+function yLearnSheet() {
+  openSheet('Payee names from YNAB', `<p class="small muted" style="margin:0">Reads how you renamed each bank label in YNAB (e.g. “CB LIDL 1234” → your payee) so imports here get the same payee and category. On app.ynab.com → Account Settings → Developer Settings → New Token. The token is used once, never saved, only sent to YNAB. Delete it in YNAB afterwards.</p>
+    <input id="ylTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="YNAB personal access token" aria-label="YNAB personal access token">
+    <button class="btn pri block" data-a="yLearnGo">Learn my payees</button><div id="ylStep"></div>`, '');
+}
+async function yLearnGo(i) {
+  const st = $('#ylStep');
+  try {
+    if (i == null) {
+      const tok = ($('#ylTok')?.value || '').trim(); if (!tok) return toast('Paste your YNAB token');
+      st.innerHTML = '<div class="small muted">Connecting…</div>';
+      let d, kind = 'plans'; try { d = await yGet('/plans', tok); } catch (e) { if (/rejected|Too many/.test(e.message)) throw e; d = await yGet('/budgets', tok); kind = 'budgets'; }
+      YL = { tok, kind, list: d.plans || d.budgets || [] };
+      if (YL.list.length > 1) { st.innerHTML = `<div class="card">${YL.list.map((b, k) => `<button class="li" data-a="yLearnGo" data-i="${k}"><span class="grow"><strong>${esc(b.name)}</strong></span>${I.right}</button>`).join('')}</div>`; return; }
+      i = 0;
+    }
+    const b = YL.list[i]; st.innerHTML = '<div class="small muted">Reading your transactions…</div>';
+    const d = await yGet(`/${YL.kind}/${b.id}/transactions`, YL.tok);
+    const n = learnFromYnab(d.transactions || []);
+    YL = null; closeSheet();
+    const r = autoCategorize(true);
+    toast(`Learned ${n} bank label${n > 1 ? 's' : ''} · ${r} transaction${r > 1 ? 's' : ''} updated. Delete the token in YNAB now.`);
+  } catch (e) { st.innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message || 'Could not connect')}</span></div>`; }
+}
+function learnFromYnab(list) {
+  const votes = {};
+  for (const t of list) {
+    const raw = t.import_payee_name_original || t.import_payee_name; const pn = t.payee_name;
+    if (!raw || !pn || t.transfer_account_id || /^(transfer|starting balance|reconciliation)/i.test(pn)) continue;
+    const k = learnKey(raw); if (!k) continue;
+    ((votes[k] ||= {})[pn] = (votes[k][pn] || 0) + 1);
+  }
+  const map = {};
+  for (const [k, v] of Object.entries(votes)) map[k] = Object.entries(v).sort((a, b) => b[1] - a[1])[0][0];
+  mutate('Payee names learned', () => { A.plan.learned = { ...(A.plan.learned || {}), ...map }; });
+  return Object.keys(map).length;
 }
 /* ================= Budget — Google Drive sync (hidden app folder, only this app can see the file) ================= */
 const DRIVE_CLIENT_ID = '96837709976-v0bf7dogjp16furjcl8h92fm77rr14sc.apps.googleusercontent.com';           // Google Cloud OAuth client (public identifier, not a secret)
@@ -2717,6 +2775,7 @@ function bankSettingsHtml() {
     ${pendList().length ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(pendList().slice(-1)[0].bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCheck">Check now</button><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
     <button class="li" data-a="bankLinkSheet"><span class="ic">${I.plus}</span><span class="grow"><strong>Link a bank</strong></span></button>
     ${b.conns.length ? `<button class="li" data-a="bankSyncNow"><span class="ic">${I.download}</span><span class="grow"><strong>Import now</strong><div class="small muted">Imports run automatically when you open the app (at most every 6 hours)</div></span></button>` : ''}
+    <button class="li" data-a="yLearn"><span class="ic">${I.download}</span><span class="grow"><strong>Payee names from YNAB</strong><div class="small muted">${A.plan.learned ? Object.keys(A.plan.learned).length + ' bank labels learned · update' : 'Give imported transactions the payees you used in YNAB'}</div></span></button>
     <button class="li" data-a="bankSetup"><span class="ic">${I.gear}</span><span class="grow"><strong>Proxy settings</strong></span></button></div>`;
 }
 
@@ -2862,6 +2921,14 @@ function cleanPayee(raw) {
   const words = x.split(' ').slice(0, 3).join(' ');
   return words === words.toUpperCase() ? words.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, m => m.toUpperCase()) : words;
 }
+function learnKey(raw) { return norm(cleanPayee(raw)).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim(); }
+/* payee you gave this bank label before (learned from YNAB) */
+function learnedPayee(raw) {
+  const m = A.plan.learned; if (!m) return null; const k = learnKey(raw); if (!k) return null;
+  let name = m[k];
+  if (!name) { const w = k.split(' '); for (let n = w.length; n >= 1 && !name; n--) { const pre = w.slice(0, n).join(' '); if (pre.length < 4) break; const hits = new Set(Object.entries(m).filter(([kk]) => kk === pre || kk.startsWith(pre + ' ')).map(([, v]) => v)); if (hits.size === 1) name = [...hits][0]; } }
+  return name ? getPayee(name) : null;
+}
 function guessPayee(raw) {
   const n = norm(cleanPayee(raw)); if (n.length < 3) return null;
   const first = n.split(' ')[0];
@@ -2890,7 +2957,7 @@ function importRows(acct, rows, from) {
     }
     const match = existing.find(t => !t.importId && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
-    const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
+    const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
     if (!cat && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
     A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, ...(r.pending ? { pend: true } : {}) });
@@ -2938,16 +3005,19 @@ function bankAutoSync() {
   if (Date.now() - last > 6 * 3600000) bankSync(false);
 }
 
-function autoCategorize() {
+function autoCategorize(quiet) {
   let n = 0;
   mutate('Auto-categorize', () => {
     for (const t of A.tx) {
       const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !t.importId) continue;
       if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
-      const cur = L.payee[t.payee]; const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
+      const cur = L.payee[t.payee]; const lp = learnedPayee(cur?.name || '');
+      if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) t.cat = lp.lastCat; n++; continue; }
+      const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
       if (g) { t.payee = g.id; t.cat = g.lastCat; n++; }
     }
   });
+  if (quiet) return n;
   toast(n ? `${n} transaction${n > 1 ? 's' : ''} categorized: check them, then approve` : 'Nothing recognised: categorize a few by hand and the app learns them');
 }
 /* ================= Budget — events & boot ================= */
@@ -3096,7 +3166,9 @@ const ACT = {
   bankCheck: () => bankCheckOnce(true),
   dupReview: el => dupReviewSheet(el.dataset.id),
   autoCat: () => autoCategorize(),
+  yLearn: () => yLearnSheet(), yLearnGo: el => yLearnGo(el.dataset.i != null ? +el.dataset.i : null),
   diffSheet: el => diffSheet(el.dataset.id, +el.dataset.v),
+  diffAdd: el => { const r = A.ui.diffMissing?.[+el.dataset.i]; const id = A.ui.diffAcct; if (!r || !id) return; mutate('Bank transaction added', () => importRows(id, [r])); el.closest('.li').remove(); toast('Added (unapproved): categorize it in the register'); },
   dupRemove: el => { const d = cardDups(el.dataset.id); mutate(`Removed ${d.length} duplicate${d.length > 1 ? 's' : ''}`, () => { for (const x of d) { if (!x.card.cat && x.main.cat) x.card.cat = x.main.cat; if (!x.card.cat && x.main.splits) x.card.splits = x.main.splits; if (x.card.memo === '' && x.main.memo) x.card.memo = x.main.memo; const i = A.tx.indexOf(x.main); if (i >= 0) A.tx.splice(i, 1); } }); closeSheet(); },
   bankRemove: el => confirmSheet('Disconnect bank', 'Stops importing from this bank and revokes the access at Enable Banking. Transactions already imported stay.', 'Disconnect', 'bankRemoveDo', { id: el.dataset.id }),
   bankRemoveDo: async el => { const c = A.plan.bank.conns.find(x => x.id === el.dataset.id); closeSheet(); if (!c) return; try { await bk('delete', { session: c.session }); } catch (e) { } mutate('Bank disconnected', () => { A.plan.bank.conns = A.plan.bank.conns.filter(x => x !== c); }); },

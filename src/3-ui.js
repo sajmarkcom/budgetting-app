@@ -190,7 +190,7 @@ function viewPlan() {
   h += `<div class="wrap">`;
   if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
   if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></div>`;
-  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
+  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span>${A.plan.learned ? '' : `<button class="btn sm" data-a="yLearn">Use my YNAB payees</button>`}<button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
   if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
@@ -361,19 +361,37 @@ function bankBalLine(acctId, bal) {
   const ok = !diffW || !diffC;
   return `<div class="banner ${ok ? '' : 'warn'}" style="margin-top:8px">${I.bank}<span>Bank balance <strong class="num">${fmt(pick.v)}</strong>${ok ? ' · matches ✓' : ` · here <strong class="num">${fmt(bal.working)}</strong> · difference <strong class="num">${fmt(diffW)}</strong>`}</span>${ok ? '' : `<button class="btn sm" data-a="diffSheet" data-id="${acctId}" data-v="${pick.v}">Find it</button>`}</div>`;
 }
-function diffSheet(acctId, bankV) {
-  const a = L.acct[acctId], b = balances()[acctId];
-  const imp = A.tx.filter(t => t.acct === acctId && t.importId && /^ebp?:/.test(t.importId)).map(t => t.date).sort();
-  const since = imp.length ? addDays(imp[0], -3) : addDays(todayISO(), -60);
-  const hand = A.tx.filter(t => t.acct === acctId && !t.importId && t.date >= since && L.payee[t.payee]?.name !== 'Starting Balance').sort((x, y) => x.date < y.date ? 1 : -1);
-  const sumHand = hand.reduce((s, t) => s + t.amount, 0);
-  const pend = A.tx.filter(t => t.acct === acctId && t.pend); const sumPend = pend.reduce((s, t) => s + t.amount, 0);
-  const row = t => `<div class="li"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></div>`;
-  openSheet('Find the difference', `<p class="small muted" style="margin:0">Here ${fmt(b.working)} · bank ${fmt(bankV)} · difference <strong>${fmt(b.working - bankV)}</strong>.</p>
-    <div class="sec-t"><span>Typed by hand since the bank link (${fmt(sumHand)})</span></div>
-    <p class="small muted" style="margin:0">The bank never sent these. If one is not on your bank statement (already counted elsewhere, or a duplicate), delete it.</p>
-    <div class="card">${hand.map(row).join('') || '<div class="li muted">None</div>'}</div>
-    ${pend.length ? `<div class="sec-t"><span>Pending at the bank (${fmt(sumPend)})</span></div><p class="small muted" style="margin:0">Payments the bank has not booked yet; some banks leave them out of the balance.</p><div class="card">${pend.map(row).join('')}</div>` : ''}`, '');
+async function diffSheet(acctId, bankV) {
+  const x = bankAcctOf(acctId); if (!x) return;
+  openSheet('Find the difference', `<div class="small muted">Comparing with your bank's last 60 days…</div>`, '');
+  try {
+    const from = addDays(todayISO(), -60), rows = []; let ck = null, guard = 0;
+    do { const r = await bk('tx', { uid: x.uid, from, ...(ck ? { ck } : {}) }); for (const t of r.transactions || []) rows.push(ebRow(t)); ck = r.continuation_key || null; } while (ck && guard++ < 20);
+    const booked = rows.filter(r => !r.pending && r.date && r.amount && r.date >= from);
+    const here = A.tx.filter(t => t.acct === acctId && !t.pend && t.date >= from);
+    const used = new Set(), missing = [];
+    for (const r of booked) {
+      const key = r.fitid ? 'eb:' + r.fitid : null;
+      let m = key && here.find(t => !used.has(t.id) && t.importId === key);
+      if (!m) m = here.filter(t => !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 7).sort((p, q) => Math.abs(daysBetween(p.date, r.date)) - Math.abs(daysBetween(q.date, r.date)))[0];
+      if (m) used.add(m.id); else missing.push(r);
+    }
+    const extra = here.filter(t => !used.has(t.id));
+    const sum = l => l.reduce((s, t) => s + t.amount, 0);
+    const appV = balances()[acctId].working - sum(A.tx.filter(t => t.acct === acctId && t.pend));
+    const bankBefore = bankV - sum(booked), appBefore = appV - sum(here);
+    A.ui.diffMissing = missing; A.ui.diffAcct = acctId;
+    const row = t => `<button class="li" data-a="txEdit" data-id="${t.id}"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></button>`;
+    const brow = (r, i) => `<div class="li"><span class="grow"><strong>${esc(r.payee)}</strong><div class="small muted">${esc(fmtDate(r.date))}</div></span><span class="num">${fmt(r.amount)}</span><button class="btn sm" data-a="diffAdd" data-i="${i}">Add</button></div>`;
+    const body = `<p class="small muted" style="margin:0">Here ${fmt(appV)} · bank ${fmt(bankV)} · difference <strong>${fmt(appV - bankV)}</strong> (pending payments left out on both sides).</p>
+      <div class="sec-t"><span>At the bank, missing here (${fmt(sum(missing))})</span></div>
+      <div class="card">${missing.map(brow).join('') || '<div class="li muted">None</div>'}</div>
+      <div class="sec-t"><span>Here, not at the bank (${fmt(sum(extra))})</span></div>
+      <p class="small muted" style="margin:0">Not found on your bank account in the last 60 days. Tap one to open it: delete it only if it really is not on your statement.</p>
+      <div class="card">${extra.map(row).join('') || '<div class="li muted">None</div>'}</div>
+      ${bankBefore !== appBefore ? `<div class="banner warn">${I.info}<span>Before ${esc(fmtDate(from))} the balances already differ by ${fmt(appBefore - bankBefore)}: that part is older than 60 days (use Reconcile to fix it with one adjustment).</span></div>` : ''}`;
+    $('.sheet-b') && ($('.sheet-b').innerHTML = body);
+  } catch (e) { $('.sheet-b') && ($('.sheet-b').innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message)}</span></div>`); }
 }
 function viewRegister() {
   const id = A.acct, all = id === 'all', a = all ? null : L.acct[id], desk = DESK();
