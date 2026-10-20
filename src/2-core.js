@@ -189,7 +189,7 @@ function calc(toMonth) {
       continue;
     }
     for (const ln of txLines(t)) {
-      if (ln.cat === 'rta') { income[m] = (income[m] || 0) + ln.amount; continue; }
+      if (ln.cat === 'rta') { if (!(isCredit(a) && ln.amount < 0)) income[m] = (income[m] || 0) + ln.amount; continue; }
       if (ln.cat === '__start') continue;
       if (!ln.cat || !L.cat[ln.cat]) { uncat[m] = (uncat[m] || 0) + ln.amount; income[m] = (income[m] || 0) + ln.amount; continue; }
       if (isCredit(a)) {
@@ -353,7 +353,7 @@ function scheduleSave() {
   A.index.updatedAt = Date.now();
   const ent = A.index.plans.find(x => x.id === A.plan?.id); if (ent) ent.name = A.plan.name;
   localSaveAll();
-  clearTimeout(saveTimer); saveTimer = setTimeout(dbSave, 700);
+  clearTimeout(saveTimer); saveTimer = setTimeout(dbSave, 700); if (typeof gdSchedule === 'function') gdSchedule();
 }
 function txByMonth() { const g = {}; for (const t of A.tx) (g[monthOf(t.date)] ||= []).push(t); return g; }
 async function dbSave() {

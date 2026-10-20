@@ -82,16 +82,34 @@ function yDo() {
   const subs = {}; for (const s of (B.subtransactions || []).filter(live)) (subs[s.transaction_id] ||= []).push(s);
   const tId = {}; const ytx = B.transactions.filter(live).filter(t => aId[t.account_id]);
   for (const t of ytx) tId[t.id] = uid();
+  // split lines that are transfers (e.g. a loan payment inside a split) become their own transfer transactions
+  const subT = {};
   for (const t of ytx) {
+    const ss = subs[t.id]; if (!ss) continue;
+    const keep = [];
+    for (const s of ss) {
+      if (s.transfer_account_id && aId[s.transfer_account_id]) {
+        const acct = aId[t.account_id];
+        const nt = { id: uid(), acct, date: t.date, payee: null, cat: catOf(s.category_id, acct), memo: s.memo || t.memo || '', amount: c(s.amount), cleared: t.cleared === 'reconciled' ? 'r' : t.cleared === 'cleared' ? 'c' : 'u', flag: t.flag_color || null, approved: true, transferAcct: aId[s.transfer_account_id] };
+        if (!(onBudget(L.acct[acct]) && !onBudget(L.acct[nt.transferAcct]))) nt.cat = null;
+        A.tx.push(nt); subT[nt.acct + '|' + nt.transferAcct + '|' + t.date + '|' + nt.amount] = nt;
+      } else keep.push(s);
+    }
+    subs[t.id] = keep; t._splitOnlyTransfers = !keep.length;
+  }
+  for (const t of ytx) {
+    if (t._splitOnlyTransfers) continue;
     const acct = aId[t.account_id];
     const tx = { id: tId[t.id], acct, date: t.date, payee: pay(t.payee_id), cat: catOf(t.category_id, acct), memo: t.memo || '', amount: c(t.amount),
       cleared: t.cleared === 'reconciled' ? 'r' : t.cleared === 'cleared' ? 'c' : 'u', flag: t.flag_color || null, approved: t.approved !== false };
     if (t.import_id) tx.importId = t.import_id;
     const ss = subs[t.id];
-    if (ss && ss.length) { tx.cat = null; tx.splits = ss.map(s => ({ cat: catOf(s.category_id, acct), amount: c(s.amount), memo: s.memo || '' })); }
+    if (ss && ss.length > 1) { tx.cat = null; tx.splits = ss.map(s => ({ cat: catOf(s.category_id, acct), amount: c(s.amount), memo: s.memo || '' })); tx.amount = tx.splits.reduce((x, y) => x + y.amount, 0); }
+    else if (ss && ss.length === 1) { tx.cat = catOf(ss[0].category_id, acct); tx.amount = c(ss[0].amount); if (ss[0].memo) tx.memo = ss[0].memo; }
     if (t.transfer_account_id && aId[t.transfer_account_id]) {
       tx.transferAcct = aId[t.transfer_account_id]; tx.payee = null;
       if (t.transfer_transaction_id && tId[t.transfer_transaction_id]) tx.transferId = tId[t.transfer_transaction_id];
+      else { const mate = subT[tx.transferAcct + '|' + acct + '|' + t.date + '|' + (-tx.amount)]; if (mate && !mate.transferId) { mate.transferId = tx.id; tx.transferId = mate.id; } }
       const a = L.acct[acct], b2 = L.acct[tx.transferAcct]; if (!(onBudget(a) && !onBudget(b2))) tx.cat = null;
     }
     const y = tx.payee && L.payee[tx.payee]; if (y && tx.cat && tx.cat !== 'rta') y.lastCat = tx.cat;
@@ -99,6 +117,8 @@ function yDo() {
   }
   // transfers whose other side was not exported: create it so both registers balance
   for (const tx of A.tx.slice()) if (tx.transferAcct && !tx.transferId) { const m = { id: uid(), acct: tx.transferAcct, date: tx.date, amount: -tx.amount, memo: tx.memo, cleared: 'u', flag: null, approved: true, transferAcct: tx.acct, transferId: tx.id, payee: null, cat: null }; tx.transferId = m.id; A.tx.push(m); }
+  // off-budget accounts (loans, tracking): YNAB can hold a balance not explained by transactions (accrued interest) — align it
+  { const bal = balances(); for (const a of B.accounts.filter(live)) { const id = aId[a.id]; if (!id || onBudget(L.acct[id])) continue; const diff = c(a.balance) - bal[id].working; if (diff) A.tx.push({ id: uid(), acct: id, date: todayISO(), payee: getPayee('Ajustement YNAB (intérêts)').id, cat: '__start', memo: '', amount: diff, cleared: 'c', flag: null, approved: true }); } }
   // assigned per month + month notes
   let first = curMonth();
   for (const mo of (B.months || [])) {

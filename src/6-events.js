@@ -129,6 +129,7 @@ const ACT = {
   importSheet: el => importSheet(el.dataset.id || (A.acct && A.acct !== 'all' ? A.acct : null)),
   impBuild: () => impBuildCSV(), impDo: () => impDo(),
   ynSheet: () => ynSheet(), ynDo: () => ynDo(),
+  gdLogin: () => gdAuth(false), gdNow: () => gdSync(), gdOff: () => gdDisconnect(),
   yLoad: () => yLoad(), yPick: el => yPick(+el.dataset.i), yDo: () => yDo(),
   schEdit: el => schSheet(el.dataset.id), schList: () => schListSheet(),
   schNow: el => { const s = A.plan.scheduled.find(x => x.id === el.dataset.id); mutate('Opération saisie', () => { saveTx({ acct: s.acct, date: todayISO(), payee: s.payee, cat: s.cat, memo: s.memo, amount: s.amount, transferAcct: s.transferAcct, splits: s.splits, cleared: 'u', approved: true }); s.next = s.freq === 'never' ? null : nextDate(s.next, s.freq); A.plan.scheduled = A.plan.scheduled.filter(x => x.next); }); },
@@ -168,12 +169,14 @@ document.addEventListener('click', e => {
 });
 // assigned inline inputs
 function applyAssign(inp) {
+  if (inp.dataset.done) return;
   const cid = inp.dataset.assign; const cur = getAssigned(A.month, cid); let raw = inp.value.trim();
   if (raw === fmtIn(cur)) return;
+  inp.dataset.done = '1';
   let v;
   if (/^[+*/]/.test(raw) || (/^-/.test(raw) && raw.length > 1 && cur !== 0)) { v = evalExpr(fmtIn(cur).replace(',', '.') + raw.replace(',', '.')); }
   else v = evalExpr(raw === '' ? '0' : raw);
-  if (v == null) { inp.value = fmtIn(cur); toast('Montant non reconnu'); return; }
+  if (v == null) { delete inp.dataset.done; inp.value = fmtIn(cur); toast('Montant non reconnu'); return; }
   render._keepScroll = true;
   mutate('Réparti : ' + catName(cid) + ' ' + fmt(v), () => setAssigned(A.month, cid, v), { silent: true });
 }
@@ -239,6 +242,7 @@ document.addEventListener('change', e => {
   }
   if (el.dataset.mp && IMP) { IMP.map[el.dataset.mp] = el.type === 'checkbox' ? el.checked : (el.dataset.mp === 'dfmt' ? el.value : +el.value); return; }
   if (el.dataset.c === 'impFile' && el.files[0]) { onImportFile(el.files[0]); return; }
+  if (el.dataset.c === 'gClient') { try { localStorage.setItem('budget.gclient', el.value.trim()); } catch (e) { } render(); return; }
   if (el.dataset.c === 'ynFile' && el.files.length) { ynFiles([...el.files]); return; }
   if (el.dataset.c === 'restore' && el.files[0]) { restoreFile(el.files[0]); el.value = ''; return; }
   if (el.dataset.c === 'selTx') { if (el.checked) A.ui.selected.add(el.dataset.id); else A.ui.selected.delete(el.dataset.id); $('#actionbar').innerHTML = A.ui.selected.size ? actionBar() : ''; return; }
@@ -253,8 +257,9 @@ $('#fab').addEventListener('click', () => txSheet(null));
     A.index = all.index; const cur = all.plans?.[A.index.current] || all.plans?.[A.index.plans[0].id];
     if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; }
   }
+  gdReadHash(); gdLoadToken();
   rebuildLookups();
   if (A.plan) { const n = runScheduled(); if (n) localSaveAll(); }
   render();
-  initDb();
+  initDb().then(() => gdSync());
 })();

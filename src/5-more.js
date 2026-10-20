@@ -298,9 +298,9 @@ function viewSettings() {
     <div class="sec-t"><span>Mes budgets</span></div>
     <div class="card">${A.index.plans.map(x => `<button class="li" data-a="switchPlan" data-id="${x.id}" ${x.id === p.id ? 'aria-current="true"' : ''}><span class="ic">${x.id === p.id ? I.check : I.plan}</span><span class="grow"><strong>${esc(x.name)}</strong>${x.id === p.id ? '<div class="small muted">Ouvert</div>' : ''}</span></button>`).join('')}
       <button class="li" data-a="newPlan"><span class="ic">${I.plus}</span><span class="grow"><strong>Nouveau budget</strong></span></button></div>
-    <div class="sec-t"><span>Sauvegarde et synchro</span></div>
+    ${driveSettingsHtml()}
+    <div class="sec-t"><span>Sauvegarde</span></div>
     <div class="card">
-      <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong id="syncState">${syncLabel()}</strong><div class="small muted">Tes données restent privées, sur ton compte.</div></span></div>
       <button class="li" data-a="exportJson"><span class="ic">${I.download}</span><span class="grow"><strong>Exporter une sauvegarde (JSON)</strong><div class="small muted">À ranger sur ton Google Drive</div></span></button>
       <button class="li" data-a="exportCsv"><span class="ic">${I.file}</span><span class="grow"><strong>Exporter les opérations (CSV)</strong><div class="small muted">Lisible dans Google Sheets</div></span></button>
       <label class="li" for="restoreFile2" style="cursor:pointer"><span class="ic">${I.upload}</span><span class="grow"><strong>Restaurer une sauvegarde</strong><div class="small muted">Ajoute le budget du fichier à ta liste</div></span></label>

@@ -37,7 +37,7 @@ function toast(msg, withUndo) {
 }
 function paintSync() { const el = $('#syncState'); if (el) el.innerHTML = syncLabel(); }
 function syncLabel() {
-  return { local: 'Stocké sur cet appareil', syncing: 'Synchronisation…', synced: 'Synchronisé sur tous tes appareils', error: 'Synchro en échec — données gardées sur cet appareil', quota: 'Espace de synchro plein — exporte une sauvegarde' }[A.sync];
+  return { local: 'Stocké sur cet appareil', syncing: 'Synchronisation…', synced: 'Synchronisé sur tous tes appareils', error: 'Synchro en échec — données gardées sur cet appareil', quota: 'Espace de synchro plein — exporte une sauvegarde', 'drive-ok': 'Synchronisé avec Google Drive', 'drive-err': 'Synchro Drive en échec — réessaie plus tard', 'drive-login': 'Reconnexion à Google nécessaire' }[A.sync] || 'Stocké sur cet appareil';
 }
 
 /* ---------- shell ---------- */
