@@ -69,7 +69,7 @@ async function gdSync() {
   try {
     const raw = await gdPull();
     const remote = raw ? JSON.parse(raw) : null;
-    if (!remote) { await gdPush(); return; }
+    if (!remote || !Object.keys(remote.plans || {}).length) { A.ui.restoreMsg = A.plan ? '' : 'Connected to Google Drive, but no plan is saved there yet. On your phone, open Settings → Google Drive Sync → Sync now, then reload this page.'; if (A.plan) await gdPush(); else { gdPaint('ok'); render(); } return; }
     // merge plan by plan: the most recently edited copy of each plan wins, nothing is ever dropped
     let local = null; try { local = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { }
     local ||= { index: { plans: [], current: null, updatedAt: 0 }, plans: {} };
@@ -92,7 +92,7 @@ async function gdSync() {
       A.plan = cur.plan; A.tx = cur.tx; A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
     } else render();
     if (pushNeeded || JSON.stringify(Object.keys(remote.plans || {}).sort()) !== JSON.stringify(Object.keys(merged.plans).sort())) await gdPush(); else gdPaint('ok');
-  } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); }
+  } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }
 }
 function gdDisconnect() {
   try { localStorage.removeItem('budget.drive'); sessionStorage.removeItem('budget.gtok'); } catch (e) { }
