@@ -51,6 +51,7 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
 #app{max-width:820px; margin:0 auto; min-height:100%; padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .side,.insp{display:none}
 .toolbar{display:flex; gap:4px; flex-wrap:wrap; padding-block:6px 2px}
+@media (max-width:700px){ .toolbar{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch} .toolbar::-webkit-scrollbar{display:none} .toolbar > *{flex:none} }
 .tbtn{height:36px; padding:0 10px; border:none; background:transparent; border-radius:10px; color:var(--accent); font-weight:700; font-size:13.5px; display:inline-flex; align-items:center; gap:6px}
 .tbtn svg{width:17px; height:17px}
 .viewsw{display:inline-flex; background:var(--surface-2); border-radius:10px; padding:2px; gap:2px}
@@ -207,7 +208,7 @@ button > svg, label > svg, a > svg, .li > svg{width:20px; height:20px; flex:none
 .banner.warn{background:var(--warn-soft); color:var(--warn)}
 .banner.bad{background:var(--bad-soft); color:var(--bad)}
 .banner.info{background:var(--info-soft); color:var(--info)}
-.banner .btn{margin-left:auto; flex:none}
+.banner{flex-wrap:wrap} .banner > span{flex:1 1 170px; min-width:0} .banner .btn{margin-left:auto; flex:none} .banner .bbtns{display:flex; gap:8px; margin-left:auto; flex:none} .banner .bbtns .btn{margin-left:0} .banner > span.bbtns{flex:none}
 .banner > svg{width:20px; height:20px; flex:none}
 
 /* buttons & fields */
@@ -1122,7 +1123,7 @@ function viewPlan() {
   h += `<div class="wrap">`;
   if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
   if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></div>`;
-  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span>${A.plan.learned ? '' : `<button class="btn sm" data-a="yLearn">Use my YNAB payees</button>`}<button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></div>`;
+  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><span class="bbtns"><button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></span></div>`;
   if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
