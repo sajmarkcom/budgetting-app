@@ -135,6 +135,11 @@ const ACT = {
   impBuild: () => impBuildCSV(), impDo: () => impDo(),
   ynSheet: () => ynSheet(), ynDo: () => ynDo(),
   gdLogin: () => gdAuth(false), gdNow: () => gdSync(), gdOff: () => gdDisconnect(),
+  bankSetup: () => bankSetupSheet(), bankConnect: () => bankConnect(), bankLinkSheet: () => bankLinkSheet(), bankLink: el => bankLink(el.dataset.bank),
+  bankMap: el => bankMapSheet(el.dataset.id), bankMapSave: el => bankMapSave(el.dataset.id), bankSyncNow: () => bankSync(true),
+  bankCancel: () => { mutate('Bank login cancelled', () => { A.plan.bank.pending = null; }, { silent: true }); },
+  bankRemove: el => confirmSheet('Disconnect bank', 'Stops importing from this bank and revokes the access at Enable Banking. Transactions already imported stay.', 'Disconnect', 'bankRemoveDo', { id: el.dataset.id }),
+  bankRemoveDo: async el => { const c = A.plan.bank.conns.find(x => x.id === el.dataset.id); closeSheet(); if (!c) return; try { await bk('delete', { session: c.session }); } catch (e) { } mutate('Bank disconnected', () => { A.plan.bank.conns = A.plan.bank.conns.filter(x => x !== c); }); },
   yLoad: () => yLoad(), yPick: el => yPick(+el.dataset.i), yDo: () => yDo(),
   schEdit: el => schSheet(el.dataset.id), schList: () => schListSheet(),
   schNow: el => { const s = A.plan.scheduled.find(x => x.id === el.dataset.id); mutate('Transaction entered', () => { saveTx({ acct: s.acct, date: todayISO(), payee: s.payee, cat: s.cat, memo: s.memo, amount: s.amount, transferAcct: s.transferAcct, splits: s.splits, cleared: 'u', approved: true }); s.next = s.freq === 'never' ? null : nextDate(s.next, s.freq); A.plan.scheduled = A.plan.scheduled.filter(x => x.next); }); },
@@ -213,6 +218,7 @@ document.addEventListener('input', e => {
   if (el.dataset.sp && D?.splits) { const s = D.splits[+el.dataset.i]; if (el.dataset.sp === 'amount') { const v = evalExpr(el.value); s.amount = v == null ? 0 : Math.abs(v); } else s[el.dataset.sp] = el.value; return; }
   if (el.dataset.i === 'search') { A.ui.search = el.value; clearTimeout(el._t); el._t = setTimeout(() => { const pos = el.selectionStart; render(); const n = $('#regSearch'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 220); return; }
   if (el.dataset.c === 'loanX') { loanSheet(el.dataset.id, +el.value); return; }
+  if (el.dataset.c === 'bkSearch') { bankListRender(el.value); return; }
 });
 document.addEventListener('change', e => {
   const el = e.target;
@@ -253,6 +259,7 @@ document.addEventListener('change', e => {
   if (el.dataset.mp && IMP) { IMP.map[el.dataset.mp] = el.type === 'checkbox' ? el.checked : (el.dataset.mp === 'dfmt' ? el.value : +el.value); return; }
   if (el.dataset.c === 'impFile' && el.files[0]) { onImportFile(el.files[0]); return; }
   if (el.dataset.c === 'gClient') { try { localStorage.setItem('budget.gclient', el.value.trim()); } catch (e) { } render(); return; }
+  if (el.dataset.c === 'bkSearch') { bankListRender(el.value); return; }
   if (el.dataset.c === 'ynFile' && el.files.length) { ynFiles([...el.files]); return; }
   if (el.dataset.c === 'restore' && el.files[0]) { restoreFile(el.files[0]); el.value = ''; return; }
   if (el.dataset.c === 'selTx') { if (el.checked) A.ui.selected.add(el.dataset.id); else A.ui.selected.delete(el.dataset.id); $('#actionbar').innerHTML = A.ui.selected.size ? actionBar() : ''; return; }
@@ -280,7 +287,7 @@ document.addEventListener('drop', e => { const el = e.target.closest?.('[data-dr
 document.addEventListener('dragend', () => { dragAcct = null; $$('.drop-over,.dragging').forEach(x => x.classList.remove('drop-over', 'dragging')); });
 
 window.addEventListener('pagehide', () => { if (A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
   try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; } catch (e) { }
@@ -294,5 +301,5 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   rebuildLookups();
   if (A.plan) { const n = runScheduled(); if (n) localSaveAll(); }
   render();
-  initDb().then(() => gdSync());
+  initDb().then(() => gdSync()).then(() => { if (A.plan) { bankWatchPending(); bankAutoSync(); } });
 })();

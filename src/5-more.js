@@ -299,6 +299,7 @@ function viewSettings() {
     <div class="card">${A.index.plans.map(x => `<div class="li" style="padding:0 6px 0 0"><button class="li" style="border:none" data-a="switchPlan" data-id="${x.id}" ${x.id === p.id ? 'aria-current="true"' : ''}><span class="ic">${x.id === p.id ? I.check : I.plan}</span><span class="grow"><strong>${esc(x.name)}</strong>${x.id === p.id ? '<div class="small muted">Open</div>' : ''}</span></button><button class="ibtn" data-a="deletePlanAsk" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${I.trash}</button></div>`).join('')}
       <button class="li" data-a="newPlan"><span class="ic">${I.plus}</span><span class="grow"><strong>New Plan</strong></span></button></div>
     ${driveSettingsHtml()}
+    ${bankSettingsHtml()}
     <div class="sec-t"><span>Backup</span></div>
     <div class="card">
       <button class="li" data-a="exportJson"><span class="ic">${I.download}</span><span class="grow"><strong>Export backup (JSON)</strong><div class="small muted">Keep a copy in your Google Drive</div></span></button>
@@ -325,7 +326,7 @@ async function saveFile(filename, data, mime) {
   try { const url = URL.createObjectURL(new Blob([data], { type: mime })); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); }
   catch (e) { toast('Export is not available here'); }
 }
-function exportJson() { saveFile(`budget-${A.plan.name.replace(/[^\w-]+/g, '_')}-${todayISO()}.json`, JSON.stringify({ app: 'pecule', v: 1, plan: A.plan, tx: A.tx }, null, 1), 'application/json'); }
+function exportJson() { const plan = JSON.parse(JSON.stringify(A.plan)); if (plan.bank) plan.bank = { url: '', key: '', conns: [], pending: null }; saveFile(`budget-${A.plan.name.replace(/[^\w-]+/g, '_')}-${todayISO()}.json`, JSON.stringify({ app: 'pecule', v: 1, plan, tx: A.tx }, null, 1), 'application/json'); }
 function exportCsv() {
   const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
   const rows = [['Account', 'Date', 'Payee', 'Category', 'Memo', 'Outflow', 'Inflow', 'Cleared'].map(q).join(';')];
