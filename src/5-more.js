@@ -355,7 +355,7 @@ function freshStart() {
   const oldEnt = A.index.plans.find(x => x.id === old.id); if (oldEnt) oldEnt.name = old.name + ' (archived ' + fmtDate(todayISO()) + ')';
   const archived = { ...old, name: oldEnt?.name || old.name };
   if (DB) { DB.doc('plans/' + old.id).set(JSON.parse(JSON.stringify(archived))).catch(() => { }); }
-  try { const all = localLoad(); if (all?.plans?.[old.id]) { all.plans[old.id].plan = archived; localStorage.setItem(LKEY, JSON.stringify(all)); } } catch (e) { }
+  if (ALL.plans[old.id]) ALL.plans[old.id].plan = archived;
   const p = JSON.parse(JSON.stringify(old)); p.id = uid(); p.assigned = {}; p.moves = []; p.notes = {}; p.startMonth = curMonth(); p.createdAt = Date.now();
   const idMap = {}; p.accounts = p.accounts.filter(a => !a.closed).map(a => { const n = { ...a, id: uid(), lastRec: null }; idMap[a.id] = n.id; return n; });
   p.cats = p.cats.filter(c => !c.cc || idMap[c.cc]).map(c => c.cc ? { ...c, cc: idMap[c.cc] } : c);

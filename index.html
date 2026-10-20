@@ -664,16 +664,31 @@ function ageOfMoney() {
 /* ---------- storage: local cache + db sync ---------- */
 const LKEY = 'pecule.v1';
 let DB = null, unsubCore = null, saveTimer = null, lastSavedMonths = {}, lastRev = '';
-function localSaveAll() {
-  try {
-    const raw = localStorage.getItem(LKEY); const all = raw ? JSON.parse(raw) : { plans: {} };
-    all.index = A.index; if (A.plan) all.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
-    localStorage.setItem(LKEY, JSON.stringify(all));
-  } catch (e) { }
+/* All plans live in memory (ALL) and are persisted to IndexedDB (no 5 MB limit); localStorage is only a legacy fallback. */
+let ALL = { index: { plans: [], current: null, updatedAt: 0 }, plans: {} };
+let _idb = null;
+function idb() {
+  if (_idb) return _idb;
+  _idb = new Promise((ok, ko) => { try { const r = indexedDB.open('budget-app', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); } catch (e) { ko(e); } });
+  return _idb;
 }
-function localLoad() { try { const raw = localStorage.getItem(LKEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
-function localGetPlan(id) { const all = localLoad(); return all?.plans?.[id] || null; }
-function localDeletePlan(id) { try { const all = localLoad(); if (all?.plans) { delete all.plans[id]; localStorage.setItem(LKEY, JSON.stringify(all)); } } catch (e) { } }
+async function idbGet(key) { const d = await idb(); return new Promise((ok, ko) => { const t = d.transaction('kv').objectStore('kv').get(key); t.onsuccess = () => ok(t.result); t.onerror = () => ko(t.error); }); }
+async function idbSet(key, val) { const d = await idb(); return new Promise((ok, ko) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = () => ok(); tx.onerror = () => ko(tx.error); }); }
+let _persistTimer = null, _persistChain = Promise.resolve();
+function persistNow() { const snap = JSON.parse(JSON.stringify(ALL)); _persistChain = _persistChain.then(() => idbSet('all', snap)).catch(e => { console.warn('save', e); try { localStorage.setItem(LKEY, JSON.stringify(snap)); } catch (x) { toast('Could not save on this device: storage is full'); } }); return _persistChain; }
+function localSaveAll() {
+  ALL.index = A.index; if (A.plan) ALL.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
+  clearTimeout(_persistTimer); _persistTimer = setTimeout(persistNow, 150);
+}
+function localLoad() { return ALL; }
+function localGetPlan(id) { return ALL.plans[id] ? JSON.parse(JSON.stringify(ALL.plans[id])) : null; }
+function localDeletePlan(id) { delete ALL.plans[id]; ALL.index = A.index; persistNow(); }
+async function storageBoot() {
+  let got = null; try { got = await idbGet('all'); } catch (e) { }
+  if (!got) { try { const raw = localStorage.getItem(LKEY); if (raw) { got = JSON.parse(raw); await idbSet('all', got); localStorage.removeItem(LKEY); } } catch (e) { } }
+  if (got && got.plans) ALL = got;
+  ALL.index ||= { plans: [], current: null, updatedAt: 0 }; ALL.plans ||= {};
+}
 
 function scheduleSave() {
   A.calcV++; rebuildLookups();
@@ -955,7 +970,7 @@ function viewOnboarding() {
       <strong>Already using this app on another device?</strong>
       <span class="small muted">Sign in with the Google account that holds your budget to get it back here.</span>
       <button class="btn pri block" data-a="gdLogin">${I.sync} Restore from Google Drive</button>
-      ${A.ui.restoreMsg ? `<div class="banner warn">${I.info}<span>${esc(A.ui.restoreMsg)}</span></div>` : (gdOn() ? `<div class="small muted syncState">${syncLabel()}</div>` : '')}
+      ${A.ui.restoreMsg ? `<div class="banner warn">${I.info}<span>${esc(A.ui.restoreMsg)}</span></div>` : (gdOn() ? `<div class="small muted"><span class="syncState">${syncLabel()}</span>${GD.remoteInfo ? ' · Drive copy: ' + GD.remoteInfo.n + ' plan(s)' : ''}</div>` : '')}
     </div>
     <div class="sec-t"><span>Or start here</span></div>
     <button class="btn block" data-a="ynSheet">Import my YNAB plan</button>
@@ -1972,7 +1987,7 @@ function freshStart() {
   const oldEnt = A.index.plans.find(x => x.id === old.id); if (oldEnt) oldEnt.name = old.name + ' (archived ' + fmtDate(todayISO()) + ')';
   const archived = { ...old, name: oldEnt?.name || old.name };
   if (DB) { DB.doc('plans/' + old.id).set(JSON.parse(JSON.stringify(archived))).catch(() => { }); }
-  try { const all = localLoad(); if (all?.plans?.[old.id]) { all.plans[old.id].plan = archived; localStorage.setItem(LKEY, JSON.stringify(all)); } } catch (e) { }
+  if (ALL.plans[old.id]) ALL.plans[old.id].plan = archived;
   const p = JSON.parse(JSON.stringify(old)); p.id = uid(); p.assigned = {}; p.moves = []; p.notes = {}; p.startMonth = curMonth(); p.createdAt = Date.now();
   const idMap = {}; p.accounts = p.accounts.filter(a => !a.closed).map(a => { const n = { ...a, id: uid(), lastRec: null }; idMap[a.id] = n.id; return n; });
   p.cats = p.cats.filter(c => !c.cc || idMap[c.cc]).map(c => c.cc ? { ...c, cc: idMap[c.cc] } : c);
@@ -2403,7 +2418,8 @@ const GD = { token: null, exp: 0, fileId: null, busy: false, timer: null, status
 const gdClient = () => DRIVE_CLIENT_ID || (() => { try { return localStorage.getItem('budget.gclient') || ''; } catch (e) { return ''; } })();
 const gdOn = () => { try { return localStorage.getItem('budget.drive') === '1'; } catch (e) { return false; } };
 const gdRedirect = () => location.origin + location.pathname;
-function gdAuth(silent) {
+async function gdAuth(silent) {
+  try { if (A.plan) { localSaveAll(); clearTimeout(_persistTimer); await persistNow(); } } catch (e) { }
   const cid = gdClient(); if (!cid) { toast('Add the Google client ID in Settings first'); return; }
   try { localStorage.setItem('budget.drive', '1'); localStorage.setItem('budget.gtry', String(Date.now())); } catch (e) { }
   const q = new URLSearchParams({ client_id: cid, redirect_uri: gdRedirect(), response_type: 'token', scope: 'https://www.googleapis.com/auth/drive.appdata', include_granted_scopes: 'true', state: silent ? 'gd-silent' : 'gd', prompt: silent ? 'none' : 'consent' });
@@ -2441,7 +2457,11 @@ async function gdPush() {
   if (!GD.token || GD.busy) { if (GD.busy) gdSchedule(); return; }
   GD.busy = true; gdPaint('busy');
   try {
-    const raw = localStorage.getItem(LKEY) || '{}';
+    ALL.index = A.index; if (A.plan) ALL.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
+    const obj = JSON.parse(JSON.stringify(ALL));
+    if (!obj || !Object.keys(obj.plans || {}).length) { GD.busy = false; gdPaint('ok'); return; } // never overwrite Drive with an empty device
+    obj.savedAt = Date.now(); obj.device = /iPhone|iPad|Android/i.test(navigator.userAgent) ? (navigator.userAgent.match(/iPhone|iPad|Android/i)[0]) : (/Mac/i.test(navigator.userAgent) ? 'Mac' : 'computer');
+    const raw = JSON.stringify(obj); GD.remoteInfo = { n: Object.keys(obj.plans).length, at: obj.savedAt, device: obj.device };
     const id = await gdFind();
     if (id) await gdFetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: raw });
     else {
@@ -2467,10 +2487,11 @@ async function gdSync() {
   try {
     const raw = await gdPull();
     const remote = raw ? JSON.parse(raw) : null;
+    GD.remoteInfo = remote ? { n: Object.keys(remote.plans || {}).length, at: remote.savedAt || remote.index?.updatedAt || 0, device: remote.device || '' } : { n: 0 };
     if (!remote || !Object.keys(remote.plans || {}).length) { A.ui.restoreMsg = A.plan ? '' : 'Connected to Google Drive, but no plan is saved there yet. On your phone, open Settings → Google Drive Sync → Sync now, then reload this page.'; if (A.plan) await gdPush(); else { gdPaint('ok'); render(); } return; }
     // merge plan by plan: the most recently edited copy of each plan wins, nothing is ever dropped
-    let local = null; try { local = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { }
-    local ||= { index: { plans: [], current: null, updatedAt: 0 }, plans: {} };
+    ALL.index = A.index; if (A.plan) ALL.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
+    const local = ALL;
     const merged = { index: { plans: [], current: local.index?.current || remote.index?.current || null, updatedAt: Math.max(local.index?.updatedAt || 0, remote.index?.updatedAt || 0), deleted: [...new Set([...(local.index?.deleted || []), ...(remote.index?.deleted || [])])] }, plans: {} };
     const ids = new Set([...Object.keys(local.plans || {}), ...Object.keys(remote.plans || {})]);
     let pulled = false, pushNeeded = false;
@@ -2483,7 +2504,7 @@ async function gdSync() {
       const name = merged.plans[id].plan.name; merged.index.plans.push({ id, name });
     }
     if (!merged.plans[merged.index.current]) merged.index.current = merged.index.plans[0]?.id || null;
-    try { localStorage.setItem(LKEY, JSON.stringify(merged)); } catch (e) { }
+    ALL = merged; persistNow();
     A.index = merged.index;
     const cur = merged.plans[merged.index.current];
     if (cur && (pulled || !A.plan || A.plan.id !== cur.plan.id)) {
@@ -2501,7 +2522,7 @@ function driveSettingsHtml() {
   const on = gdOn();
   return `<div class="sec-t"><span>Google Drive Sync</span></div>
   <div class="card">
-    <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong class="syncState">${syncLabel()}</strong><div class="small muted">${on ? 'A hidden file in your Google Drive that only this app can see. Saved automatically after every change.' : 'Keep your plan on your phone and your computer, saved in your Google Drive.'}</div></span></div>
+    <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong class="syncState">${syncLabel()}</strong>${GD.remoteInfo ? `<div class="small">Drive copy: ${GD.remoteInfo.n} plan${GD.remoteInfo.n === 1 ? '' : 's'}${GD.remoteInfo.at ? ' · saved ' + new Date(GD.remoteInfo.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}${GD.remoteInfo.device ? ' from ' + esc(GD.remoteInfo.device) : ''}</div>` : ''}<div class="small muted">${on ? 'A hidden file in your Google Drive that only this app can see. Saved automatically after every change.' : 'Keep your plan on your phone and your computer, saved in your Google Drive.'}</div></span></div>
     ${on ? `<button class="li" data-a="gdNow"><span class="ic">${I.sync}</span><span class="grow"><strong>Sync now</strong></span></button>
       ${GD.status === 'needlogin' || !GD.token ? `<button class="li" data-a="gdLogin"><span class="ic">${I.lock}</span><span class="grow"><strong>Sign in to Google again</strong></span></button>` : ''}
       <button class="li" data-a="gdOff"><span class="ic">${I.close}</span><span class="grow"><strong>Turn off sync</strong><div class="small muted">Your data stays on this device</div></span></button>`
@@ -2785,15 +2806,18 @@ document.addEventListener('dragover', e => { const el = e.target.closest?.('[dat
 document.addEventListener('drop', e => { const el = e.target.closest?.('[data-drag]'); if (!el || !dragAcct) return; e.preventDefault(); const id = dragAcct; dragAcct = null; dropAccount(id, el.dataset.drag); });
 document.addEventListener('dragend', () => { dragAcct = null; $$('.drop-over,.dragging').forEach(x => x.classList.remove('drop-over', 'dragging')); });
 
+window.addEventListener('pagehide', () => { if (A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
-(function boot() {
+(async function boot() {
   try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; } catch (e) { }
-  const all = localLoad();
+  gdReadHash(); gdLoadToken();
+  await storageBoot();
+  const all = ALL;
   if (all?.index?.plans?.length) {
     A.index = all.index; const cur = all.plans?.[A.index.current] || all.plans?.[A.index.plans[0].id];
     if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; }
   }
-  gdReadHash(); gdLoadToken();
   rebuildLookups();
   if (A.plan) { const n = runScheduled(); if (n) localSaveAll(); }
   render();

@@ -109,7 +109,7 @@ function viewOnboarding() {
       <strong>Already using this app on another device?</strong>
       <span class="small muted">Sign in with the Google account that holds your budget to get it back here.</span>
       <button class="btn pri block" data-a="gdLogin">${I.sync} Restore from Google Drive</button>
-      ${A.ui.restoreMsg ? `<div class="banner warn">${I.info}<span>${esc(A.ui.restoreMsg)}</span></div>` : (gdOn() ? `<div class="small muted syncState">${syncLabel()}</div>` : '')}
+      ${A.ui.restoreMsg ? `<div class="banner warn">${I.info}<span>${esc(A.ui.restoreMsg)}</span></div>` : (gdOn() ? `<div class="small muted"><span class="syncState">${syncLabel()}</span>${GD.remoteInfo ? ' · Drive copy: ' + GD.remoteInfo.n + ' plan(s)' : ''}</div>` : '')}
     </div>
     <div class="sec-t"><span>Or start here</span></div>
     <button class="btn block" data-a="ynSheet">Import my YNAB plan</button>

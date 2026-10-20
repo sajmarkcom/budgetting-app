@@ -274,15 +274,18 @@ document.addEventListener('dragover', e => { const el = e.target.closest?.('[dat
 document.addEventListener('drop', e => { const el = e.target.closest?.('[data-drag]'); if (!el || !dragAcct) return; e.preventDefault(); const id = dragAcct; dragAcct = null; dropAccount(id, el.dataset.drag); });
 document.addEventListener('dragend', () => { dragAcct = null; $$('.drop-over,.dragging').forEach(x => x.classList.remove('drop-over', 'dragging')); });
 
+window.addEventListener('pagehide', () => { if (A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
-(function boot() {
+(async function boot() {
   try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; } catch (e) { }
-  const all = localLoad();
+  gdReadHash(); gdLoadToken();
+  await storageBoot();
+  const all = ALL;
   if (all?.index?.plans?.length) {
     A.index = all.index; const cur = all.plans?.[A.index.current] || all.plans?.[A.index.plans[0].id];
     if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; }
   }
-  gdReadHash(); gdLoadToken();
   rebuildLookups();
   if (A.plan) { const n = runScheduled(); if (n) localSaveAll(); }
   render();

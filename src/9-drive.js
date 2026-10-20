@@ -5,7 +5,8 @@ const GD = { token: null, exp: 0, fileId: null, busy: false, timer: null, status
 const gdClient = () => DRIVE_CLIENT_ID || (() => { try { return localStorage.getItem('budget.gclient') || ''; } catch (e) { return ''; } })();
 const gdOn = () => { try { return localStorage.getItem('budget.drive') === '1'; } catch (e) { return false; } };
 const gdRedirect = () => location.origin + location.pathname;
-function gdAuth(silent) {
+async function gdAuth(silent) {
+  try { if (A.plan) { localSaveAll(); clearTimeout(_persistTimer); await persistNow(); } } catch (e) { }
   const cid = gdClient(); if (!cid) { toast('Add the Google client ID in Settings first'); return; }
   try { localStorage.setItem('budget.drive', '1'); localStorage.setItem('budget.gtry', String(Date.now())); } catch (e) { }
   const q = new URLSearchParams({ client_id: cid, redirect_uri: gdRedirect(), response_type: 'token', scope: 'https://www.googleapis.com/auth/drive.appdata', include_granted_scopes: 'true', state: silent ? 'gd-silent' : 'gd', prompt: silent ? 'none' : 'consent' });
@@ -43,7 +44,11 @@ async function gdPush() {
   if (!GD.token || GD.busy) { if (GD.busy) gdSchedule(); return; }
   GD.busy = true; gdPaint('busy');
   try {
-    const raw = localStorage.getItem(LKEY) || '{}';
+    ALL.index = A.index; if (A.plan) ALL.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
+    const obj = JSON.parse(JSON.stringify(ALL));
+    if (!obj || !Object.keys(obj.plans || {}).length) { GD.busy = false; gdPaint('ok'); return; } // never overwrite Drive with an empty device
+    obj.savedAt = Date.now(); obj.device = /iPhone|iPad|Android/i.test(navigator.userAgent) ? (navigator.userAgent.match(/iPhone|iPad|Android/i)[0]) : (/Mac/i.test(navigator.userAgent) ? 'Mac' : 'computer');
+    const raw = JSON.stringify(obj); GD.remoteInfo = { n: Object.keys(obj.plans).length, at: obj.savedAt, device: obj.device };
     const id = await gdFind();
     if (id) await gdFetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: raw });
     else {
@@ -69,10 +74,11 @@ async function gdSync() {
   try {
     const raw = await gdPull();
     const remote = raw ? JSON.parse(raw) : null;
+    GD.remoteInfo = remote ? { n: Object.keys(remote.plans || {}).length, at: remote.savedAt || remote.index?.updatedAt || 0, device: remote.device || '' } : { n: 0 };
     if (!remote || !Object.keys(remote.plans || {}).length) { A.ui.restoreMsg = A.plan ? '' : 'Connected to Google Drive, but no plan is saved there yet. On your phone, open Settings → Google Drive Sync → Sync now, then reload this page.'; if (A.plan) await gdPush(); else { gdPaint('ok'); render(); } return; }
     // merge plan by plan: the most recently edited copy of each plan wins, nothing is ever dropped
-    let local = null; try { local = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { }
-    local ||= { index: { plans: [], current: null, updatedAt: 0 }, plans: {} };
+    ALL.index = A.index; if (A.plan) ALL.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
+    const local = ALL;
     const merged = { index: { plans: [], current: local.index?.current || remote.index?.current || null, updatedAt: Math.max(local.index?.updatedAt || 0, remote.index?.updatedAt || 0), deleted: [...new Set([...(local.index?.deleted || []), ...(remote.index?.deleted || [])])] }, plans: {} };
     const ids = new Set([...Object.keys(local.plans || {}), ...Object.keys(remote.plans || {})]);
     let pulled = false, pushNeeded = false;
@@ -85,7 +91,7 @@ async function gdSync() {
       const name = merged.plans[id].plan.name; merged.index.plans.push({ id, name });
     }
     if (!merged.plans[merged.index.current]) merged.index.current = merged.index.plans[0]?.id || null;
-    try { localStorage.setItem(LKEY, JSON.stringify(merged)); } catch (e) { }
+    ALL = merged; persistNow();
     A.index = merged.index;
     const cur = merged.plans[merged.index.current];
     if (cur && (pulled || !A.plan || A.plan.id !== cur.plan.id)) {
@@ -103,7 +109,7 @@ function driveSettingsHtml() {
   const on = gdOn();
   return `<div class="sec-t"><span>Google Drive Sync</span></div>
   <div class="card">
-    <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong class="syncState">${syncLabel()}</strong><div class="small muted">${on ? 'A hidden file in your Google Drive that only this app can see. Saved automatically after every change.' : 'Keep your plan on your phone and your computer, saved in your Google Drive.'}</div></span></div>
+    <div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong class="syncState">${syncLabel()}</strong>${GD.remoteInfo ? `<div class="small">Drive copy: ${GD.remoteInfo.n} plan${GD.remoteInfo.n === 1 ? '' : 's'}${GD.remoteInfo.at ? ' · saved ' + new Date(GD.remoteInfo.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}${GD.remoteInfo.device ? ' from ' + esc(GD.remoteInfo.device) : ''}</div>` : ''}<div class="small muted">${on ? 'A hidden file in your Google Drive that only this app can see. Saved automatically after every change.' : 'Keep your plan on your phone and your computer, saved in your Google Drive.'}</div></span></div>
     ${on ? `<button class="li" data-a="gdNow"><span class="ic">${I.sync}</span><span class="grow"><strong>Sync now</strong></span></button>
       ${GD.status === 'needlogin' || !GD.token ? `<button class="li" data-a="gdLogin"><span class="ic">${I.lock}</span><span class="grow"><strong>Sign in to Google again</strong></span></button>` : ''}
       <button class="li" data-a="gdOff"><span class="ic">${I.close}</span><span class="grow"><strong>Turn off sync</strong><div class="small muted">Your data stays on this device</div></span></button>`

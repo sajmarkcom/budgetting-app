@@ -344,16 +344,31 @@ function ageOfMoney() {
 /* ---------- storage: local cache + db sync ---------- */
 const LKEY = 'pecule.v1';
 let DB = null, unsubCore = null, saveTimer = null, lastSavedMonths = {}, lastRev = '';
-function localSaveAll() {
-  try {
-    const raw = localStorage.getItem(LKEY); const all = raw ? JSON.parse(raw) : { plans: {} };
-    all.index = A.index; if (A.plan) all.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
-    localStorage.setItem(LKEY, JSON.stringify(all));
-  } catch (e) { }
+/* All plans live in memory (ALL) and are persisted to IndexedDB (no 5 MB limit); localStorage is only a legacy fallback. */
+let ALL = { index: { plans: [], current: null, updatedAt: 0 }, plans: {} };
+let _idb = null;
+function idb() {
+  if (_idb) return _idb;
+  _idb = new Promise((ok, ko) => { try { const r = indexedDB.open('budget-app', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); } catch (e) { ko(e); } });
+  return _idb;
 }
-function localLoad() { try { const raw = localStorage.getItem(LKEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
-function localGetPlan(id) { const all = localLoad(); return all?.plans?.[id] || null; }
-function localDeletePlan(id) { try { const all = localLoad(); if (all?.plans) { delete all.plans[id]; localStorage.setItem(LKEY, JSON.stringify(all)); } } catch (e) { } }
+async function idbGet(key) { const d = await idb(); return new Promise((ok, ko) => { const t = d.transaction('kv').objectStore('kv').get(key); t.onsuccess = () => ok(t.result); t.onerror = () => ko(t.error); }); }
+async function idbSet(key, val) { const d = await idb(); return new Promise((ok, ko) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = () => ok(); tx.onerror = () => ko(tx.error); }); }
+let _persistTimer = null, _persistChain = Promise.resolve();
+function persistNow() { const snap = JSON.parse(JSON.stringify(ALL)); _persistChain = _persistChain.then(() => idbSet('all', snap)).catch(e => { console.warn('save', e); try { localStorage.setItem(LKEY, JSON.stringify(snap)); } catch (x) { toast('Could not save on this device: storage is full'); } }); return _persistChain; }
+function localSaveAll() {
+  ALL.index = A.index; if (A.plan) ALL.plans[A.plan.id] = { plan: A.plan, tx: A.tx };
+  clearTimeout(_persistTimer); _persistTimer = setTimeout(persistNow, 150);
+}
+function localLoad() { return ALL; }
+function localGetPlan(id) { return ALL.plans[id] ? JSON.parse(JSON.stringify(ALL.plans[id])) : null; }
+function localDeletePlan(id) { delete ALL.plans[id]; ALL.index = A.index; persistNow(); }
+async function storageBoot() {
+  let got = null; try { got = await idbGet('all'); } catch (e) { }
+  if (!got) { try { const raw = localStorage.getItem(LKEY); if (raw) { got = JSON.parse(raw); await idbSet('all', got); localStorage.removeItem(LKEY); } } catch (e) { } }
+  if (got && got.plans) ALL = got;
+  ALL.index ||= { plans: [], current: null, updatedAt: 0 }; ALL.plans ||= {};
+}
 
 function scheduleSave() {
   A.calcV++; rebuildLookups();
