@@ -60,7 +60,7 @@ function render() {
   else if (A.view === 'settings') html = viewSettings();
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
   const insp = A.view === 'plan' && DESK() ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
-  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
+  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
     ${navBtn('plan', 'Plan', I.plan)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('tx', 'Transactions', I.list)}${navBtn('reflect', 'Reflect', I.reflect)}${navBtn('settings', 'Settings', I.gear)}
@@ -188,6 +188,8 @@ function viewPlan() {
       <button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>
       <button class="tbtn" data-a="moves">${I.swap} Recent Moves</button>
       <button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${I.edit} ${A.ui.edit ? 'Done' : 'Edit'}</button>
+      <span style="flex:1"></span>
+      <span class="viewsw" role="group" aria-label="Row size"><button class="${A.ui.compact ? '' : 'on'}" data-a="setCompact" data-v="0" aria-label="Expanded rows with progress bars">${ico('<rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/>')}</button><button class="${A.ui.compact ? 'on' : ''}" data-a="setCompact" data-v="1" aria-label="Compact rows">${ico('<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>')}</button></span>
     </div>`;
   h += `<div class="colhead"><span class="c-name">Category</span><span class="w-ass">Assigned</span><span class="w-act hide-s">Activity</span><span class="w-av">Available</span></div>`;
   const groups = p.groups.filter(g => g.sys !== 'cc' || p.cats.some(c => c.gid === g.id && !c.hidden));

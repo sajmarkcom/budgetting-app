@@ -50,6 +50,11 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
 .toolbar{display:flex; gap:4px; flex-wrap:wrap; padding-block:6px 2px}
 .tbtn{height:36px; padding:0 10px; border:none; background:transparent; border-radius:10px; color:var(--accent); font-weight:700; font-size:13.5px; display:inline-flex; align-items:center; gap:6px}
 .tbtn svg{width:17px; height:17px}
+.viewsw{display:inline-flex; background:var(--surface-2); border-radius:10px; padding:2px; gap:2px}
+.viewsw button{width:34px; height:30px; border:none; border-radius:8px; background:transparent; color:var(--muted); display:flex; align-items:center; justify-content:center}
+.viewsw button.on{background:var(--surface); color:var(--fg); box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.viewsw svg{width:17px; height:17px}
+.compact .cat .bar{display:none} .compact .cat{min-height:40px; padding-block:4px} .compact .ass-in{height:30px} .compact .pill{height:26px}
 .tbtn:hover{background:var(--surface-2)} .tbtn.on{background:var(--accent-soft)} .tbtn:disabled{opacity:.4; cursor:default}
 .balbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); padding:10px 14px; margin-top:4px}
 .balbar > div{display:flex; flex-direction:column} .balbar small{font-size:11px; color:var(--muted); font-weight:700} .balbar .num{font-weight:700; font-size:15px} .balbar .strong{font-size:17px; font-weight:800} .balbar .op{color:var(--muted); font-weight:800}

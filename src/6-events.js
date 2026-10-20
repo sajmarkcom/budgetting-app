@@ -5,10 +5,11 @@ const ACT = {
   closeSheet: () => closeSheet(),
   month: el => { A.month = addMonths(A.month, +el.dataset.d); render(); },
   filter: el => { A.ui.filter = el.dataset.f; if (A.view !== 'plan') A.view = 'plan'; render(); },
+  setCompact: el => { A.ui.compact = el.dataset.v === '1'; try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u.compact = A.ui.compact; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } render._keepScroll = true; render(); },
   toggleEdit: () => { A.ui.edit = !A.ui.edit; render(); },
   toggleEditPlan: () => { A.view = 'plan'; A.ui.edit = true; render(); },
   toggleHidden: () => { A.ui.showHidden = !A.ui.showHidden; render(); },
-  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed })); } catch (e) { } render._keepScroll = true; render(); },
+  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed, compact: !!A.ui.compact })); } catch (e) { } render._keepScroll = true; render(); },
   rtaSheet: (el, e) => { if (e.target.closest('.cta')) return; rtaSheet(); },
   assignSheet: (el, e) => { e.stopPropagation(); assignSheet(); },
   fixOver: (el, e) => { e.stopPropagation(); const m = A.month; const c = A.plan.cats.filter(c => getAssigned(m, c.id) > 0).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0]; if (c) moveSheet(c.id, 'rta', Math.min(-monthData(m).rta, Math.max(0, catM(m, c.id).available)), 'Fix This'); else toast('Nothing to take back this month'); },
@@ -282,7 +283,7 @@ window.addEventListener('pagehide', () => { if (A.plan) { localSaveAll(); clearT
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;

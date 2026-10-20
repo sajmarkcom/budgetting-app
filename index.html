@@ -52,6 +52,11 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
 .toolbar{display:flex; gap:4px; flex-wrap:wrap; padding-block:6px 2px}
 .tbtn{height:36px; padding:0 10px; border:none; background:transparent; border-radius:10px; color:var(--accent); font-weight:700; font-size:13.5px; display:inline-flex; align-items:center; gap:6px}
 .tbtn svg{width:17px; height:17px}
+.viewsw{display:inline-flex; background:var(--surface-2); border-radius:10px; padding:2px; gap:2px}
+.viewsw button{width:34px; height:30px; border:none; border-radius:8px; background:transparent; color:var(--muted); display:flex; align-items:center; justify-content:center}
+.viewsw button.on{background:var(--surface); color:var(--fg); box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.viewsw svg{width:17px; height:17px}
+.compact .cat .bar{display:none} .compact .cat{min-height:40px; padding-block:4px} .compact .ass-in{height:30px} .compact .pill{height:26px}
 .tbtn:hover{background:var(--surface-2)} .tbtn.on{background:var(--accent-soft)} .tbtn:disabled{opacity:.4; cursor:default}
 .balbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); padding:10px 14px; margin-top:4px}
 .balbar > div{display:flex; flex-direction:column} .balbar small{font-size:11px; color:var(--muted); font-weight:700} .balbar .num{font-weight:700; font-size:15px} .balbar .strong{font-size:17px; font-weight:800} .balbar .op{color:var(--muted); font-weight:800}
@@ -928,7 +933,7 @@ function render() {
   else if (A.view === 'settings') html = viewSettings();
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
   const insp = A.view === 'plan' && DESK() ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
-  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
+  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
     ${navBtn('plan', 'Plan', I.plan)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('tx', 'Transactions', I.list)}${navBtn('reflect', 'Reflect', I.reflect)}${navBtn('settings', 'Settings', I.gear)}
@@ -1056,6 +1061,8 @@ function viewPlan() {
       <button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>
       <button class="tbtn" data-a="moves">${I.swap} Recent Moves</button>
       <button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${I.edit} ${A.ui.edit ? 'Done' : 'Edit'}</button>
+      <span style="flex:1"></span>
+      <span class="viewsw" role="group" aria-label="Row size"><button class="${A.ui.compact ? '' : 'on'}" data-a="setCompact" data-v="0" aria-label="Expanded rows with progress bars">${ico('<rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/>')}</button><button class="${A.ui.compact ? 'on' : ''}" data-a="setCompact" data-v="1" aria-label="Compact rows">${ico('<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>')}</button></span>
     </div>`;
   h += `<div class="colhead"><span class="c-name">Category</span><span class="w-ass">Assigned</span><span class="w-act hide-s">Activity</span><span class="w-av">Available</span></div>`;
   const groups = p.groups.filter(g => g.sys !== 'cc' || p.cats.some(c => c.gid === g.id && !c.hidden));
@@ -2548,10 +2555,11 @@ const ACT = {
   closeSheet: () => closeSheet(),
   month: el => { A.month = addMonths(A.month, +el.dataset.d); render(); },
   filter: el => { A.ui.filter = el.dataset.f; if (A.view !== 'plan') A.view = 'plan'; render(); },
+  setCompact: el => { A.ui.compact = el.dataset.v === '1'; try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u.compact = A.ui.compact; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } render._keepScroll = true; render(); },
   toggleEdit: () => { A.ui.edit = !A.ui.edit; render(); },
   toggleEditPlan: () => { A.view = 'plan'; A.ui.edit = true; render(); },
   toggleHidden: () => { A.ui.showHidden = !A.ui.showHidden; render(); },
-  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed })); } catch (e) { } render._keepScroll = true; render(); },
+  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed, compact: !!A.ui.compact })); } catch (e) { } render._keepScroll = true; render(); },
   rtaSheet: (el, e) => { if (e.target.closest('.cta')) return; rtaSheet(); },
   assignSheet: (el, e) => { e.stopPropagation(); assignSheet(); },
   fixOver: (el, e) => { e.stopPropagation(); const m = A.month; const c = A.plan.cats.filter(c => getAssigned(m, c.id) > 0).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0]; if (c) moveSheet(c.id, 'rta', Math.min(-monthData(m).rta, Math.max(0, catM(m, c.id).available)), 'Fix This'); else toast('Nothing to take back this month'); },
@@ -2825,7 +2833,7 @@ window.addEventListener('pagehide', () => { if (A.plan) { localSaveAll(); clearT
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;
