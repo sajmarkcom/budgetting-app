@@ -296,7 +296,7 @@ function viewSettings() {
       <button class="li" data-a="importSheet"><span class="ic">${I.upload}</span><span class="grow"><strong>File Import</strong><div class="small muted">CSV, OFX, QFX, QIF from your bank</div></span>${I.right}</button>
     </div>
     <div class="sec-t"><span>My Plans</span></div>
-    <div class="card">${A.index.plans.map(x => `<button class="li" data-a="switchPlan" data-id="${x.id}" ${x.id === p.id ? 'aria-current="true"' : ''}><span class="ic">${x.id === p.id ? I.check : I.plan}</span><span class="grow"><strong>${esc(x.name)}</strong>${x.id === p.id ? '<div class="small muted">Open</div>' : ''}</span></button>`).join('')}
+    <div class="card">${A.index.plans.map(x => `<div class="li" style="padding:0 6px 0 0"><button class="li" style="border:none" data-a="switchPlan" data-id="${x.id}" ${x.id === p.id ? 'aria-current="true"' : ''}><span class="ic">${x.id === p.id ? I.check : I.plan}</span><span class="grow"><strong>${esc(x.name)}</strong>${x.id === p.id ? '<div class="small muted">Open</div>' : ''}</span></button><button class="ibtn" data-a="deletePlanAsk" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${I.trash}</button></div>`).join('')}
       <button class="li" data-a="newPlan"><span class="ic">${I.plus}</span><span class="grow"><strong>New Plan</strong></span></button></div>
     ${driveSettingsHtml()}
     <div class="sec-t"><span>Backup</span></div>

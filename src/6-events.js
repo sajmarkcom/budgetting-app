@@ -158,13 +158,17 @@ const ACT = {
   resetPlan: () => confirmSheet('Reset Assigned', 'Every assigned amount, in every month, will be cleared. Accounts and transactions stay.', 'Reset', 'resetDo'),
   resetDo: () => { mutate('Assigned amounts reset', () => { A.plan.assigned = {}; A.plan.moves = []; }); closeSheet(); },
   deletePlan: () => confirmSheet('Delete This Plan', `“${esc(A.plan.name)}” and all its transactions will be permanently deleted. Export a backup first if in doubt.`, 'Delete Permanently', 'deletePlanDo'),
-  deletePlanDo: async () => {
-    const id = A.plan.id; closeSheet();
+  deletePlanAsk: el => { const id = el.dataset.id, x = A.index.plans.find(p => p.id === id); if (!x) return; confirmSheet('Delete Plan', `“${esc(x.name)}” and all its transactions will be permanently deleted, on every device.`, 'Delete Permanently', 'deletePlanDo', { id }); },
+  deletePlanDo: async el => {
+    const id = el?.dataset?.id || A.plan.id; closeSheet();
     if (DB) { try { await DB.doc('plans/' + id).delete(); const snap = await DB.collection('plans/' + id + '/tx').get(); for (const d of snap.docs) await DB.doc('plans/' + id + '/tx/' + d.id).delete(); } catch (e) { } }
-    localDeletePlan(id);
     A.index.deleted = [...(A.index.deleted || []), id];
-    A.index.plans = A.index.plans.filter(x => x.id !== id); A.index.current = A.index.plans[0]?.id || null; A.plan = null; A.tx = [];
+    A.index.plans = A.index.plans.filter(x => x.id !== id);
+    localDeletePlan(id);
+    if (A.plan && A.plan.id !== id) { A.index.updatedAt = Date.now(); localSaveAll(); gdSchedule(); render(); toast('Plan deleted'); return; }
+    A.index.current = A.index.plans[0]?.id || null; A.plan = null; A.tx = [];
     if (A.index.current) await switchPlan(A.index.current); else { A.index.updatedAt = Date.now(); localSaveAll(); if (DB) DB.doc('meta/index').set(JSON.parse(JSON.stringify(A.index))).catch(() => { }); render(); }
+    gdSchedule(); toast('Plan deleted');
   },
 };
 
