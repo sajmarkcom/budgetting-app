@@ -47,7 +47,7 @@ function handle(p) {
       });
       case 'pending': { // the bank sent the user back to this script: hand the new session to the app once
         const v = P.getProperty('S_' + p.state); if (!v) return { pending: true };
-        P.deleteProperty('S_' + p.state); return JSON.parse(v);
+        return JSON.parse(v); // kept so a second device or a retry still gets it; cleaned up after 1 h
       }
       case 'session': return api('GET', '/sessions/' + encodeURIComponent(p.session));
       case 'delete': return api('DELETE', '/sessions/' + encodeURIComponent(p.session));
@@ -67,13 +67,17 @@ function callbackPage(p) {
     if (p.code && p.state && /^eb-[\w-]{8,}$/.test(p.state)) {
       const s = api('POST', '/sessions', { code: p.code });
       if (s.error) msg = 'Enable Banking: ' + JSON.stringify(s.detail || s.error);
-      else { P.setProperty('S_' + p.state, JSON.stringify({ session: s })); ok = true; }
+      else { P.setProperty('S_' + p.state, JSON.stringify({ session: s, at: Date.now() })); cleanup(); ok = true; }
     } else msg = p.error_description || p.error || 'Missing authorization code.';
   } catch (err) { msg = String(err); }
   const html = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:-apple-system,system-ui,sans-serif;padding:32px;background:#0A1122;color:#E7ECF7">'
     + (ok ? '<h2>Bank connected ✓</h2><p>Go back to the Budget app: your accounts will appear there.</p>'
           : '<h2>Connection failed</h2><p>' + msg.replace(/[<>&]/g, '') + '</p><p>Go back to the Budget app and try again.</p>') + '</body>';
   return HtmlService.createHtmlOutput(html).setTitle('Budget — bank connection');
+}
+
+function cleanup() {
+  const all = P.getProperties(); for (const k in all) if (k.indexOf('S_') === 0) { try { if (Date.now() - (JSON.parse(all[k]).at || 0) > 3600000) P.deleteProperty(k); } catch (e) { P.deleteProperty(k); } }
 }
 
 function dataFile() {

@@ -24,7 +24,7 @@ function bankSettingsHtml() {
       <button class="btn sm" data-a="bankMap" data-id="${c.id}">Accounts</button>${days < 30 ? `<button class="btn sm" data-a="bankLink" data-bank="${esc(c.bank)}">Reconnect</button>` : ''}<button class="ibtn" data-a="bankRemove" data-id="${c.id}" aria-label="Disconnect ${esc(c.bank)}">${I.trash}</button></div>`;
   }).join('');
   return `<div class="sec-t"><span>Bank Connections</span></div><div class="card">${rows}
-    ${b.pending ? `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(b.pending.bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
+    ${b.pending ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(b.pending.bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
     <button class="li" data-a="bankLinkSheet"><span class="ic">${I.plus}</span><span class="grow"><strong>Link a bank</strong></span></button>
     ${b.conns.length ? `<button class="li" data-a="bankSyncNow"><span class="ic">${I.download}</span><span class="grow"><strong>Import now</strong><div class="small muted">Imports run automatically when you open the app (at most every 6 hours)</div></span></button>` : ''}
     <button class="li" data-a="bankSetup"><span class="ic">${I.gear}</span><span class="grow"><strong>Proxy settings</strong></span></button></div>`;
@@ -89,18 +89,24 @@ async function bankLink(name) {
 }
 let bankPoll = null;
 function bankWatchPending() {
-  const b = A.plan?.bank; if (!b?.pending || bankPoll) return;
-  if (Date.now() - b.pending.at > 30 * 60000) { b.pending = null; scheduleSave(); return; }
+  // always read the CURRENT plan: a sync from Drive can replace A.plan while we wait
+  const cur = () => A.plan?.bank?.pending ? A.plan.bank : null;
+  const b0 = cur(); if (!b0 || bankPoll) return;
+  if (Date.now() - b0.pending.at > 30 * 60000) { b0.pending = null; scheduleSave(); render(); return; }
   bankPoll = setInterval(async () => {
+    const b = cur(); if (!b) { clearInterval(bankPoll); bankPoll = null; return; }
     try {
       const r = await bk('pending', { state: b.pending.state });
       if (r.pending) return;
       clearInterval(bankPoll); bankPoll = null;
-      const s = r.session; const p = b.pending; b.pending = null;
+      const bb = cur(); if (!bb || !r.session) { render(); return; }
+      const s = r.session; const p = bb.pending;
+      if (bb.conns.some(c => c.session === s.session_id)) { bb.pending = null; scheduleSave(); render(); return; }
       const conn = { id: uid(), bank: p.bank, session: s.session_id, validUntil: s.access?.valid_until || p.validUntil, accounts: (s.accounts || []).map(a => ({ uid: a.uid, name: a.name || a.product || a.account_id?.iban || 'Account', iban: a.account_id?.iban || '', currency: a.currency || '', acct: null })), lastSync: 0 };
-      const old = b.conns.find(c => c.bank === p.bank);
+      const old = bb.conns.find(c => c.bank === p.bank);
       if (old) for (const a of conn.accounts) { const prev = old.accounts.find(x => (x.iban && x.iban === a.iban) || x.name === a.name); if (prev) a.acct = prev.acct; }
-      mutate('Bank connected', () => { b.conns = b.conns.filter(c => c !== old); b.conns.push(conn); });
+      mutate('Bank connected', () => { const B = A.plan.bank; B.pending = null; B.conns = B.conns.filter(c => c.id !== old?.id); B.conns.push(conn); });
+      await persistNow(); try { if (gdOn()) await gdPush(); } catch (e) { }
       bankMapSheet(conn.id);
     } catch (e) { clearInterval(bankPoll); bankPoll = null; toast(e.message); }
   }, 3000);

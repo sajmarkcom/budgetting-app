@@ -406,7 +406,7 @@ function mergePlanPair(l, r) {
   const out = JSON.parse(JSON.stringify(newer)); out.del = {};
   for (const c of COLL) { const m = mergeList(lp[c], rp[c], lp.del?.[c], rp.del?.[c]); out[c] = m.list; out.del[c] = m.del; }
   const tm = mergeList(l.tx, r.tx, lp.del?.tx, rp.del?.tx); out.del.tx = tm.del;
-  if (lp.bank || rp.bank) { const bm = mergeList(lp.bank?.conns, rp.bank?.conns, lp.del?.conns, rp.del?.conns); out.bank = { ...(newer.bank || lp.bank || rp.bank), conns: bm.list }; out.del.conns = bm.del; }
+  if (lp.bank || rp.bank) { const bm = mergeList(lp.bank?.conns, rp.bank?.conns, lp.del?.conns, rp.del?.conns); const seen = new Set(); out.bank = { ...(newer.bank || lp.bank || rp.bank), conns: bm.list.filter(c => !c.session || (seen.has(c.session) ? false : seen.add(c.session))) }; out.del.conns = bm.del; }
   out.au = { ...(lp.au || {}) }; out.assigned = JSON.parse(JSON.stringify(lp.assigned || {}));
   const keys = new Set([...Object.keys(lp.au || {}), ...Object.keys(rp.au || {})]);
   for (const k of keys) {
