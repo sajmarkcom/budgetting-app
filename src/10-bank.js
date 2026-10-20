@@ -291,8 +291,9 @@ function importRows(acct, rows, from) {
   const existing = A.tx.filter(t => t.acct === acct);
   const ids = new Set([...existing.map(t => t.importId).filter(Boolean), ...(A.plan.ignoredImp || [])]); const used = new Set(), pendSeen = new Set();
   let nn = 0, nm = 0; const seen = {};
+  const today = todayISO();
   for (const r of rows) {
-    if (!r.date || !r.amount) continue;
+    if (!r.date || !r.amount || r.date > today) continue; // future-dated lines (standing orders the bank announces) come when they are actually paid
     const base = r.fitid ? r.fitid : `${r.date}|${r.amount}|${(r.payee || '').toLowerCase()}|${(r.memo || '').toLowerCase()}`;
     const key0 = (r.pending ? 'ebp:' : 'eb:') + base;
     seen[key0] = (seen[key0] || 0) + 1; const key = r.fitid ? key0 : key0 + '|' + seen[key0];
@@ -344,6 +345,7 @@ async function bankSync(manual) {
     }
     c.lastSync = Date.now();
   }
+  { const today = todayISO(); const fut = A.tx.filter(t => isBankImp(t) && !t.approved && t.date > today).map(t => t.id); if (fut.length) A.tx = A.tx.filter(t => !fut.includes(t.id)); }
   if (pairSelfTransfers()) tn = tn; bankBusy = false; scheduleSave(); render();
   if (manual || tn || errs.length) toast(errs.length ? errs[0] : `Bank import: ${tn} new, ${tm} matched`, !!tn);
 }

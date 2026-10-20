@@ -447,14 +447,14 @@ function viewRegister() {
     if (!all) { let r = 0; const asc = A.tx.filter(t => t.acct === id).sort((x, y) => x.date === y.date ? (x.id < y.id ? -1 : 1) : x.date < y.date ? -1 : 1); for (const t of asc) { r += t.amount; run[t.id] = r; } }
     const lim = A.ui.regLimit || 150;
     if (desk) {
-      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}<th></th>${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${!all ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
-      for (const t of list.slice(0, lim)) h += txTr(t, all, run[t.id]);
+      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}<th></th>${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th><th></th></tr></thead><tbody>`;
+      for (const t of list.slice(0, lim)) h += txTr(t, all, null);
       h += `</tbody></table></div>`;
     } else {
       let day = '';
       for (const t of list.slice(0, lim)) {
         if (t.date !== day) { if (day) h += `</div>`; day = t.date; h += `<div class="day">${dayLabel(t.date)}</div><div class="card">`; }
-        h += txRow(t, all, run[t.id]);
+        h += txRow(t, all, null);
       }
       h += `</div>`;
     }
