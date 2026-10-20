@@ -128,6 +128,7 @@ const ACT = {
   ccPay: el => ccPaySheet(el.dataset.id),
   importSheet: el => importSheet(el.dataset.id || (A.acct && A.acct !== 'all' ? A.acct : null)),
   impBuild: () => impBuildCSV(), impDo: () => impDo(),
+  ynSheet: () => ynSheet(), ynDo: () => ynDo(),
   schEdit: el => schSheet(el.dataset.id), schList: () => schListSheet(),
   schNow: el => { const s = A.plan.scheduled.find(x => x.id === el.dataset.id); mutate('Opération saisie', () => { saveTx({ acct: s.acct, date: todayISO(), payee: s.payee, cat: s.cat, memo: s.memo, amount: s.amount, transferAcct: s.transferAcct, splits: s.splits, cleared: 'u', approved: true }); s.next = s.freq === 'never' ? null : nextDate(s.next, s.freq); A.plan.scheduled = A.plan.scheduled.filter(x => x.next); }); },
   schSkip: el => { const s = A.plan.scheduled.find(x => x.id === el.dataset.id); mutate('Prochaine échéance sautée', () => { s.next = s.freq === 'never' ? null : nextDate(s.next, s.freq); A.plan.scheduled = A.plan.scheduled.filter(x => x.next); }); closeSheet(); },
@@ -237,6 +238,7 @@ document.addEventListener('change', e => {
   }
   if (el.dataset.mp && IMP) { IMP.map[el.dataset.mp] = el.type === 'checkbox' ? el.checked : (el.dataset.mp === 'dfmt' ? el.value : +el.value); return; }
   if (el.dataset.c === 'impFile' && el.files[0]) { onImportFile(el.files[0]); return; }
+  if (el.dataset.c === 'ynFile' && el.files.length) { ynFiles([...el.files]); return; }
   if (el.dataset.c === 'restore' && el.files[0]) { restoreFile(el.files[0]); el.value = ''; return; }
   if (el.dataset.c === 'selTx') { if (el.checked) A.ui.selected.add(el.dataset.id); else A.ui.selected.delete(el.dataset.id); $('#actionbar').innerHTML = A.ui.selected.size ? actionBar() : ''; return; }
 });

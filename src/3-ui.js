@@ -78,6 +78,7 @@ function viewOnboarding() {
     </div>
     <div class="field"><label for="obName">Nom du budget</label><input id="obName" class="in" value="Mon budget" autocomplete="off"></div>
     <button class="btn pri block" data-a="createPlan">Créer mon budget</button>
+    <button class="btn block" data-a="ynSheet">Importer mon budget YNAB</button>
     <button class="btn block" data-a="demoPlan">Explorer avec un budget d'exemple</button>
     <label class="btn ghost block" for="restoreFile">${I.upload} Restaurer une sauvegarde</label>
     <input id="restoreFile" type="file" accept=".json,application/json" hidden data-c="restore">

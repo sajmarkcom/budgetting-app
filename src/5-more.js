@@ -292,6 +292,7 @@ function viewSettings() {
       <button class="li" data-a="schList"><span class="ic">${I.repeat}</span><span class="grow"><strong>Opérations programmées</strong><div class="small muted">${p.scheduled.length} active${p.scheduled.length > 1 ? 's' : ''}</div></span>${I.right}</button>
       <button class="li" data-a="payees"><span class="ic">${I.people}</span><span class="grow"><strong>Bénéficiaires et règles</strong><div class="small muted">${p.payees.length} bénéficiaires · ${p.rules.length} règles</div></span>${I.right}</button>
       <button class="li" data-a="toggleEditPlan"><span class="ic">${I.edit}</span><span class="grow"><strong>Groupes et enveloppes</strong><div class="small muted">Renommer, réordonner, masquer</div></span>${I.right}</button>
+      <button class="li" data-a="ynSheet"><span class="ic">${I.download}</span><span class="grow"><strong>Importer depuis YNAB</strong><div class="small muted">Comptes, enveloppes, réparti et historique complet</div></span>${I.right}</button>
       <button class="li" data-a="importSheet"><span class="ic">${I.upload}</span><span class="grow"><strong>Importer un relevé bancaire</strong><div class="small muted">CSV, OFX, QFX, QIF</div></span>${I.right}</button>
     </div>
     <div class="sec-t"><span>Mes budgets</span></div>
