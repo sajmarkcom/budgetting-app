@@ -1,9 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1E3A8A"><meta name="apple-mobile-web-app-status-bar-style" content="default"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>html{color-scheme:light}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>Pécule</title>
+<title>Mon budget</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Pécule">
+<meta name="apple-mobile-web-app-title" content="Budget">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Manrope:wght@400;500;600;700;800&display=swap">
 <style>
@@ -251,7 +251,7 @@ button.li:hover{background:var(--surface-2)}
 <button id="fab" class="fab" aria-label="Nouvelle opération" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
 <div id="actionbar" class="actionbar"></div>
 <script>
-/* ================= Pécule — core: utils, model, storage, budget engine ================= */
+/* ================= Budget — core: utils, model, storage, budget engine ================= */
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -769,7 +769,7 @@ function payeeRuleApply(raw) {
   for (const r of A.plan.rules) if (r.contains && low.includes(r.contains.toLowerCase())) return r.payee;
   return raw;
 }
-/* ================= Pécule — UI: shell, plan, accounts, register ================= */
+/* ================= Budget — UI: shell, plan, accounts, register ================= */
 const ico = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const I = {
   left: ico('<path d="M15 18l-6-6 6-6"/>'), right: ico('<path d="M9 18l6-6-6-6"/>'), down: ico('<path d="M6 9l6 6 6-6"/>'),
@@ -840,7 +840,7 @@ const undoBtns = () => `<button class="ibtn" data-a="undo" aria-label="Annuler" 
 /* ---------- onboarding ---------- */
 function viewOnboarding() {
   return `<div class="wrap hero">
-    <h1>Pécule</h1>
+    <h1>Mon budget</h1>
     <p>Chaque euro reçoit une mission. Tu répartis l'argent que tu as vraiment, enveloppe par enveloppe, et tu sais à tout moment ce que tu peux dépenser.</p>
     <div class="steps">
       <div class="stepc"><b>1</b><div><strong>Ajoute tes comptes</strong><div class="muted small">Compte courant, épargne, carte, prêts — avec leur solde du jour.</div></div></div>
@@ -1082,7 +1082,7 @@ function actionBar() {
     <button data-a="bulk" data-k="cat">Catégoriser</button><button data-a="bulk" data-k="approve">Valider</button><button data-a="bulk" data-k="clear">Pointer</button>
     <button data-a="bulk" data-k="flag">Drapeau</button><button data-a="bulk" data-k="date">Date</button><button data-a="bulk" data-k="del">Supprimer</button><button data-a="bulk" data-k="none" aria-label="Tout désélectionner">${I.close.replace('<svg', '<svg width="18" height="18"')}</button></div>`;
 }
-/* ================= Pécule — sheets (bottom panels) ================= */
+/* ================= Budget — sheets (bottom panels) ================= */
 let SH = null; // { render(), onClose }
 function openSheet(title, body, foot = '', opts = {}) {
   closeSheet(true);
@@ -1362,7 +1362,7 @@ function reconcileSheet(id, step = 1) {
   if (step === 1) body = `<p style="margin:0">Le solde <strong>pointé</strong> de ${esc(a.name)} est de</p><div class="bigamt num">${fmt(bal.cleared)}</div><p class="muted small" style="margin:0">Est-ce le solde affiché par ta banque aujourd'hui (hors opérations en attente) ?</p>
     <div class="grid2"><button class="btn pri" data-a="recYes" data-id="${id}">Oui</button><button class="btn" data-a="recNo" data-id="${id}">Non</button></div>`;
   else body = `<div class="field"><label for="recBal">Solde affiché par la banque</label><input id="recBal" class="in" inputmode="decimal" placeholder="0,00"></div>
-    <div class="small muted">Pointe d'abord les opérations manquantes dans le registre. S'il reste un écart, Pécule crée un ajustement.</div>
+    <div class="small muted">Pointe d'abord les opérations manquantes dans le registre. S'il reste un écart, l'appli crée un ajustement.</div>
     <button class="btn pri block" data-a="recAdjust" data-id="${id}">Calculer l'écart et rapprocher</button>`;
   openSheet('Rapprocher', body, '', { focus: step === 2 ? '#recBal' : null });
 }
@@ -1448,7 +1448,7 @@ function catDeleteSheet(cid) {
     : `<p style="margin:0">Supprimer « ${esc(c.name)} » ? Tu pourras annuler juste après.</p>`;
   openSheet('Supprimer l\'enveloppe', body, `<button class="btn danger block" data-a="catDeleteDo" data-c="${cid}">Supprimer</button>`);
 }
-/* ================= Pécule — import, reflect, settings ================= */
+/* ================= Budget — import, reflect, settings ================= */
 
 /* ---------- file import (CSV / OFX / QFX / QIF) ---------- */
 let IMP = null;
@@ -1761,7 +1761,7 @@ function viewSettings() {
       <button class="li" data-a="resetPlan"><span class="ic">${I.undo}</span><span class="grow"><strong>Remettre la répartition à zéro</strong><div class="small muted">Garde les comptes et les opérations, efface tout le réparti</div></span></button>
       <button class="li" data-a="deletePlan"><span class="ic" style="color:var(--bad)">${I.trash}</span><span class="grow"><strong style="color:var(--bad)">Supprimer ce budget</strong></span></button>
     </div>
-    <p class="muted small" style="margin-top:16px">Pécule — budget par enveloppes. Raccourcis clavier : <b>N</b> nouvelle opération, <b>Ctrl+Z</b> annuler, <b>Ctrl+Maj+Z</b> rétablir, <b>←/→</b> changer de mois.</p>
+    <p class="muted small" style="margin-top:16px">Budget par enveloppes. Raccourcis clavier : <b>N</b> nouvelle opération, <b>Ctrl+Z</b> annuler, <b>Ctrl+Maj+Z</b> rétablir, <b>←/→</b> changer de mois.</p>
   </div>`;
   return h;
 }
@@ -1774,12 +1774,12 @@ async function saveFile(filename, data, mime) {
   try { const url = URL.createObjectURL(new Blob([data], { type: mime })); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); }
   catch (e) { toast('Export impossible ici'); }
 }
-function exportJson() { saveFile(`pecule-${A.plan.name.replace(/[^\w-]+/g, '_')}-${todayISO()}.json`, JSON.stringify({ app: 'pecule', v: 1, plan: A.plan, tx: A.tx }, null, 1), 'application/json'); }
+function exportJson() { saveFile(`budget-${A.plan.name.replace(/[^\w-]+/g, '_')}-${todayISO()}.json`, JSON.stringify({ app: 'pecule', v: 1, plan: A.plan, tx: A.tx }, null, 1), 'application/json'); }
 function exportCsv() {
   const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
   const rows = [['Compte', 'Date', 'Bénéficiaire', 'Catégorie', 'Mémo', 'Sortie', 'Entrée', 'Pointée'].map(q).join(';')];
   for (const t of A.tx.slice().sort((a, b) => a.date < b.date ? -1 : 1)) for (const ln of txLines(t)) rows.push([L.acct[t.acct]?.name, fmtDate(t.date), payeeName(t), ln.cat === '__start' ? 'Solde initial' : catName(ln.cat), ln.memo || t.memo, ln.amount < 0 ? fmtIn(-ln.amount) : '', ln.amount > 0 ? fmtIn(ln.amount) : '', t.cleared === 'u' ? 'non' : t.cleared === 'r' ? 'rapprochée' : 'oui'].map(q).join(';'));
-  saveFile(`pecule-operations-${todayISO()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+  saveFile(`budget-operations-${todayISO()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
 }
 async function restoreFile(file) {
   try {
@@ -1790,7 +1790,7 @@ async function restoreFile(file) {
     if (A.plan) { localSaveAll(); }
     A.plan = plan; A.tx = d.tx || []; A.index.plans.push({ id: plan.id, name: plan.name }); A.index.current = plan.id;
     A.undo = []; A.redo = []; rebuildLookups(); scheduleSave(); watchCore(); A.view = 'plan'; render(); toast('Sauvegarde restaurée');
-  } catch (e) { toast('Ce fichier n\'est pas une sauvegarde Pécule'); }
+  } catch (e) { toast('Ce fichier n\'est pas une sauvegarde de l'appli'); }
 }
 function createPlan(name, demo) {
   if (A.plan) localSaveAll();
@@ -1860,7 +1860,7 @@ function buildDemo() {
   if (extra > 0) setAssigned(m2, byName('Épargne de précaution').id, getAssigned(m2, byName('Épargne de précaution').id) + extra);
   A.calcV++;
 }
-/* ================= Pécule — events & boot ================= */
+/* ================= Budget — events & boot ================= */
 const ACT = {
   nav: el => { A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
   undo: () => undo(), redo: () => redo(),

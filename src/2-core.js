@@ -1,4 +1,4 @@
-/* ================= Pécule — core: utils, model, storage, budget engine ================= */
+/* ================= Budget — core: utils, model, storage, budget engine ================= */
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));

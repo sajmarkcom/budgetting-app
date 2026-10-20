@@ -1,4 +1,4 @@
-/* ================= Pécule — events & boot ================= */
+/* ================= Budget — events & boot ================= */
 const ACT = {
   nav: el => { A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
   undo: () => undo(), redo: () => redo(),

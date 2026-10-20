@@ -1,4 +1,4 @@
-/* ================= Pécule — import, reflect, settings ================= */
+/* ================= Budget — import, reflect, settings ================= */
 
 /* ---------- file import (CSV / OFX / QFX / QIF) ---------- */
 let IMP = null;
@@ -311,7 +311,7 @@ function viewSettings() {
       <button class="li" data-a="resetPlan"><span class="ic">${I.undo}</span><span class="grow"><strong>Remettre la répartition à zéro</strong><div class="small muted">Garde les comptes et les opérations, efface tout le réparti</div></span></button>
       <button class="li" data-a="deletePlan"><span class="ic" style="color:var(--bad)">${I.trash}</span><span class="grow"><strong style="color:var(--bad)">Supprimer ce budget</strong></span></button>
     </div>
-    <p class="muted small" style="margin-top:16px">Pécule — budget par enveloppes. Raccourcis clavier : <b>N</b> nouvelle opération, <b>Ctrl+Z</b> annuler, <b>Ctrl+Maj+Z</b> rétablir, <b>←/→</b> changer de mois.</p>
+    <p class="muted small" style="margin-top:16px">Budget par enveloppes. Raccourcis clavier : <b>N</b> nouvelle opération, <b>Ctrl+Z</b> annuler, <b>Ctrl+Maj+Z</b> rétablir, <b>←/→</b> changer de mois.</p>
   </div>`;
   return h;
 }
@@ -324,12 +324,12 @@ async function saveFile(filename, data, mime) {
   try { const url = URL.createObjectURL(new Blob([data], { type: mime })); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); }
   catch (e) { toast('Export impossible ici'); }
 }
-function exportJson() { saveFile(`pecule-${A.plan.name.replace(/[^\w-]+/g, '_')}-${todayISO()}.json`, JSON.stringify({ app: 'pecule', v: 1, plan: A.plan, tx: A.tx }, null, 1), 'application/json'); }
+function exportJson() { saveFile(`budget-${A.plan.name.replace(/[^\w-]+/g, '_')}-${todayISO()}.json`, JSON.stringify({ app: 'pecule', v: 1, plan: A.plan, tx: A.tx }, null, 1), 'application/json'); }
 function exportCsv() {
   const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
   const rows = [['Compte', 'Date', 'Bénéficiaire', 'Catégorie', 'Mémo', 'Sortie', 'Entrée', 'Pointée'].map(q).join(';')];
   for (const t of A.tx.slice().sort((a, b) => a.date < b.date ? -1 : 1)) for (const ln of txLines(t)) rows.push([L.acct[t.acct]?.name, fmtDate(t.date), payeeName(t), ln.cat === '__start' ? 'Solde initial' : catName(ln.cat), ln.memo || t.memo, ln.amount < 0 ? fmtIn(-ln.amount) : '', ln.amount > 0 ? fmtIn(ln.amount) : '', t.cleared === 'u' ? 'non' : t.cleared === 'r' ? 'rapprochée' : 'oui'].map(q).join(';'));
-  saveFile(`pecule-operations-${todayISO()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
+  saveFile(`budget-operations-${todayISO()}.csv`, '﻿' + rows.join('\r\n'), 'text/csv');
 }
 async function restoreFile(file) {
   try {
@@ -340,7 +340,7 @@ async function restoreFile(file) {
     if (A.plan) { localSaveAll(); }
     A.plan = plan; A.tx = d.tx || []; A.index.plans.push({ id: plan.id, name: plan.name }); A.index.current = plan.id;
     A.undo = []; A.redo = []; rebuildLookups(); scheduleSave(); watchCore(); A.view = 'plan'; render(); toast('Sauvegarde restaurée');
-  } catch (e) { toast('Ce fichier n\'est pas une sauvegarde Pécule'); }
+  } catch (e) { toast('Ce fichier n\'est pas une sauvegarde de l'appli'); }
 }
 function createPlan(name, demo) {
   if (A.plan) localSaveAll();

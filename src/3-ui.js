@@ -1,4 +1,4 @@
-/* ================= Pécule — UI: shell, plan, accounts, register ================= */
+/* ================= Budget — UI: shell, plan, accounts, register ================= */
 const ico = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const I = {
   left: ico('<path d="M15 18l-6-6 6-6"/>'), right: ico('<path d="M9 18l6-6-6-6"/>'), down: ico('<path d="M6 9l6 6 6-6"/>'),
@@ -69,7 +69,7 @@ const undoBtns = () => `<button class="ibtn" data-a="undo" aria-label="Annuler" 
 /* ---------- onboarding ---------- */
 function viewOnboarding() {
   return `<div class="wrap hero">
-    <h1>Pécule</h1>
+    <h1>Mon budget</h1>
     <p>Chaque euro reçoit une mission. Tu répartis l'argent que tu as vraiment, enveloppe par enveloppe, et tu sais à tout moment ce que tu peux dépenser.</p>
     <div class="steps">
       <div class="stepc"><b>1</b><div><strong>Ajoute tes comptes</strong><div class="muted small">Compte courant, épargne, carte, prêts — avec leur solde du jour.</div></div></div>

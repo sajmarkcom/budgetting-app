@@ -1,4 +1,4 @@
-/* ================= Pécule — sheets (bottom panels) ================= */
+/* ================= Budget — sheets (bottom panels) ================= */
 let SH = null; // { render(), onClose }
 function openSheet(title, body, foot = '', opts = {}) {
   closeSheet(true);
@@ -278,7 +278,7 @@ function reconcileSheet(id, step = 1) {
   if (step === 1) body = `<p style="margin:0">Le solde <strong>pointé</strong> de ${esc(a.name)} est de</p><div class="bigamt num">${fmt(bal.cleared)}</div><p class="muted small" style="margin:0">Est-ce le solde affiché par ta banque aujourd'hui (hors opérations en attente) ?</p>
     <div class="grid2"><button class="btn pri" data-a="recYes" data-id="${id}">Oui</button><button class="btn" data-a="recNo" data-id="${id}">Non</button></div>`;
   else body = `<div class="field"><label for="recBal">Solde affiché par la banque</label><input id="recBal" class="in" inputmode="decimal" placeholder="0,00"></div>
-    <div class="small muted">Pointe d'abord les opérations manquantes dans le registre. S'il reste un écart, Pécule crée un ajustement.</div>
+    <div class="small muted">Pointe d'abord les opérations manquantes dans le registre. S'il reste un écart, l'appli crée un ajustement.</div>
     <button class="btn pri block" data-a="recAdjust" data-id="${id}">Calculer l'écart et rapprocher</button>`;
   openSheet('Rapprocher', body, '', { focus: step === 2 ? '#recBal' : null });
 }
