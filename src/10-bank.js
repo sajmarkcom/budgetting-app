@@ -194,9 +194,37 @@ function guessPayee(raw) {
   }
   return best;
 }
+/* imported by this app from the bank (YNAB's own import ids don't count) */
+function isBankImp(t) { return !!t.importId && /^ebp?:/.test(t.importId); }
+/* a bank line that you typed as two transactions (e.g. loan + its insurance) */
+function findPair(list, r) {
+  const c = list.filter(t => Math.abs(daysBetween(t.date, r.date)) <= 7 && Math.sign(t.amount) === Math.sign(r.amount) && Math.abs(t.amount) < Math.abs(r.amount));
+  for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) if (c[i].amount + c[j].amount === r.amount && Math.abs(daysBetween(c[i].date, c[j].date)) <= 3) return [c[i], c[j]];
+  return null;
+}
+/* bank lines imported twice: once by YNAB (or typed by hand) and once by this app */
+function bankDupes(acctId) {
+  const mine = A.tx.filter(t => t.acct === acctId && !isBankImp(t) && !t.pend && L.payee[t.payee]?.name !== 'Starting Balance');
+  const imp = A.tx.filter(t => t.acct === acctId && isBankImp(t) && !t.approved && !t.importId.includes('#') && !t.pend);
+  const used = new Set(), out = [];
+  for (const t of imp.sort((a, b) => a.date < b.date ? -1 : 1)) {
+    const free = mine.filter(m => !used.has(m.id));
+    const one = free.filter(m => m.amount === t.amount && Math.abs(daysBetween(m.date, t.date)) <= 7).sort((a, b) => Math.abs(daysBetween(a.date, t.date)) - Math.abs(daysBetween(b.date, t.date)))[0];
+    if (one) { used.add(one.id); out.push({ imp: t, keep: [one] }); continue; }
+    const pair = findPair(free, t); if (pair) { pair.forEach(m => used.add(m.id)); out.push({ imp: t, keep: pair }); }
+  }
+  return out;
+}
+function mergeBankDupes(acctId) {
+  const d = bankDupes(acctId); if (!d.length) return 0;
+  mutate(`Merged ${d.length} duplicate${d.length > 1 ? 's' : ''}`, () => {
+    for (const x of d) { x.keep.forEach((m, k) => { m.importId = x.imp.importId + (k ? '#' + (k + 1) : ''); if (m.cleared === 'u') m.cleared = 'c'; }); const i = A.tx.indexOf(x.imp); if (i >= 0) A.tx.splice(i, 1); }
+  });
+  return d.length;
+}
 function importRows(acct, rows, from) {
   const existing = A.tx.filter(t => t.acct === acct);
-  const ids = new Set(existing.map(t => t.importId).filter(Boolean)); const used = new Set(), pendSeen = new Set();
+  const ids = new Set([...existing.map(t => t.importId).filter(Boolean), ...(A.plan.ignoredImp || [])]); const used = new Set(), pendSeen = new Set();
   let nn = 0, nm = 0; const seen = {};
   for (const r of rows) {
     if (!r.date || !r.amount) continue;
@@ -208,7 +236,8 @@ function importRows(acct, rows, from) {
       const pt = existing.find(t => t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
       if (pt) { used.add(pt.id); pt.importId = key; pt.pend = false; pt.date = r.date; if (pt.cleared === 'u') pt.cleared = 'c'; ids.add(key); nm++; continue; }
     }
-    const match = existing.find(t => !t.importId && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
+    let match = existing.find(t => !isBankImp(t) && !t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
+    if (!match && !r.pending) { const pair = findPair(existing.filter(t => !isBankImp(t) && !used.has(t.id)), r); if (pair) { used.add(pair[1].id); pair[1].importId = key + '#2'; match = pair[0]; } }
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
     const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;

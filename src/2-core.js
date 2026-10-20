@@ -567,6 +567,9 @@ function saveTx(d) {
 function deleteTx(ids) {
   const set = new Set(ids);
   for (const t of A.tx) if (set.has(t.id) && t.transferId) set.add(t.transferId);
+  // a bank transaction you delete must not come back at the next import
+  const ign = A.tx.filter(t => set.has(t.id) && t.importId && /^ebp?:/.test(t.importId)).map(t => t.importId.replace(/#\d+$/, ''));
+  if (ign.length) A.plan.ignoredImp = [...(A.plan.ignoredImp || []), ...ign].slice(-3000);
   A.tx = A.tx.filter(t => !set.has(t.id));
 }
 function runScheduled() {

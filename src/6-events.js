@@ -145,6 +145,7 @@ const ACT = {
   dupReview: el => dupReviewSheet(el.dataset.id),
   autoCat: () => autoCategorize(),
   yLearn: () => yLearnSheet(), yLearnGo: el => yLearnGo(el.dataset.i != null ? +el.dataset.i : null),
+  bankDupMerge: el => { const n = mergeBankDupes(el.dataset.id); A.ui.bankBal = {}; toast(n + ' duplicate' + (n > 1 ? 's' : '') + ' merged: your categories are kept'); },
   diffSheet: el => diffSheet(el.dataset.id, +el.dataset.v),
   diffAdd: el => { const r = A.ui.diffMissing?.[+el.dataset.i]; const id = A.ui.diffAcct; if (!r || !id) return; mutate('Bank transaction added', () => importRows(id, [r])); el.closest('.li').remove(); toast('Added (unapproved): categorize it in the register'); },
   dupRemove: el => { const d = cardDups(el.dataset.id); mutate(`Removed ${d.length} duplicate${d.length > 1 ? 's' : ''}`, () => { for (const x of d) { if (!x.card.cat && x.main.cat) x.card.cat = x.main.cat; if (!x.card.cat && x.main.splits) x.card.splits = x.main.splits; if (x.card.memo === '' && x.main.memo) x.card.memo = x.main.memo; const i = A.tx.indexOf(x.main); if (i >= 0) A.tx.splice(i, 1); } }); closeSheet(); },

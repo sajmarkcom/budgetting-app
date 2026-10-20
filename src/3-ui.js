@@ -374,7 +374,8 @@ async function diffSheet(acctId, bankV) {
       const key = r.fitid ? 'eb:' + r.fitid : null;
       let m = key && here.find(t => !used.has(t.id) && t.importId === key);
       if (!m) m = here.filter(t => !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 7).sort((p, q) => Math.abs(daysBetween(p.date, r.date)) - Math.abs(daysBetween(q.date, r.date)))[0];
-      if (m) used.add(m.id); else missing.push(r);
+      if (!m) { const pr = findPair(here.filter(t => !used.has(t.id)), r); if (pr) { used.add(pr[1].id); m = pr[0]; } }
+      if (m) { used.add(m.id); if (key) here.filter(t => t.importId && t.importId.startsWith(key + '#')).forEach(t => used.add(t.id)); } else missing.push(r);
     }
     const extra = here.filter(t => !used.has(t.id));
     const sum = l => l.reduce((s, t) => s + t.amount, 0);
@@ -402,7 +403,9 @@ function viewRegister() {
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
     all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
-  const bk0 = all ? null : bankBalLine(id, bal);
+  let bk0 = all ? null : bankBalLine(id, bal);
+  const bdup = all || !bankAcctOf(id) ? [] : bankDupes(id);
+  if (bdup.length) bk0 = `<div class="banner warn" style="margin-top:8px">${I.info}<span>${bdup.length} bank transaction${bdup.length > 1 ? 's were' : ' was'} imported twice (they were already here from YNAB or typed by hand)</span><button class="btn sm" data-a="bankDupMerge" data-id="${id}">Merge</button></div>` + (bk0 || '');
   h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>${bk0 || ''}`;
   const dups = all ? [] : cardDups(id);
   if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;
