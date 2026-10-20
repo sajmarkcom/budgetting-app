@@ -229,7 +229,7 @@ function txBody() {
     ${D.id ? `<button class="btn danger block" data-a="txDelete">${I.trash} Delete Transaction</button>` : ''}`;
 }
 function updSplitStatus() { const el = $('#spStatus'); if (!el || !D?.splits) return; const sum = D.splits.reduce((s, x) => s + x.amount, 0); el.textContent = sum === D.amount ? 'Balanced' : 'Remaining ' + fmt(D.amount - sum); el.style.color = sum === D.amount ? 'var(--good)' : 'var(--warn)'; }
-function txFoot() { return `<button class="btn pri block" data-a="txSave">${D.approved === false ? 'Approve' : D.id ? 'Save' : 'Save'}</button>${!D.id ? `<button class="btn" data-a="txSaveNew" aria-label="Save and add another">Save & Add Another</button>` : ''}`; }
+function txFoot() { return `${D.id ? `<button class="btn danger" data-a="txDelete" aria-label="Delete transaction" title="Delete transaction" style="flex:0 0 auto">${I.trash}</button>` : ''}<button class="btn pri block" data-a="txSave">${D.approved === false ? 'Approve' : D.id ? 'Save' : 'Save'}</button>${!D.id ? `<button class="btn" data-a="txSaveNew" aria-label="Save and add another">Save & Add Another</button>` : ''}`; }
 function txRefresh() { const y = $('#scrim .sheet-b')?.scrollTop; refreshSheetBody(txBody()); const f = $('#scrim .sheet-f'); if (f) f.innerHTML = txFoot(); if (y != null) $('#scrim .sheet-b').scrollTop = y; }
 function txCommit(again) {
   const amtEl = $('#txAmt'); if (amtEl) { const v = evalExpr(amtEl.value); D.amount = v == null ? 0 : Math.abs(v); }
