@@ -180,7 +180,7 @@ function yGoal(k) {
 /* ---------- learn payee names from YNAB: bank label → your payee (YNAB keeps the bank's original text) ---------- */
 let YL = null;
 function yLearnSheet() {
-  openSheet('Payee names from YNAB', `<p class="small muted" style="margin:0">Reads how you renamed each bank label in YNAB (e.g. “CB LIDL 1234” → your payee) so imports here get the same payee and category. On app.ynab.com → Account Settings → Developer Settings → New Token. The token is used once, never saved, only sent to YNAB. Delete it in YNAB afterwards.</p>
+  openSheet('Payee names from YNAB', `<p class="small muted" style="margin:0">Learns from your past choices in YNAB: for every bank line YNAB imported (e.g. “CB LIDL 1234”), the payee and category you gave it. New bank lines here then get them automatically. No YNAB setting needed. On app.ynab.com → Account Settings → Developer Settings → New Token. The token is used once, never saved, only sent to YNAB. Delete it in YNAB afterwards.</p>
     <input id="ylTok" class="in" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="YNAB personal access token" aria-label="YNAB personal access token">
     <button class="btn pri block" data-a="yLearnGo">Learn my payees</button><div id="ylStep"></div>`, '');
 }

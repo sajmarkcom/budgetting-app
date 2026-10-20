@@ -28,7 +28,7 @@ function bankSettingsHtml() {
     ${pendList().length ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(pendList().slice(-1)[0].bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCheck">Check now</button><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
     <button class="li" data-a="bankLinkSheet"><span class="ic">${I.plus}</span><span class="grow"><strong>Link a bank</strong></span></button>
     ${b.conns.length ? `<button class="li" data-a="bankSyncNow"><span class="ic">${I.download}</span><span class="grow"><strong>Import now</strong><div class="small muted">Imports run automatically when you open the app (at most every 6 hours)</div></span></button>` : ''}
-    <button class="li" data-a="yLearn"><span class="ic">${I.download}</span><span class="grow"><strong>Payee names from YNAB</strong><div class="small muted">${A.plan.learned ? Object.keys(A.plan.learned).length + ' bank labels learned · update' : 'Give imported transactions the payees you used in YNAB'}</div></span></button>
+    <button class="li" data-a="yLearn"><span class="ic">${I.download}</span><span class="grow"><strong>Payee names from YNAB</strong><div class="small muted">${A.plan.learned ? Object.keys(A.plan.learned).length + ' bank labels learned · update' : 'Learn payees and categories from your past YNAB choices'}</div></span></button>
     <button class="li" data-a="bankSetup"><span class="ic">${I.gear}</span><span class="grow"><strong>Proxy settings</strong></span></button></div>`;
 }
 
