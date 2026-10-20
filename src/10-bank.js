@@ -55,6 +55,7 @@ async function bankConnect() {
     b.url = url; if (!b.key || prevUrl !== url) b.key = randKey();
     let claim = null; try { claim = await bk('claim'); } catch (e) { if (e.code !== 'already_claimed') throw e; }
     await bk('ping');
+    try { localStorage.setItem('budget.proxy', JSON.stringify({ url: b.url, key: b.key })); } catch (e) { }
     mutate('Bank proxy connected', () => { }, { silent: true }); closeSheet(); toast('Proxy connected'); bankLinkSheet();
   } catch (e) {
     b.url = prevUrl; b.key = prevKey;

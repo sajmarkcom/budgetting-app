@@ -6,6 +6,7 @@
  *   APP_ID       your Enable Banking application ID
  *   PRIVATE_KEY  the content of the .pem file Enable Banking downloaded when you registered the application
  * The app sets SECRET itself the first time it connects; after that, any request without it is refused.
+ * It also keeps your budget in budget-data.json in your Google Drive, so the app syncs without asking you to sign in.
  */
 const P = PropertiesService.getScriptProperties();
 const EB = 'https://api.enablebanking.com';
@@ -29,10 +30,16 @@ function handle(p) {
       P.setProperty('SECRET', p.key); return { ok: true };
     }
     if (!P.getProperty('SECRET') || p.key !== P.getProperty('SECRET')) return { error: 'unauthorized' };
-    if (!P.getProperty('APP_ID') || !P.getProperty('PRIVATE_KEY')) return { error: 'not_configured' };
+    if (p.action === 'load') { const f = dataFile(); return { content: f ? f.getBlob().getDataAsString() : null, at: f ? f.getLastUpdated().getTime() : 0 }; }
+    if (p.action === 'save') {
+      if (typeof p.content !== 'string' || p.content.length < 20) return { error: 'empty' };
+      let f = dataFile();
+      if (f) f.setContent(p.content); else { f = DriveApp.createFile('budget-data.json', p.content, 'application/json'); P.setProperty('FILE_ID', f.getId()); }
+      return { ok: true };
+    }
     switch (p.action) {
-      case 'ping': return { ok: true, redirect: ScriptApp.getService().getUrl() };
-      case 'banks': return api('GET', '/aspsps?country=' + encodeURIComponent(p.country || 'FR'));
+      case 'ping': if (!P.getProperty('APP_ID') || !P.getProperty('PRIVATE_KEY')) return { ok: true, bank: false }; return { ok: true, redirect: ScriptApp.getService().getUrl() };
+      case 'banks': if (!P.getProperty('APP_ID')) return { error: 'not_configured' }; return api('GET', '/aspsps?country=' + encodeURIComponent(p.country || 'FR'));
       case 'start': return api('POST', '/auth', {
         access: { valid_until: p.validUntil },
         aspsp: { name: p.bank, country: p.country || 'FR' },
@@ -67,6 +74,11 @@ function callbackPage(p) {
     + (ok ? '<h2>Bank connected ✓</h2><p>Go back to the Budget app: your accounts will appear there.</p>'
           : '<h2>Connection failed</h2><p>' + msg.replace(/[<>&]/g, '') + '</p><p>Go back to the Budget app and try again.</p>') + '</body>';
   return HtmlService.createHtmlOutput(html).setTitle('Budget — bank connection');
+}
+
+function dataFile() {
+  const id = P.getProperty('FILE_ID'); if (!id) return null;
+  try { const f = DriveApp.getFileById(id); return f.isTrashed() ? null : f; } catch (e) { return null; }
 }
 
 function json(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }

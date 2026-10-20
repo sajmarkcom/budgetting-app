@@ -39,7 +39,7 @@ function toast(msg, withUndo) {
 }
 function paintSync() { $$('.syncState').forEach(el => { el.textContent = syncLabel(); }); }
 function syncLabel() {
-  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed — try again later', 'drive-login': 'Sign in to Google again' }[A.sync] || 'Saved on this device';
+  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed — try again later', 'drive-login': 'Sign in to Google again', 'script-update': 'Update your Apps Script to the latest version' }[A.sync] || 'Saved on this device';
 }
 const DESK = () => window.matchMedia('(min-width: 1024px)').matches;
 let _wasDesk = null;
@@ -109,6 +109,7 @@ function viewOnboarding() {
       <strong>Already using this app on another device?</strong>
       <span class="small muted">Sign in with the Google account that holds your budget to get it back here.</span>
       <button class="btn pri block" data-a="gdLogin">${I.sync} Restore from Google Drive</button>
+      <div class="row"><input id="pairIn" class="in grow" placeholder="Or paste a pairing code" autocomplete="off" spellcheck="false"><button class="btn" data-a="pairUse">Restore</button></div>
       ${A.ui.restoreMsg ? `<div class="banner warn">${I.info}<span>${esc(A.ui.restoreMsg)}</span></div>` : (gdOn() ? `<div class="small muted"><span class="syncState">${syncLabel()}</span>${GD.remoteInfo ? ' · Drive copy: ' + GD.remoteInfo.n + ' plan(s)' : ''}</div>` : '')}
     </div>
     <div class="sec-t"><span>Or start here</span></div>
