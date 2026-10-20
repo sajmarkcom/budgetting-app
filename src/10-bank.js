@@ -128,7 +128,7 @@ function bankMapSheet(connId) {
   const c = A.plan.bank.conns.find(x => x.id === connId); if (!c) return;
   const opts = sel => `<option value="">Don't import</option><option value="__new">+ Create a new account</option>` + A.plan.accounts.filter(a => !a.closed).map(a => `<option value="${a.id}" ${sel === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
   const body = `<p style="margin:0" class="small muted">Choose where each bank account's transactions go. Imported transactions arrive unapproved, already matched with the ones you entered by hand.</p>
-    <div class="card">${c.accounts.map((a, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow" style="min-width:150px"><strong>${esc(a.name)}</strong><div class="small muted">${esc([BK_TYPE[a.type] || '', a.product && a.product !== a.name ? a.product : '', a.iban ? '•••• ' + a.iban.slice(-4) : ''].filter(Boolean).join(' · '))}</div><div class="small" data-bkbal="${i}"></div></span>
+    <div class="card">${c.accounts.map((a, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow" style="min-width:150px"><strong>${esc(a.name)}</strong><div class="small muted">${esc([BK_TYPE[a.type] || '', a.product && a.product !== a.name ? a.product : '', a.iban ? '•••• ' + a.iban.slice(-4) : ''].filter(Boolean).join(' · '))}</div><div class="small muted" data-bkbal="${i}">Loading balance…</div></span>
       <select class="in" style="height:40px; width:auto; max-width:60%" data-bkmap="${i}" aria-label="Plan account for ${esc(a.name)}">${opts(a.acct)}</select></div>`).join('') || '<div class="li muted">The bank returned no accounts.</div>'}</div>
     <div class="field"><label for="bkFrom">Import transactions from</label><input id="bkFrom" class="in" type="date" value="${addDays(todayISO(), -30)}"></div>`;
   openSheet(c.bank + ' accounts', body, `<button class="btn pri block" data-a="bankMapSave" data-id="${connId}">Save & Import</button>`);
@@ -136,8 +136,10 @@ function bankMapSheet(connId) {
   c.accounts.forEach(async (a, i) => {
     try {
       const r = await bk('balances', { uid: a.uid }); const bl = (r.balances || [])[0]; const el = $(`[data-bkbal="${i}"]`);
-      if (bl && el) { const v = Math.round(parseFloat(bl.balance_amount.amount) * 100); el.textContent = 'Balance ' + fmt(v) + (bl.balance_amount.currency && bl.balance_amount.currency !== 'EUR' ? ' ' + bl.balance_amount.currency : ''); el.className = 'small ' + (v < 0 ? 'amt-bad' : 'muted'); }
-    } catch (e) { }
+      if (!el) return;
+      if (bl) { const v = Math.round(parseFloat(bl.balance_amount.amount) * 100); el.textContent = 'Balance ' + fmt(v) + (bl.balance_amount.currency && bl.balance_amount.currency !== 'EUR' ? ' ' + bl.balance_amount.currency : '') + (bl.balance_type ? ' (' + bl.balance_type + ')' : ''); el.className = 'small ' + (v < 0 ? 'amt-bad' : 'muted'); }
+      else el.textContent = 'Balance: the bank returned none';
+    } catch (e) { const el = $(`[data-bkbal="${i}"]`); if (el) { el.className = 'small muted'; el.textContent = 'Balance unavailable: ' + e.message.slice(0, 120); } }
   });
 }
 function bankMapSave(connId) {
