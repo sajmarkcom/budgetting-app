@@ -1,5 +1,5 @@
 /* ================= Budget — Google Drive sync (hidden app folder, only this app can see the file) ================= */
-const DRIVE_CLIENT_ID = '';           // filled once the Google Cloud client exists; can also be set from Réglages
+const DRIVE_CLIENT_ID = '96837709976-v0bf7dogjp16furjcl8h92fm77rr14sc.apps.googleusercontent.com';           // filled once the Google Cloud client exists; can also be set from Réglages
 const DRIVE_FILE = 'budget-data.json';
 const GD = { token: null, exp: 0, fileId: null, busy: false, timer: null, status: 'off' };
 const gdClient = () => DRIVE_CLIENT_ID || (() => { try { return localStorage.getItem('budget.gclient') || ''; } catch (e) { return ''; } })();
