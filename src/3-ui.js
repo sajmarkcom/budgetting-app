@@ -383,9 +383,17 @@ async function diffSheet(acctId, bankV) {
     const bankBefore = bankV - sum(booked), appBefore = appV - sum(here);
     A.ui.diffMissing = missing; A.ui.diffAcct = acctId;
     const row = t => `<button class="li" data-a="txEdit" data-id="${t.id}"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></button>`;
-    const isCardDebit = r => /(DEBIT MENSUEL CARTE|RELEVE CARTE|FACTURE CARTE|DEBIT DIFFERE)/i.test(r.payee + ' ' + (r.memo || ''));
+    const isCardDebit = r => /(DEBIT MENSUEL|RELEVE CARTE|FACTURE CARTE|DEBIT DIFFERE)/i.test(r.payee + ' ' + (r.memo || ''));
     const brow = (r, i) => `<div class="li" style="flex-wrap:wrap"><span class="grow"><strong>${esc(r.payee)}</strong><div class="small muted">${esc(fmtDate(r.date))}</div>${isCardDebit(r) ? `<div class="small amt-bad">Monthly card debit: don't add it if you typed these card purchases one by one in this account. From now on it is a transfer to your card account.</div>` : ''}</span><span class="num">${fmt(r.amount)}</span>${isCardDebit(r) ? '' : `<button class="btn sm" data-a="diffAdd" data-i="${i}">Add</button>`}</div>`;
-    const body = `<p class="small muted" style="margin:0">Here ${fmt(appV)} · bank ${fmt(bankV)} · difference <strong>${fmt(appV - bankV)}</strong> (pending payments left out on both sides).</p>
+    const lumpRe = /(DEBIT MENSUEL|RELEVE CARTE|FACTURE CARTE|DEBIT DIFFERE)/i;
+    const lumps = A.tx.filter(t => t.acct === acctId && isBankImp(t) && !t.approved && lumpRe.test(payeeName(t) || ''));
+    const handCard = extra.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
+    const diff = appV - bankV;
+    const body = `<p class="small muted" style="margin:0">Here ${fmt(appV)} · bank ${fmt(bankV)} · difference <strong>${fmt(diff)}</strong> (pending payments left out on both sides).</p>
+      ${lumps.length ? `<div class="sec-t"><span>Monthly card debits counted twice</span></div>
+      <p class="small muted" style="margin:0">You typed your card purchases one by one in this account (${fmt(handCard)} below), so the bank's monthly card debit counts them a second time. Delete it.</p>
+      <div class="card">${lumps.map(t => `<div class="li"><span class="grow"><strong>${esc(payeeName(t))}</strong><div class="small muted">${esc(fmtDate(t.date))}</div></span><span class="num">${fmt(t.amount)}</span><button class="btn sm danger" data-a="diffDel" data-id="${t.id}" data-acct="${acctId}" data-v="${bankV}">Delete</button></div>`).join('')}</div>` : ''}
+      ${diff ? `<div class="card" style="padding:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap"><span class="grow small">Or simply align this account on the bank: adds one adjustment of <strong>${fmt(-diff)}</strong> (like YNAB's reconciliation).</span><button class="btn sm" data-a="diffAdjust" data-id="${acctId}" data-v="${-diff}">Adjust to ${fmt(bankV)}</button></div>` : '<div class="banner">✓ Matches the bank</div>'}
       <div class="sec-t"><span>At the bank, missing here (${fmt(sum(missing))})</span></div>
       <p class="small muted" style="margin:0">Add one only if you never recorded it at all (not even with another date or name).</p>
       <div class="card">${missing.map(brow).join('') || '<div class="li muted">None</div>'}</div>

@@ -146,6 +146,8 @@ const ACT = {
   autoCat: () => autoCategorize(),
   yLearn: () => yLearnSheet(), yLearnGo: el => yLearnGo(el.dataset.i != null ? +el.dataset.i : null),
   bankDupMerge: el => { const n = mergeBankDupes(el.dataset.id); A.ui.bankBal = {}; toast(n + ' duplicate' + (n > 1 ? 's' : '') + ' merged: your categories are kept'); },
+  diffDel: el => { mutate('Card debit deleted', () => deleteTx([el.dataset.id])); A.ui.bankBal = {}; diffSheet(el.dataset.acct, +el.dataset.v); },
+  diffAdjust: el => { const v = +el.dataset.v, id = el.dataset.id; if (!v) return; mutate('Balance adjusted to the bank', () => { A.tx.push({ id: uid(), acct: id, date: todayISO(), payee: getPayee('Reconciliation Balance Adjustment').id, cat: onBudget(L.acct[id]) && !isCredit(L.acct[id]) ? 'rta' : null, memo: 'Aligned on the bank balance', amount: v, cleared: 'c', flag: null, approved: true }); }); A.ui.bankBal = {}; closeSheet(); toast('Adjusted: this account now matches the bank'); },
   diffSheet: el => diffSheet(el.dataset.id, +el.dataset.v),
   diffAdd: el => { const r = A.ui.diffMissing?.[+el.dataset.i]; const id = A.ui.diffAcct; if (!r || !id) return; mutate('Bank transaction added', () => importRows(id, [r])); el.closest('.li').remove(); toast('Added (unapproved): categorize it in the register'); },
   dupRemove: el => { const d = cardDups(el.dataset.id); mutate(`Removed ${d.length} duplicate${d.length > 1 ? 's' : ''}`, () => { for (const x of d) { if (!x.card.cat && x.main.cat) x.card.cat = x.main.cat; if (!x.card.cat && x.main.splits) x.card.splits = x.main.splits; if (x.card.memo === '' && x.main.memo) x.card.memo = x.main.memo; const i = A.tx.indexOf(x.main); if (i >= 0) A.tx.splice(i, 1); } }); closeSheet(); },
