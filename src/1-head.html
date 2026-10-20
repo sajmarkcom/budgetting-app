@@ -324,4 +324,16 @@ button.li:hover{background:var(--surface-2)}
 .stepc b{font-family:var(--f-display); font-size:20px; color:var(--accent); width:26px; flex:none}
 .empty{padding:28px 16px; text-align:center; color:var(--muted); display:flex; flex-direction:column; gap:10px; align-items:center}
 .kbd-hint{font-size:12px; color:var(--muted)}
+
+/* popup menus (right-click, plan menu, quick rename) */
+.pmenu{position:fixed; z-index:200; min-width:250px; max-width:360px; background:var(--surface); color:var(--fg); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.35); padding:6px; max-height:80vh; overflow:auto}
+.pm-i{display:flex; align-items:center; gap:12px; width:100%; border:none; background:transparent; color:inherit; padding:9px 10px; border-radius:9px; font:inherit; font-size:14.5px; font-weight:600; text-align:left; cursor:pointer}
+.pm-i:hover:not(:disabled){background:var(--surface-2)} .pm-i:disabled{opacity:.38; cursor:default}
+.pm-i.danger{color:var(--bad)}
+.pm-ic{width:20px; display:inline-flex; justify-content:center; opacity:.8} .pm-ic svg{width:18px; height:18px}
+.pm-i kbd{font:600 11.5px inherit; padding:2px 6px; border-radius:6px; background:var(--surface-2); color:var(--muted)}
+.pm-sep{height:1px; background:var(--line); margin:5px 4px}
+.pm-h{padding:8px 10px 4px; font-size:12px; font-weight:700; color:var(--muted)}
+.pm-cat{min-width:420px; padding:14px}
+body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
 </style>

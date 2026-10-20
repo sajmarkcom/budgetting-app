@@ -90,7 +90,7 @@ function deferredCards() {
 function sidebar() {
   const p = A.plan, b = balances(); const linked = new Set((p.bank?.conns || []).flatMap(c => c.accounts.map(x => x.acct).filter(Boolean)));
   const sideNav = (v, l, icn, extra = '') => `<button class="snav ${A.view === v && (v !== 'accounts' || !A.acct) ? 'on' : ''}" data-a="nav" data-v="${v}" ${extra}>${icn}<span>${l}</span></button>`;
-  let h = `<div class="side-head"><button class="side-plan" data-a="nav" data-v="settings"><span class="logo" aria-hidden="true">${I.plan}</span><span class="grow"><strong class="ellip" style="display:block">${esc(p.name)}</strong><span class="small muted syncState">${syncLabel()}</span></span></button></div>
+  let h = `<div class="side-head"><button class="side-plan" data-a="planMenu" aria-haspopup="menu"><span class="logo" aria-hidden="true">${I.plan}</span><span class="grow"><strong class="ellip" style="display:block">${esc(p.name)}</strong><span class="small muted syncState">${syncLabel()}</span></span></button></div>
     <nav class="side-nav">${sideNav('plan', 'Plan', I.plan)}${sideNav('reflect', 'Reflect', I.reflect)}${sideNav('tx', 'All Accounts', I.bank)}${sideNav('settings', 'Settings', I.gear)}</nav>`;
   for (const [key, label, fn] of SECTIONS) {
     const list = p.accounts.filter(a => !a.closed && fn(a)); if (!list.length) continue;
@@ -468,7 +468,7 @@ function clrBtn(t) {
 }
 function txTr(t, all, runBal) {
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
-  return `<tr class="${t.approved === false ? 'unapproved' : ''}">
+  return `<tr data-tid="${t.id}" class="${t.approved === false ? 'unapproved' : ''}">
     ${A.ui.select ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
     <td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
@@ -485,7 +485,7 @@ function txRow(t, showAcct, runBal) {
   let c = txCatLabel(t); const todo = c === 'Category Needed';
   if (showAcct) c = (L.acct[t.acct]?.name || '') + (c ? ' · ' + c : '');
   if (t.memo) c += (c ? ' · ' : '') + t.memo;
-  return `<div class="tx ${t.approved === false ? 'unapproved' : ''}">
+  return `<div data-tid="${t.id}" class="tx ${t.approved === false ? 'unapproved' : ''}">
     ${A.ui.select ? `<input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select">` : ''}
     ${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}
     <button class="main-b" data-a="txEdit" data-id="${t.id}"><span class="p ellip">${esc(payeeName(t) || 'No payee')}</span><span class="c ellip ${todo ? 'todo' : ''}">${esc(c)}</span></button>
