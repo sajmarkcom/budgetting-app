@@ -163,22 +163,30 @@ function ebRow(t) {
   const info = (Array.isArray(t.remittance_information) ? t.remittance_information.join(' ') : t.remittance_information || '').replace(/\s+/g, ' ').trim();
   return { date: t.booking_date || t.value_date || t.transaction_date, amount: amt, payee: (party || info || 'Bank transaction').slice(0, 80), memo: party && info ? info.slice(0, 140) : '', fitid: t.entry_reference || t.transaction_id || null, pending: t.status && t.status !== 'BOOK' };
 }
-function importRows(acct, rows) {
+function importRows(acct, rows, from) {
   const existing = A.tx.filter(t => t.acct === acct);
-  const ids = new Set(existing.map(t => t.importId).filter(Boolean)); const used = new Set();
+  const ids = new Set(existing.map(t => t.importId).filter(Boolean)); const used = new Set(), pendSeen = new Set();
   let nn = 0, nm = 0; const seen = {};
   for (const r of rows) {
     if (!r.date || !r.amount) continue;
-    const key0 = r.fitid ? 'eb:' + r.fitid : `eb:${r.date}|${r.amount}|${(r.payee || '').toLowerCase()}|${(r.memo || '').toLowerCase()}`;
+    const base = r.fitid ? r.fitid : `${r.date}|${r.amount}|${(r.payee || '').toLowerCase()}|${(r.memo || '').toLowerCase()}`;
+    const key0 = (r.pending ? 'ebp:' : 'eb:') + base;
     seen[key0] = (seen[key0] || 0) + 1; const key = r.fitid ? key0 : key0 + '|' + seen[key0];
-    if (ids.has(key)) continue;
+    if (ids.has(key)) { if (r.pending) pendSeen.add(key); continue; }
+    if (!r.pending) { // a card payment that was pending is now booked: update it instead of adding a duplicate
+      const pt = existing.find(t => t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
+      if (pt) { used.add(pt.id); pt.importId = key; pt.pend = false; pt.date = r.date; if (pt.cleared === 'u') pt.cleared = 'c'; ids.add(key); nm++; continue; }
+    }
     const match = existing.find(t => !t.importId && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
-    if (match) { used.add(match.id); match.importId = key; if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
+    if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
     const y = getPayee(payeeRuleApply(r.payee) || r.payee);
     const cat = y?.lastCat && L.cat[y.lastCat] && onBudget(L.acct[acct]) ? y.lastCat : null;
-    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: 'c', flag: null, approved: false, importId: key });
+    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, ...(r.pending ? { pend: true } : {}) });
+    if (r.pending) pendSeen.add(key);
     ids.add(key); nn++;
   }
+  // pending payments the bank no longer reports (cancelled) disappear, unless you already approved them
+  for (const t of existing) if (t.pend && !used.has(t.id) && !pendSeen.has(t.importId) && !t.approved && (!from || t.date >= from)) { const i = A.tx.indexOf(t); if (i >= 0) A.tx.splice(i, 1); }
   return { nn, nm };
 }
 let bankBusy = false;
@@ -189,11 +197,21 @@ async function bankSync(manual) {
     if (new Date(c.validUntil) < new Date()) { errs.push(c.bank + ': access expired, reconnect'); continue; }
     for (const a of c.accounts) {
       if (!a.acct || !L.acct[a.acct]) continue;
-      const from = c.lastSync ? addDays(isoOf(new Date(c.lastSync)), -10) : (a.from || addDays(todayISO(), -30));
+      const first = !a.lastSync; // each bank account keeps its own sync date (one linked later starts from its own date)
+      const from = !first ? addDays(isoOf(new Date(a.lastSync)), -10) : (a.from || addDays(todayISO(), -30));
       try {
         const rows = []; let ck = null, guard = 0;
-        do { const r = await bk('tx', { uid: a.uid, from, ...(ck ? { ck } : {}) }); for (const t of r.transactions || []) { const x = ebRow(t); if (!x.pending) rows.push(x); } ck = r.continuation_key || null; } while (ck && guard++ < 20);
-        const snap = snapshot(); const res = importRows(a.acct, rows);
+        do { const r = await bk('tx', { uid: a.uid, from, ...(ck ? { ck } : {}) }); for (const t of r.transactions || []) rows.push(ebRow(t)); ck = r.continuation_key || null; } while (ck && guard++ < 20);
+        const hadTx = A.tx.some(t => t.acct === a.acct);
+        const snap = snapshot(); const res = importRows(a.acct, rows, from);
+        if (first && !hadTx) { // brand-new account: add a starting balance so it matches the bank
+          try {
+            const br = await bk('balances', { uid: a.uid }); const bl = (br.balances || [])[0];
+            if (bl) { const bal = Math.round(parseFloat(bl.balance_amount.amount) * 100); const sum = A.tx.filter(t => t.acct === a.acct).reduce((x, t) => x + t.amount, 0);
+              if (bal - sum) { const acc = L.acct[a.acct]; A.tx.push({ id: uid(), acct: a.acct, date: addDays(from, -1), payee: getPayee('Starting Balance').id, cat: onBudget(acc) && !isCredit(acc) ? 'rta' : '__start', memo: '', amount: bal - sum, cleared: 'c', flag: null, approved: true }); res.nn++; } }
+          } catch (e) { }
+        }
+        a.lastSync = Date.now();
         if (res.nn || res.nm) { A.undo.push({ snap, label: 'Bank import' }); tn += res.nn; tm += res.nm; }
       } catch (e) { errs.push(c.bank + ': ' + e.message); }
     }
