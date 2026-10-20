@@ -129,6 +129,7 @@ const ACT = {
   importSheet: el => importSheet(el.dataset.id || (A.acct && A.acct !== 'all' ? A.acct : null)),
   impBuild: () => impBuildCSV(), impDo: () => impDo(),
   ynSheet: () => ynSheet(), ynDo: () => ynDo(),
+  yLoad: () => yLoad(), yPick: el => yPick(+el.dataset.i), yDo: () => yDo(),
   schEdit: el => schSheet(el.dataset.id), schList: () => schListSheet(),
   schNow: el => { const s = A.plan.scheduled.find(x => x.id === el.dataset.id); mutate('Opération saisie', () => { saveTx({ acct: s.acct, date: todayISO(), payee: s.payee, cat: s.cat, memo: s.memo, amount: s.amount, transferAcct: s.transferAcct, splits: s.splits, cleared: 'u', approved: true }); s.next = s.freq === 'never' ? null : nextDate(s.next, s.freq); A.plan.scheduled = A.plan.scheduled.filter(x => x.next); }); },
   schSkip: el => { const s = A.plan.scheduled.find(x => x.id === el.dataset.id); mutate('Prochaine échéance sautée', () => { s.next = s.freq === 'never' ? null : nextDate(s.next, s.freq); A.plan.scheduled = A.plan.scheduled.filter(x => x.next); }); closeSheet(); },

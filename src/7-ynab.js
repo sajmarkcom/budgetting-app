@@ -13,7 +13,7 @@ function ynMonth(s) {
 function ynSheet() {
   YN = { files: [], reg: null, plan: null };
   const body = `<p style="margin:0">Importe ton historique YNAB complet : comptes, enveloppes, réparti mois par mois et toutes les opérations. Tout se passe sur ce téléphone, rien n'est envoyé nulle part.</p>
-    <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:8px">
+    ${yApiBox()}    <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:8px">
       <strong>1. Exporter depuis YNAB (sur ordinateur)</strong>
       <span class="small muted">app.ynab.com → menu du budget (en haut à gauche) → « Export Plan ». YNAB télécharge un fichier .zip. Range-le dans ton Google Drive.</span>
       <strong>2. Le choisir ici</strong>
