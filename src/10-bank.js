@@ -210,6 +210,30 @@ const MERCHANTS = [
   [/\b(pharmacie|doctolib|medecin|dentiste|laboratoire)\b/i, ['santé', 'sante', 'pharmacie']],
   [/\b(tabac|presse)\b/i, ['tabac']], [/\b(dgfip|impot|tresor public)\b/i, ['états', 'etat', 'impots', 'impôts']],
 ];
+/* your own name, as the banks report it on your accounts (e.g. “BOUCHENOIRE Sullivan”) */
+function ownerNames() {
+  const out = new Set();
+  for (const c of A.plan.bank?.conns || []) for (const x of c.accounts) { const w = norm(x.name || '').replace(/[^\p{L} ]/gu, ' ').split(/\s+/).filter(t => t.length >= 3); if (w.length >= 2 && w.length <= 4) out.add(w.sort().join(' ')); }
+  return [...out];
+}
+function isSelfLabel(raw) {
+  const own = ownerNames(); if (!own.length) return false;
+  const w = new Set(norm(cleanPayee(raw) + ' ' + String(raw || '')).replace(/[^\p{L} ]/gu, ' ').split(/\s+/));
+  return own.some(n => n.split(' ').every(t => w.has(t)));
+}
+/* money you moved between your own accounts: link both bank lines as one transfer */
+function pairSelfTransfers() {
+  let n = 0;
+  const cand = A.tx.filter(t => t.self && !t.transferAcct && !t.approved);
+  for (const t of cand) {
+    if (t.transferAcct) continue;
+    const o = A.tx.find(x => x !== t && x.acct !== t.acct && !x.transferAcct && x.amount === -t.amount && Math.abs(daysBetween(x.date, t.date)) <= 4 && (x.self || !x.cat) && L.acct[x.acct] && !L.acct[x.acct].closed);
+    if (!o) continue;
+    t.transferAcct = o.acct; t.transferId = o.id; t.payee = null; t.cat = null; t.splits = null;
+    o.transferAcct = t.acct; o.transferId = t.id; o.payee = null; o.cat = null; o.splits = null; n++;
+  }
+  return n;
+}
 function merchantPayee(raw) {
   const txt = ' ' + cleanPayee(raw) + ' ' + String(raw || '') + ' ';
   for (const [re, names] of MERCHANTS) if (re.test(txt)) {
@@ -275,10 +299,11 @@ function importRows(acct, rows, from) {
     let match = existing.find(t => !isBankImp(t) && !t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (!match && !r.pending) { const pair = findPair(existing.filter(t => !isBankImp(t) && !used.has(t.id)), r); if (pair) { used.add(pair[1].id); pair[1].importId = key + '#2'; match = pair[0]; } }
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
-    const ruled = payeeRuleApply(r.payee); const y = ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
-    const acc = L.acct[acct]; let cat = y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
-    if (!cat && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
-    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(r.pending ? { pend: true } : {}) });
+    const self = !r.pending && isSelfLabel(r.payee);
+    const ruled = payeeRuleApply(r.payee); const y = self ? getPayee(cleanPayee(r.payee)) : ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
+    const acc = L.acct[acct]; let cat = !self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
+    if (!cat && !self && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
+    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(self ? { self: true } : {}), ...(r.pending ? { pend: true } : {}) });
     if (r.pending) pendSeen.add(key);
     ids.add(key); nn++;
   }
@@ -314,7 +339,7 @@ async function bankSync(manual) {
     }
     c.lastSync = Date.now();
   }
-  bankBusy = false; scheduleSave(); render();
+  if (pairSelfTransfers()) tn = tn; bankBusy = false; scheduleSave(); render();
   if (manual || tn || errs.length) toast(errs.length ? errs[0] : `Bank import: ${tn} new, ${tm} matched`, !!tn);
 }
 function bankAutoSync() {
@@ -327,14 +352,16 @@ function autoCategorize(quiet) {
   let n = 0;
   mutate('Auto-categorize', () => {
     for (const t of A.tx) {
-      const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !t.importId) continue;
+      const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !isBankImp(t)) continue;
       if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
-      const cur = L.payee[t.payee]; const lp = learnedPayee(cur?.name || '');
+      const cur = L.payee[t.payee]; if (isSelfLabel(t.rawPayee || cur?.name || '')) { t.self = true; continue; }
+      const lp = learnedPayee(cur?.name || '');
       if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) t.cat = lp.lastCat; n++; continue; }
       const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
       if (g) { t.payee = g.id; t.cat = g.lastCat; n++; }
     }
   });
+  let pairs = 0; mutate('Transfers linked', () => { pairs = pairSelfTransfers(); }, { silent: true }); n += pairs;
   if (quiet) return n;
   toast(n ? `${n} transaction${n > 1 ? 's' : ''} categorized: check them, then approve` : 'Nothing recognised: categorize a few by hand and the app learns them');
 }
