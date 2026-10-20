@@ -76,7 +76,7 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
   .side-sec-h{display:flex; align-items:center; gap:6px; width:100%; border:none; background:transparent; color:var(--side-muted); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left}
   .side-sec-h .num{letter-spacing:0; font-size:13px; color:var(--side-fg)}
   .side-acct{display:flex; align-items:center; gap:8px; width:100%; border:none; background:transparent; color:inherit; padding:8px 10px 8px 32px; border-radius:9px; font-size:14px; font-weight:600; text-align:left}
-  .side-acct:hover{background:rgba(255,255,255,.07)} .side-acct.on{background:var(--side-on)} .side-acct .num{font-size:13.5px}
+  .side-acct:hover{background:rgba(255,255,255,.07)} .side-acct.dragging{opacity:.4} .side-acct.drop-over{box-shadow:inset 0 2px 0 var(--accent)} .side-acct.on{background:var(--side-on)} .side-acct .num{font-size:13.5px}
   .side .amt-bad{color:#F7A99E}
   .side-foot{margin-top:auto; padding-top:14px; display:flex; flex-direction:column; gap:8px}
   .side-foot .btn{background:rgba(255,255,255,.08); color:var(--side-fg); border-color:transparent}
@@ -932,7 +932,7 @@ function sidebar() {
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
     h += `</div>`;
   }
   const closed = p.accounts.filter(a => a.closed);
@@ -942,7 +942,7 @@ function sidebar() {
     if (!col) for (const a of closed) h += `<button class="side-acct muted ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num">${fmt(b[a.id].working)}</span></button>`;
     h += `</div>`;
   }
-  h += `<div class="side-foot"><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
+  h += `<div class="side-foot"><span class="small muted" style="padding:0 6px">Drag accounts to reorder them.</span><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
   return h;
 }
 
@@ -1113,6 +1113,7 @@ function viewAccounts() {
   const p = A.plan, b = balances();
   let net = 0; for (const a of p.accounts) if (!a.closed) net += b[a.id].working;
   let h = topBar('Accounts', 'Net Worth ' + fmt(net), undoBtns(), `<button class="ibtn" data-a="acctNew" aria-label="Add Account">${I.plus}</button>`);
+  const ro = A.ui.reorder;
   h += `<div class="wrap">`;
   if (!p.accounts.length) return h + `<div class="empty"><strong>No accounts yet</strong><span>Add your checking account with the balance your bank shows today.</span><button class="btn pri" data-a="acctNew">${I.plus} Add Account</button></div></div>`;
   for (const [key, lbl, fn] of SECTIONS) {
@@ -1121,6 +1122,7 @@ function viewAccounts() {
     h += `<div class="sec-t"><span>${lbl}</span><span class="num">${fmt(tot)}</span></div><div class="card">`;
     for (const a of list) {
       const x = b[a.id]; const unap = A.tx.filter(t => t.acct === a.id && t.approved === false).length;
+      if (ro) { h += `<div class="li"><span class="ic">${acctIcon(a)}</span><span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong></span><button class="ibtn" data-a="aMove" data-id="${a.id}" data-d="-1" aria-label="Move up">${I.up}</button><button class="ibtn" data-a="aMove" data-id="${a.id}" data-d="1" aria-label="Move down">${I.down}</button></div>`; continue; }
       h += `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span>
         <span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${ACCT[a.type].label}${unap ? ` · <b style="color:var(--info)">${unap} to approve</b>` : ''}${a.lastRec ? ' · reconciled ' + fmtDate(a.lastRec) : ''}</span></span>
         <strong class="num ${x.working < 0 ? 'amt-bad' : ''}">${fmt(x.working)}</strong></button>`;
@@ -1133,7 +1135,7 @@ function viewAccounts() {
     h += `<div class="sec-t"><button class="side-sec-h" style="padding:0" data-a="collapseClosed" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span>Closed (${closed.length})</span></button></div>`;
     if (!col) h += `<div class="card">${closed.map(a => `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span><span class="grow muted">${esc(a.name)}</span><span class="num muted">${fmt(b[a.id].working)}</span></button>`).join('')}</div>`;
   }
-  h += `<div class="row" style="margin-top:16px; flex-wrap:wrap"><button class="btn" data-a="acctNew">${I.plus} Add Account</button><button class="btn" data-a="importSheet">${I.upload} File Import</button></div></div>`;
+  h += `<div class="row" style="margin-top:16px; flex-wrap:wrap"><button class="btn ${ro ? 'pri' : ''}" data-a="toggleReorder">${I.swap} ${ro ? 'Done' : 'Reorder Accounts'}</button><button class="btn" data-a="acctNew">${I.plus} Add Account</button><button class="btn" data-a="importSheet">${I.upload} File Import</button></div></div>`;
   return h;
 }
 
@@ -2581,6 +2583,8 @@ const ACT = {
   acctDeleteDo: el => { const id = el.dataset.id; mutate('Account deleted', () => { deleteTx(A.tx.filter(t => t.acct === id).map(t => t.id)); A.plan.accounts = A.plan.accounts.filter(a => a.id !== id); A.plan.cats = A.plan.cats.filter(c => c.cc !== id); A.plan.scheduled = A.plan.scheduled.filter(s => s.acct !== id && s.transferAcct !== id); }); closeSheet(); A.acct = null; render(); },
   openAcctNav: el => { A.view = 'accounts'; A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; A.ui.select = false; A.ui.selected.clear(); render(); },
   collapseClosed: () => { A.ui.collapsed.s_closed = A.ui.collapsed.s_closed === false ? true : false; render._keepScroll = true; render(); },
+  toggleReorder: () => { A.ui.reorder = !A.ui.reorder; render(); },
+  aMove: el => { moveAccount(el.dataset.id, +el.dataset.d); },
   openAcct: el => { A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; window.scrollTo(0, 0); render(); },
   openAll: el => { A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = el.dataset.f; A.ui.search = ''; window.scrollTo(0, 0); render(); },
   backAccts: () => { A.acct = null; A.ui.select = false; A.ui.selected.clear(); render(); },
@@ -2760,6 +2764,26 @@ document.addEventListener('change', e => {
   if (el.dataset.c === 'selTx') { if (el.checked) A.ui.selected.add(el.dataset.id); else A.ui.selected.delete(el.dataset.id); $('#actionbar').innerHTML = A.ui.selected.size ? actionBar() : ''; return; }
 });
 $('#fab').addEventListener('click', () => txSheet(null));
+
+/* ---------- account order ---------- */
+const sectionOf = a => a.closed ? 'closed' : (SECTIONS.find(([, , fn]) => fn(a)) || ['x'])[0];
+function moveAccount(id, d) {
+  const list = A.plan.accounts, i = list.findIndex(a => a.id === id); if (i < 0) return;
+  const sec = sectionOf(list[i]); let j = i + d;
+  while (j >= 0 && j < list.length && sectionOf(list[j]) !== sec) j += d;
+  if (j < 0 || j >= list.length) return;
+  render._keepScroll = true; mutate('Account order updated', () => { [list[i], list[j]] = [list[j], list[i]]; }, { silent: true });
+}
+function dropAccount(dragId, targetId) {
+  const list = A.plan.accounts, a = list.find(x => x.id === dragId), b = list.find(x => x.id === targetId);
+  if (!a || !b || a === b || sectionOf(a) !== sectionOf(b)) return;
+  mutate('Account order updated', () => { const from = list.indexOf(a); list.splice(from, 1); const to = list.indexOf(b); list.splice(from <= to ? to + 1 : to, 0, a); }, { silent: true });
+}
+let dragAcct = null;
+document.addEventListener('dragstart', e => { const el = e.target.closest?.('[data-drag]'); if (!el) return; dragAcct = el.dataset.drag; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragAcct); } catch (x) { } el.classList.add('dragging'); });
+document.addEventListener('dragover', e => { const el = e.target.closest?.('[data-drag]'); if (!el || !dragAcct) return; e.preventDefault(); $$('.drop-over').forEach(x => x.classList.remove('drop-over')); el.classList.add('drop-over'); });
+document.addEventListener('drop', e => { const el = e.target.closest?.('[data-drag]'); if (!el || !dragAcct) return; e.preventDefault(); const id = dragAcct; dragAcct = null; dropAccount(id, el.dataset.drag); });
+document.addEventListener('dragend', () => { dragAcct = null; $$('.drop-over,.dragging').forEach(x => x.classList.remove('drop-over', 'dragging')); });
 
 /* ---------- boot ---------- */
 (function boot() {

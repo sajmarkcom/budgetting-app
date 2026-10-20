@@ -86,7 +86,7 @@ function sidebar() {
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
     h += `</div>`;
   }
   const closed = p.accounts.filter(a => a.closed);
@@ -96,7 +96,7 @@ function sidebar() {
     if (!col) for (const a of closed) h += `<button class="side-acct muted ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num">${fmt(b[a.id].working)}</span></button>`;
     h += `</div>`;
   }
-  h += `<div class="side-foot"><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
+  h += `<div class="side-foot"><span class="small muted" style="padding:0 6px">Drag accounts to reorder them.</span><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
   return h;
 }
 
@@ -267,6 +267,7 @@ function viewAccounts() {
   const p = A.plan, b = balances();
   let net = 0; for (const a of p.accounts) if (!a.closed) net += b[a.id].working;
   let h = topBar('Accounts', 'Net Worth ' + fmt(net), undoBtns(), `<button class="ibtn" data-a="acctNew" aria-label="Add Account">${I.plus}</button>`);
+  const ro = A.ui.reorder;
   h += `<div class="wrap">`;
   if (!p.accounts.length) return h + `<div class="empty"><strong>No accounts yet</strong><span>Add your checking account with the balance your bank shows today.</span><button class="btn pri" data-a="acctNew">${I.plus} Add Account</button></div></div>`;
   for (const [key, lbl, fn] of SECTIONS) {
@@ -275,6 +276,7 @@ function viewAccounts() {
     h += `<div class="sec-t"><span>${lbl}</span><span class="num">${fmt(tot)}</span></div><div class="card">`;
     for (const a of list) {
       const x = b[a.id]; const unap = A.tx.filter(t => t.acct === a.id && t.approved === false).length;
+      if (ro) { h += `<div class="li"><span class="ic">${acctIcon(a)}</span><span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong></span><button class="ibtn" data-a="aMove" data-id="${a.id}" data-d="-1" aria-label="Move up">${I.up}</button><button class="ibtn" data-a="aMove" data-id="${a.id}" data-d="1" aria-label="Move down">${I.down}</button></div>`; continue; }
       h += `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span>
         <span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${ACCT[a.type].label}${unap ? ` · <b style="color:var(--info)">${unap} to approve</b>` : ''}${a.lastRec ? ' · reconciled ' + fmtDate(a.lastRec) : ''}</span></span>
         <strong class="num ${x.working < 0 ? 'amt-bad' : ''}">${fmt(x.working)}</strong></button>`;
@@ -287,7 +289,7 @@ function viewAccounts() {
     h += `<div class="sec-t"><button class="side-sec-h" style="padding:0" data-a="collapseClosed" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span>Closed (${closed.length})</span></button></div>`;
     if (!col) h += `<div class="card">${closed.map(a => `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span><span class="grow muted">${esc(a.name)}</span><span class="num muted">${fmt(b[a.id].working)}</span></button>`).join('')}</div>`;
   }
-  h += `<div class="row" style="margin-top:16px; flex-wrap:wrap"><button class="btn" data-a="acctNew">${I.plus} Add Account</button><button class="btn" data-a="importSheet">${I.upload} File Import</button></div></div>`;
+  h += `<div class="row" style="margin-top:16px; flex-wrap:wrap"><button class="btn ${ro ? 'pri' : ''}" data-a="toggleReorder">${I.swap} ${ro ? 'Done' : 'Reorder Accounts'}</button><button class="btn" data-a="acctNew">${I.plus} Add Account</button><button class="btn" data-a="importSheet">${I.upload} File Import</button></div></div>`;
   return h;
 }
 

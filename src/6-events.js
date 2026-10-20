@@ -72,6 +72,8 @@ const ACT = {
   acctDeleteDo: el => { const id = el.dataset.id; mutate('Account deleted', () => { deleteTx(A.tx.filter(t => t.acct === id).map(t => t.id)); A.plan.accounts = A.plan.accounts.filter(a => a.id !== id); A.plan.cats = A.plan.cats.filter(c => c.cc !== id); A.plan.scheduled = A.plan.scheduled.filter(s => s.acct !== id && s.transferAcct !== id); }); closeSheet(); A.acct = null; render(); },
   openAcctNav: el => { A.view = 'accounts'; A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; A.ui.select = false; A.ui.selected.clear(); render(); },
   collapseClosed: () => { A.ui.collapsed.s_closed = A.ui.collapsed.s_closed === false ? true : false; render._keepScroll = true; render(); },
+  toggleReorder: () => { A.ui.reorder = !A.ui.reorder; render(); },
+  aMove: el => { moveAccount(el.dataset.id, +el.dataset.d); },
   openAcct: el => { A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; window.scrollTo(0, 0); render(); },
   openAll: el => { A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = el.dataset.f; A.ui.search = ''; window.scrollTo(0, 0); render(); },
   backAccts: () => { A.acct = null; A.ui.select = false; A.ui.selected.clear(); render(); },
@@ -251,6 +253,26 @@ document.addEventListener('change', e => {
   if (el.dataset.c === 'selTx') { if (el.checked) A.ui.selected.add(el.dataset.id); else A.ui.selected.delete(el.dataset.id); $('#actionbar').innerHTML = A.ui.selected.size ? actionBar() : ''; return; }
 });
 $('#fab').addEventListener('click', () => txSheet(null));
+
+/* ---------- account order ---------- */
+const sectionOf = a => a.closed ? 'closed' : (SECTIONS.find(([, , fn]) => fn(a)) || ['x'])[0];
+function moveAccount(id, d) {
+  const list = A.plan.accounts, i = list.findIndex(a => a.id === id); if (i < 0) return;
+  const sec = sectionOf(list[i]); let j = i + d;
+  while (j >= 0 && j < list.length && sectionOf(list[j]) !== sec) j += d;
+  if (j < 0 || j >= list.length) return;
+  render._keepScroll = true; mutate('Account order updated', () => { [list[i], list[j]] = [list[j], list[i]]; }, { silent: true });
+}
+function dropAccount(dragId, targetId) {
+  const list = A.plan.accounts, a = list.find(x => x.id === dragId), b = list.find(x => x.id === targetId);
+  if (!a || !b || a === b || sectionOf(a) !== sectionOf(b)) return;
+  mutate('Account order updated', () => { const from = list.indexOf(a); list.splice(from, 1); const to = list.indexOf(b); list.splice(from <= to ? to + 1 : to, 0, a); }, { silent: true });
+}
+let dragAcct = null;
+document.addEventListener('dragstart', e => { const el = e.target.closest?.('[data-drag]'); if (!el) return; dragAcct = el.dataset.drag; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragAcct); } catch (x) { } el.classList.add('dragging'); });
+document.addEventListener('dragover', e => { const el = e.target.closest?.('[data-drag]'); if (!el || !dragAcct) return; e.preventDefault(); $$('.drop-over').forEach(x => x.classList.remove('drop-over')); el.classList.add('drop-over'); });
+document.addEventListener('drop', e => { const el = e.target.closest?.('[data-drag]'); if (!el || !dragAcct) return; e.preventDefault(); const id = dragAcct; dragAcct = null; dropAccount(id, el.dataset.drag); });
+document.addEventListener('dragend', () => { dragAcct = null; $$('.drop-over,.dragging').forEach(x => x.classList.remove('drop-over', 'dragging')); });
 
 /* ---------- boot ---------- */
 (function boot() {
