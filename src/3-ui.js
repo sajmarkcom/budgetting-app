@@ -39,7 +39,7 @@ function toast(msg, withUndo) {
 }
 function paintSync() { $$('.syncState').forEach(el => { el.textContent = syncLabel(); }); }
 function syncLabel() {
-  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed — try again later', 'drive-login': 'Sign in to Google again', 'script-update': 'Update your Apps Script to the latest version' }[A.sync] || 'Saved on this device';
+  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed' + (typeof GD !== 'undefined' && GD.lastErr ? ' (' + GD.lastErr + ')' : ' — try again later'), 'drive-login': 'Sign in to Google again', 'script-update': 'Update your Apps Script to the latest version' }[A.sync] || 'Saved on this device';
 }
 const DESK = () => window.matchMedia('(min-width: 1024px)').matches;
 let _wasDesk = null;
@@ -76,6 +76,16 @@ function topBar(title, sub, left = '', right = '') {
 const undoBtns = () => `<button class="ibtn" data-a="undo" aria-label="Undo" ${A.undo.length ? '' : 'disabled'}>${I.undo}</button>`;
 
 /* ---------- desktop sidebar ---------- */
+/* deferred-debit cards: bank accounts without an IBAN, in the same bank connection as an account with one */
+function deferredCards() {
+  const out = {};
+  for (const c of A.plan.bank?.conns || []) {
+    const main = c.accounts.filter(x => x.acct && x.iban && L.acct[x.acct] && !L.acct[x.acct].closed);
+    const cards = c.accounts.filter(x => x.acct && !x.iban && L.acct[x.acct] && !L.acct[x.acct].closed && x.acct !== main[0]?.acct);
+    if (main.length === 1 && cards.length) (out[main[0].acct] ||= []).push(...cards.map(x => x.acct));
+  }
+  return out;
+}
 function sidebar() {
   const p = A.plan, b = balances();
   const sideNav = (v, l, icn, extra = '') => `<button class="snav ${A.view === v && (v !== 'accounts' || !A.acct) ? 'on' : ''}" data-a="nav" data-v="${v}" ${extra}>${icn}<span>${l}</span></button>`;
@@ -86,7 +96,8 @@ function sidebar() {
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+      const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); h += `<div class="side-after" title="Balance once the deferred card is debited"><span class="grow ellip">after card</span><span class="num ${after < 0 ? 'amt-bad' : ''}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
   }
   const closed = p.accounts.filter(a => a.closed);

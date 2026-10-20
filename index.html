@@ -82,6 +82,7 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
   .side-sec-h{display:flex; align-items:center; gap:6px; width:100%; border:none; background:transparent; color:var(--side-muted); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; padding:8px 10px; text-align:left}
   .side-sec-h .num{letter-spacing:0; font-size:13px; color:var(--side-fg)}
   .side-acct{display:flex; align-items:center; gap:8px; width:100%; border:none; background:transparent; color:inherit; padding:8px 10px 8px 32px; border-radius:9px; font-size:14px; font-weight:600; text-align:left}
+  .side-after{display:flex; gap:8px; padding:0 10px 6px 32px; margin-top:-4px; font-size:12.5px; opacity:.65} .side-after .num{font-size:12.5px}
   .side-acct:hover{background:rgba(255,255,255,.07)} .side-acct.dragging{opacity:.4} .side-acct.drop-over{box-shadow:inset 0 2px 0 var(--accent)} .side-acct.on{background:var(--side-on)} .side-acct .num{font-size:13.5px}
   .side .amt-bad{color:#F7A99E}
   .side-foot{margin-top:auto; padding-top:14px; display:flex; flex-direction:column; gap:8px}
@@ -963,7 +964,7 @@ function toast(msg, withUndo) {
 }
 function paintSync() { $$('.syncState').forEach(el => { el.textContent = syncLabel(); }); }
 function syncLabel() {
-  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed — try again later', 'drive-login': 'Sign in to Google again', 'script-update': 'Update your Apps Script to the latest version' }[A.sync] || 'Saved on this device';
+  return { local: 'Saved on this device', syncing: 'Syncing…', synced: 'Synced across your devices', error: 'Sync failed — data kept on this device', quota: 'Sync storage full — export a backup', 'drive-ok': 'Synced with Google Drive', 'drive-err': 'Google Drive sync failed' + (typeof GD !== 'undefined' && GD.lastErr ? ' (' + GD.lastErr + ')' : ' — try again later'), 'drive-login': 'Sign in to Google again', 'script-update': 'Update your Apps Script to the latest version' }[A.sync] || 'Saved on this device';
 }
 const DESK = () => window.matchMedia('(min-width: 1024px)').matches;
 let _wasDesk = null;
@@ -1000,6 +1001,16 @@ function topBar(title, sub, left = '', right = '') {
 const undoBtns = () => `<button class="ibtn" data-a="undo" aria-label="Undo" ${A.undo.length ? '' : 'disabled'}>${I.undo}</button>`;
 
 /* ---------- desktop sidebar ---------- */
+/* deferred-debit cards: bank accounts without an IBAN, in the same bank connection as an account with one */
+function deferredCards() {
+  const out = {};
+  for (const c of A.plan.bank?.conns || []) {
+    const main = c.accounts.filter(x => x.acct && x.iban && L.acct[x.acct] && !L.acct[x.acct].closed);
+    const cards = c.accounts.filter(x => x.acct && !x.iban && L.acct[x.acct] && !L.acct[x.acct].closed && x.acct !== main[0]?.acct);
+    if (main.length === 1 && cards.length) (out[main[0].acct] ||= []).push(...cards.map(x => x.acct));
+  }
+  return out;
+}
 function sidebar() {
   const p = A.plan, b = balances();
   const sideNav = (v, l, icn, extra = '') => `<button class="snav ${A.view === v && (v !== 'accounts' || !A.acct) ? 'on' : ''}" data-a="nav" data-v="${v}" ${extra}>${icn}<span>${l}</span></button>`;
@@ -1010,7 +1021,8 @@ function sidebar() {
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span><span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+      const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); h += `<div class="side-after" title="Balance once the deferred card is debited"><span class="grow ellip">after card</span><span class="num ${after < 0 ? 'amt-bad' : ''}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
   }
   const closed = p.accounts.filter(a => a.closed);
@@ -2528,7 +2540,7 @@ async function gdFind() {
   const r = await gdFetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)`);
   const f = (await r.json()).files?.[0]; GD.fileId = f ? f.id : null; return GD.fileId;
 }
-function gdPaint(s) { GD.status = s; A.sync = { ok: 'drive-ok', busy: 'syncing', err: 'drive-err', needlogin: 'drive-login', update: 'script-update' }[s] || A.sync; paintSync(); }
+function gdPaint(s) { if (s === 'ok') GD.lastErr = ''; GD.status = s; A.sync = { ok: 'drive-ok', busy: 'syncing', err: 'drive-err', needlogin: 'drive-login', update: 'script-update' }[s] || A.sync; paintSync(); }
 async function gdPull() {
   if (viaScript()) { const r = await px('load'); return r.content || null; }
   const id = await gdFind(); if (!id) return null;
@@ -2599,7 +2611,7 @@ async function gdSync() {
       A.plan = cur.plan; A.tx = cur.tx; stampBaseline(); A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
     } else render();
     if (pushNeeded || JSON.stringify(Object.keys(remote.plans || {}).sort()) !== JSON.stringify(Object.keys(merged.plans).sort())) await gdPush(); else gdPaint('ok');
-  } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }
+  } catch (e) { console.warn('gdSync', e); GD.lastErr = String(e?.message || e || '').slice(0, 80); gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }
 }
 function gdDisconnect() {
   try { localStorage.removeItem('budget.drive'); localStorage.removeItem('budget.gtok'); } catch (e) { }

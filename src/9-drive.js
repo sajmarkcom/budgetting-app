@@ -47,7 +47,7 @@ async function gdFind() {
   const r = await gdFetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)`);
   const f = (await r.json()).files?.[0]; GD.fileId = f ? f.id : null; return GD.fileId;
 }
-function gdPaint(s) { GD.status = s; A.sync = { ok: 'drive-ok', busy: 'syncing', err: 'drive-err', needlogin: 'drive-login', update: 'script-update' }[s] || A.sync; paintSync(); }
+function gdPaint(s) { if (s === 'ok') GD.lastErr = ''; GD.status = s; A.sync = { ok: 'drive-ok', busy: 'syncing', err: 'drive-err', needlogin: 'drive-login', update: 'script-update' }[s] || A.sync; paintSync(); }
 async function gdPull() {
   if (viaScript()) { const r = await px('load'); return r.content || null; }
   const id = await gdFind(); if (!id) return null;
@@ -118,7 +118,7 @@ async function gdSync() {
       A.plan = cur.plan; A.tx = cur.tx; stampBaseline(); A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
     } else render();
     if (pushNeeded || JSON.stringify(Object.keys(remote.plans || {}).sort()) !== JSON.stringify(Object.keys(merged.plans).sort())) await gdPush(); else gdPaint('ok');
-  } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }
+  } catch (e) { console.warn('gdSync', e); GD.lastErr = String(e?.message || e || '').slice(0, 80); gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }
 }
 function gdDisconnect() {
   try { localStorage.removeItem('budget.drive'); localStorage.removeItem('budget.gtok'); } catch (e) { }
