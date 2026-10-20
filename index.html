@@ -2504,6 +2504,9 @@ async function gdSync() {
       const name = merged.plans[id].plan.name; merged.index.plans.push({ id, name });
     }
     if (!merged.plans[merged.index.current]) merged.index.current = merged.index.plans[0]?.id || null;
+    // an empty plan on this device should not hide a real plan coming from another device
+    const curP = merged.plans[merged.index.current];
+    if (!curP || !(curP.tx || []).length) { const best = Object.values(merged.plans).filter(x => (x.tx || []).length).sort((a, b) => (b.plan.updatedAt || 0) - (a.plan.updatedAt || 0))[0]; if (best) { merged.index.current = best.plan.id; pulled = true; } }
     ALL = merged; persistNow();
     A.index = merged.index;
     const cur = merged.plans[merged.index.current];
