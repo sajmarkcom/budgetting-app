@@ -299,7 +299,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   const all = ALL;
   if (all?.index?.plans?.length) {
     A.index = all.index; const cur = all.plans?.[A.index.current] || all.plans?.[A.index.plans[0].id];
-    if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; }
+    if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; stampBaseline(); }
   }
   rebuildLookups();
   if (A.plan) { const n = runScheduled(); if (n) localSaveAll(); }

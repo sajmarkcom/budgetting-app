@@ -703,7 +703,57 @@ async function storageBoot() {
   ALL.index ||= { plans: [], current: null, updatedAt: 0 }; ALL.plans ||= {};
 }
 
+/* ---------- change stamps: every record carries the time it last changed, deletions leave a tombstone,
+   so two devices editing the same plan merge record by record instead of one overwriting the other ---------- */
+const COLL = ['accounts', 'groups', 'cats', 'payees', 'scheduled', 'moves'];
+let _stampHash = new Map();
+const strip = o => { const { u, ...rest } = o; return JSON.stringify(rest); };
+function stampAll(baseline) {
+  const p = A.plan; if (!p) return; const now = Date.now(); p.del ||= {}; p.au ||= {};
+  const doList = (name, list) => {
+    const prev = _stampHash.get(name) || new Map(); const next = new Map(); (p.del[name] ||= {});
+    for (const o of list) { if (!o || !o.id) continue; const h = strip(o); if (!baseline && prev.get(o.id) !== h) o.u = now; else if (baseline && !o.u) o.u = p.updatedAt || 1; next.set(o.id, h); }
+    if (!baseline) for (const id of prev.keys()) if (!next.has(id)) p.del[name][id] = now;
+    _stampHash.set(name, next);
+  };
+  doList('tx', A.tx);
+  for (const c of COLL) doList(c, p[c] || []);
+  if (p.bank) doList('conns', p.bank.conns || []);
+  const prevA = _stampHash.get('assigned') || new Map(); const nextA = new Map();
+  for (const [m, o] of Object.entries(p.assigned || {})) for (const [cid, v] of Object.entries(o)) { const k = m + '|' + cid; nextA.set(k, v); if (!baseline && prevA.get(k) !== v) p.au[k] = now; }
+  if (!baseline) for (const k of prevA.keys()) if (!nextA.has(k)) p.au[k] = now;
+  _stampHash.set('assigned', nextA);
+  _stampHash.set('_plan', p.id);
+}
+function stampBaseline() { _stampHash = new Map(); stampAll(true); }
+function mergeList(L, R, delL, delR) {
+  const del = { ...(delR || {}) }; for (const [k, v] of Object.entries(delL || {})) del[k] = Math.max(del[k] || 0, v);
+  const byId = new Map(); const order = [];
+  for (const o of L || []) { byId.set(o.id, o); order.push(o.id); }
+  for (const o of R || []) { const cur = byId.get(o.id); if (!cur) { byId.set(o.id, o); order.push(o.id); } else if ((o.u || 0) > (cur.u || 0)) byId.set(o.id, o); }
+  return { list: order.map(id => byId.get(id)).filter(o => !(del[o.id] && del[o.id] >= (o.u || 0))), del };
+}
+function mergePlanPair(l, r) {
+  // l, r: {plan, tx}; returns merged {plan, tx}
+  const lp = l.plan, rp = r.plan; const newer = (rp.updatedAt || 0) > (lp.updatedAt || 0) ? rp : lp;
+  const out = JSON.parse(JSON.stringify(newer)); out.del = {};
+  for (const c of COLL) { const m = mergeList(lp[c], rp[c], lp.del?.[c], rp.del?.[c]); out[c] = m.list; out.del[c] = m.del; }
+  const tm = mergeList(l.tx, r.tx, lp.del?.tx, rp.del?.tx); out.del.tx = tm.del;
+  if (lp.bank || rp.bank) { const bm = mergeList(lp.bank?.conns, rp.bank?.conns, lp.del?.conns, rp.del?.conns); out.bank = { ...(newer.bank || lp.bank || rp.bank), conns: bm.list }; out.del.conns = bm.del; }
+  out.au = { ...(lp.au || {}) }; out.assigned = JSON.parse(JSON.stringify(lp.assigned || {}));
+  const keys = new Set([...Object.keys(lp.au || {}), ...Object.keys(rp.au || {})]);
+  for (const k of keys) {
+    const lu = lp.au?.[k] || 0, ru = rp.au?.[k] || 0; if (ru <= lu) continue;
+    const [m, cid] = k.split('|'); const v = rp.assigned?.[m]?.[cid];
+    (out.assigned[m] ||= {}); if (v) out.assigned[m][cid] = v; else delete out.assigned[m][cid]; out.au[k] = ru;
+  }
+  for (const [m, o] of Object.entries(rp.assigned || {})) for (const [cid, v] of Object.entries(o)) { const k = m + '|' + cid; if (!out.au[k] && out.assigned[m]?.[cid] == null) { (out.assigned[m] ||= {})[cid] = v; } }
+  out.updatedAt = Math.max(lp.updatedAt || 0, rp.updatedAt || 0);
+  return { plan: out, tx: tm.list };
+}
 function scheduleSave() {
+  if (A.plan && _stampHash.get('_plan') !== A.plan.id) stampBaseline();
+  if (A.plan) stampAll(false);
   A.calcV++; rebuildLookups();
   if (A.plan) { A.plan.updatedAt = Date.now(); A.plan.rev = uid(); }
   A.index.updatedAt = Date.now();
@@ -774,7 +824,7 @@ async function switchPlan(id) {
   if (DB) { try { got = await dbLoadPlan(id); } catch (e) { } }
   if (!got) got = localGetPlan(id);
   if (!got) { toast('Plan not found'); return; }
-  A.plan = got.plan; A.tx = got.tx; A.index.current = id; A.undo = []; A.redo = [];
+  A.plan = got.plan; A.tx = got.tx; A.index.current = id; A.undo = []; A.redo = []; stampBaseline();
   A.month = curMonth(); A.view = 'plan'; A.acct = null;
   rebuildLookups(); A.calcV++; runScheduled(); scheduleSave(); watchCore(); render();
 }
@@ -2532,8 +2582,10 @@ async function gdSync() {
       if (merged.index.deleted.includes(id)) continue;
       const l = local.plans?.[id], r = remote.plans?.[id];
       const lu = l?.plan?.updatedAt || 0, ru = r?.plan?.updatedAt || 0;
-      if (r && (!l || ru > lu)) { merged.plans[id] = r; if (id === A.plan?.id || !l) pulled = true; if (!l) pulled = true; }
-      else { merged.plans[id] = l; if (!r || lu > ru) pushNeeded = true; }
+      if (r && !l) { merged.plans[id] = r; pulled = true; }
+      else if (!r) { merged.plans[id] = l; pushNeeded = true; }
+      else if (JSON.stringify(l) === JSON.stringify(r)) merged.plans[id] = l;
+      else { merged.plans[id] = mergePlanPair(l, r); pushNeeded = true; if (id === A.plan?.id) pulled = true; }
       const name = merged.plans[id].plan.name; merged.index.plans.push({ id, name });
     }
     if (!merged.plans[merged.index.current]) merged.index.current = merged.index.plans[0]?.id || null;
@@ -2544,7 +2596,7 @@ async function gdSync() {
     A.index = merged.index;
     const cur = merged.plans[merged.index.current];
     if (cur && (pulled || !A.plan || A.plan.id !== cur.plan.id)) {
-      A.plan = cur.plan; A.tx = cur.tx; A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
+      A.plan = cur.plan; A.tx = cur.tx; stampBaseline(); A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
     } else render();
     if (pushNeeded || JSON.stringify(Object.keys(remote.plans || {}).sort()) !== JSON.stringify(Object.keys(merged.plans).sort())) await gdPush(); else gdPaint('ok');
   } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }
@@ -2657,7 +2709,7 @@ async function bankLink(name) {
   try {
     const r = await bk('start', { bank: name, country: 'FR', validUntil, state });
     b.pending = { state, bank: name, at: Date.now(), validUntil };
-    mutate('Bank login started', () => { }, { silent: true }); await persistNow();
+    mutate('Bank login started', () => { }, { silent: true }); await persistNow(); try { if (gdOn()) await gdPush(); } catch (e) { }
     location.href = r.url;
   } catch (e) { toast(e.message); }
 }
@@ -3055,7 +3107,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   const all = ALL;
   if (all?.index?.plans?.length) {
     A.index = all.index; const cur = all.plans?.[A.index.current] || all.plans?.[A.index.plans[0].id];
-    if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; }
+    if (cur) { A.plan = cur.plan; A.tx = cur.tx; A.index.current = cur.plan.id; stampBaseline(); }
   }
   rebuildLookups();
   if (A.plan) { const n = runScheduled(); if (n) localSaveAll(); }

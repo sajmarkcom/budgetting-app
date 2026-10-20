@@ -101,8 +101,10 @@ async function gdSync() {
       if (merged.index.deleted.includes(id)) continue;
       const l = local.plans?.[id], r = remote.plans?.[id];
       const lu = l?.plan?.updatedAt || 0, ru = r?.plan?.updatedAt || 0;
-      if (r && (!l || ru > lu)) { merged.plans[id] = r; if (id === A.plan?.id || !l) pulled = true; if (!l) pulled = true; }
-      else { merged.plans[id] = l; if (!r || lu > ru) pushNeeded = true; }
+      if (r && !l) { merged.plans[id] = r; pulled = true; }
+      else if (!r) { merged.plans[id] = l; pushNeeded = true; }
+      else if (JSON.stringify(l) === JSON.stringify(r)) merged.plans[id] = l;
+      else { merged.plans[id] = mergePlanPair(l, r); pushNeeded = true; if (id === A.plan?.id) pulled = true; }
       const name = merged.plans[id].plan.name; merged.index.plans.push({ id, name });
     }
     if (!merged.plans[merged.index.current]) merged.index.current = merged.index.plans[0]?.id || null;
@@ -113,7 +115,7 @@ async function gdSync() {
     A.index = merged.index;
     const cur = merged.plans[merged.index.current];
     if (cur && (pulled || !A.plan || A.plan.id !== cur.plan.id)) {
-      A.plan = cur.plan; A.tx = cur.tx; A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
+      A.plan = cur.plan; A.tx = cur.tx; stampBaseline(); A.undo = []; A.redo = []; A.calcV++; rebuildLookups(); runScheduled(); render(); toast('Plan updated from Google Drive');
     } else render();
     if (pushNeeded || JSON.stringify(Object.keys(remote.plans || {}).sort()) !== JSON.stringify(Object.keys(merged.plans).sort())) await gdPush(); else gdPaint('ok');
   } catch (e) { gdPaint(e.message === 'auth' ? 'needlogin' : 'err'); if (!A.plan) { A.ui.restoreMsg = 'Could not read your Google Drive (' + (e.message || 'error') + '). Try again.'; render(); } }

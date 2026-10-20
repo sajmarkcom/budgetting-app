@@ -83,7 +83,7 @@ async function bankLink(name) {
   try {
     const r = await bk('start', { bank: name, country: 'FR', validUntil, state });
     b.pending = { state, bank: name, at: Date.now(), validUntil };
-    mutate('Bank login started', () => { }, { silent: true }); await persistNow();
+    mutate('Bank login started', () => { }, { silent: true }); await persistNow(); try { if (gdOn()) await gdPush(); } catch (e) { }
     location.href = r.url;
   } catch (e) { toast(e.message); }
 }
