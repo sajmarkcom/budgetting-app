@@ -1790,7 +1790,7 @@ async function restoreFile(file) {
     if (A.plan) { localSaveAll(); }
     A.plan = plan; A.tx = d.tx || []; A.index.plans.push({ id: plan.id, name: plan.name }); A.index.current = plan.id;
     A.undo = []; A.redo = []; rebuildLookups(); scheduleSave(); watchCore(); A.view = 'plan'; render(); toast('Sauvegarde restaurée');
-  } catch (e) { toast('Ce fichier n\'est pas une sauvegarde de l'appli'); }
+  } catch (e) { toast('Ce fichier n\'est pas une sauvegarde de l\'appli'); }
 }
 function createPlan(name, demo) {
   if (A.plan) localSaveAll();
