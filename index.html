@@ -3703,13 +3703,22 @@ function suggestCats(t) {
   Object.entries(recent).sort((p, q) => q[1] - p[1]).forEach(([c]) => add(c));
   return out;
 }
+/* the other side already exists as a transfer with a line you typed in another account (not from the bank): relink it to this bank line */
+function trRelink(t, to) {
+  for (const o of A.tx) {
+    if (o.acct !== to || o.amount !== -t.amount || !o.transferAcct || o.transferAcct === t.acct || Math.abs(daysBetween(o.date, t.date)) > 7) continue;
+    const old = A.tx.find(x => x.id === o.transferId); if (!old || (typeof isBankImp === "function" ? isBankImp(old) : old.importId)) continue;
+    return { o, old };
+  }
+  return null;
+}
 function catPickList(t, q) {
   q = norm(q || '');
   const sug = q ? [] : suggestCats(t).slice(0, 5);
   const row = c => `<button class="pm-i" data-a="catPickDo" data-c="${c}" data-id="${t.id}"><span class="grow">${esc(c === 'rta' ? 'Inflow: Ready to Assign' : catName(c))}</span>${c !== 'rta' ? `<span class="small muted num">${fmt(catM(monthOf(t.date), c).available)}</span>` : ''}</button>`;
   const raw = t.rawPayee || L.payee[t.payee]?.name || '';
   const trTo = !q && typeof ownAcctInLabel === 'function' ? ownAcctInLabel(raw, t.acct) : null;
-  const trRow = id => `<button class="pm-i" data-a="catPickTr" data-ac="${id}" data-id="${t.id}"><span class="grow">${t.amount < 0 ? 'Transfer to' : 'Transfer from'} ${esc(L.acct[id].name)}</span><span class="small muted">no category</span></button>`;
+  const trRow = id => { const rl = trRelink(t, id); return `<button class="pm-i" data-a="catPickTr" data-ac="${id}" data-id="${t.id}"><span class="grow">${t.amount < 0 ? 'Transfer to' : 'Transfer from'} ${esc(L.acct[id].name)}${rl ? `<span class="small muted" style="display:block">replaces the ${fmt(Math.abs(rl.old.amount))} typed in ${esc(L.acct[rl.old.acct]?.name || '')} on ${fmtDate(rl.old.date)}</span>` : ''}</span><span class="small muted">no category</span></button>`; };
   let h = (trTo ? `<div class="pm-h">Looks like a transfer</div>` + trRow(trTo) + msep : '') + (sug.length ? `<div class="pm-h">Suggested</div>` + sug.map(row).join('') + msep : '');
   for (const g of A.plan.groups) {
     if (g.sys === 'cc') continue;
@@ -3734,9 +3743,11 @@ Object.assign(ACT, {
     mutate((t.amount < 0 ? 'Transfer to ' : 'Transfer from ') + L.acct[to].name, () => {
       // the other side may already be there (imported from that bank or typed by hand); otherwise add it
       let o = A.tx.find(x => x.acct === to && !x.transferAcct && x.amount === -t.amount && Math.abs(daysBetween(x.date, t.date)) <= 5);
+      const rl = !o && trRelink(t, to); // already recorded as a transfer from another account (e.g. typed in YNAB as SG → Revolut): move it here
+      if (rl) { o = rl.o; const i = A.tx.indexOf(rl.old); if (i >= 0) A.tx.splice(i, 1); }
       if (!o) { o = { id: uid(), acct: to, date: t.date, payee: null, cat: null, memo: t.memo || '', amount: -t.amount, cleared: 'u', flag: null, approved: true }; A.tx.push(o); }
       t.transferAcct = to; t.transferId = o.id; t.payee = null; t.cat = null; t.splits = null; t.approved = true; t.self = true; delete t.auto;
-      o.transferAcct = t.acct; o.transferId = t.id; o.payee = null; o.cat = null; o.splits = null; o.approved = true;
+      o.transferAcct = t.acct; o.transferId = t.id; o.payee = null; if (rl) toast('Linked to the existing ' + L.acct[to].name + ' line; the copy typed in ' + (L.acct[rl.old.acct]?.name || '') + ' was replaced'); o.cat = null; o.splits = null; o.approved = true;
       if (t.rawPayee && typeof learnKey === 'function') { const k = learnKey(t.rawPayee); if (k) A.plan.learnedTr = { ...(A.plan.learnedTr || {}), [k]: to }; }
     });
   },
