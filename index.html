@@ -341,6 +341,10 @@ button.li:hover{background:var(--surface-2)}
 .lk.orig{border-top:2px dashed var(--muted)} .lk.fut{border-top:2px dashed var(--accent)}
 .loan-track{margin-top:12px; padding:12px 14px; border-radius:var(--r-m); background:var(--info-soft); font-weight:600}
 .linkbtn{border:none; background:none; color:var(--accent); font:inherit; font-weight:700; padding:0; cursor:pointer}
+/* loan chart hover */
+.loan-chart{position:relative} .lg-vl{stroke:var(--muted); stroke-width:1} .lg-dot{stroke:var(--surface); stroke-width:2} .lg-dot.p{fill:var(--accent)} .lg-dot.o{fill:var(--muted)}
+.lg-tip{position:absolute; pointer-events:none; background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.25); padding:10px 12px; min-width:250px; z-index:5; font-size:13px}
+.lt-h{font-weight:800; padding-bottom:6px; margin-bottom:6px; border-bottom:1px solid var(--line)} .lt-r{display:flex; justify-content:space-between; gap:14px; padding:2px 0} .lt-r span{color:var(--muted); font-weight:600}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -1526,10 +1530,13 @@ function loanPanel(a) {
   const adj = own.filter(isAdj).reduce((x, t) => x + t.amount, 0);
   const past = []; let run = 0, i = 0; const rawB = [];
   for (let m = first; m <= cur; m = addMonths(m, 1)) { while (i < own.length && monthOf(own[i].date) <= m) { if (!isAdj(own[i])) run += own[i].amount; i++; } rawB.push([m, run]); }
-  const w = rawB.map(x => Math.max(0, -x[1])), wsum = w.reduce((x, y) => x + y, 0) || 1; let acc = 0;
+  const firstPay = rawB.findIndex((x, k) => k && x[1] > rawB[k - 1][1]); // interest only builds up once repayments start
+  const w = rawB.map((x, k) => k >= Math.max(0, firstPay) ? Math.max(0, -x[1]) : 0), wsum = w.reduce((x, y) => x + y, 0) || 1; let acc = 0;
   rawB.forEach((x, k) => { acc += adj * w[k] / wsum; past.push([x[0], Math.max(0, -Math.round(x[1] + acc))]); });
   const step = b => Math.max(0, b + Math.round(b * r) - P);
-  const orig = []; if (P > 0) { let b = past[0][1]; for (let m = first, k = 0; k < 600 && b > 0; m = addMonths(m, 1), k++) { orig.push([m, b]); b = step(b); } }
+  // original schedule: like the bank's amortization table — flat while repayments are deferred, then the fixed monthly payment
+  const fp = past.findIndex((x, k) => k && x[1] < past[k - 1][1] - (P ? P / 2 : 0));
+  const orig = []; if (P > 0) { let b = past[0][1]; for (let m = first, k = 0; k < 600 && b > 0; m = addMonths(m, 1), k++) { if (fp > 0 && k >= fp) b = step(b); orig.push([m, b]); } if (b <= 0) orig.push([addMonths(orig[orig.length - 1][0], 1), 0]); }
   const bal = past[past.length - 1][1];
   const fut = []; if (P > 0 && bal > 0 && P > Math.round(bal * r)) { let b = bal; for (let m = cur, k = 0; k < 600; m = addMonths(m, 1), k++) { fut.push([m, b]); if (b <= 0) break; b = step(b); } }
   // a month's payment is made during that month (like YNAB): the loan is paid off in the month of the last payment
@@ -1551,11 +1558,28 @@ function loanPanel(a) {
   return `<div class="balbar loan-stats">${stat(fmt(bal), 'Remaining Balance')}${stat((a.rate || 0).toLocaleString('fr-FR') + '%', 'Interest Rate')}${stat(P ? fmt(P) : '—', 'Minimum Payment')}${stat(payoff ? MSHORT[+payoff.slice(5, 7) - 1] + ' ' + payoff.slice(0, 4) : '—', 'Payoff Date')}</div>
   <div class="card loan-card"><div class="loan-h"><strong>Your Loan's Progress</strong><button class="btn sm" data-a="loanPlanner" data-id="${a.id}">Open Payoff Simulator</button></div>
     <div class="small muted">Balance Remaining</div><div class="loan-big num">${fmt(bal)} <span class="muted" style="font-size:15px">(${pct.toLocaleString('fr-FR')}%)</span></div>
-    <svg viewBox="0 0 ${W} ${H}" class="loan-svg" role="img" aria-label="Loan balance over time">${grid}<path d="${area}" class="lg-area"/><path d="${path(past)}" class="lg-past"/>${orig.length ? `<path d="${path(orig)}" class="lg-orig"/>` : ''}${fut.length ? `<path d="${path(fut)}" class="lg-fut"/>` : ''}${xl}</svg>
+    <div class="loan-chart" data-loan='${esc(JSON.stringify({ W, L0, R, T, B, H, first, span, top, past, orig, fut }))}'><svg viewBox="0 0 ${W} ${H}" class="loan-svg" role="img" aria-label="Loan balance over time">${grid}<path d="${area}" class="lg-area"/><path d="${path(past)}" class="lg-past"/>${orig.length ? `<path d="${path(orig)}" class="lg-orig"/>` : ''}${fut.length ? `<path d="${path(fut)}" class="lg-fut"/>` : ''}${xl}<g class="lg-hov"></g></svg><div class="lg-tip" hidden></div></div>
     <div class="loan-leg small"><span><i class="lk past"></i>Past Balance</span>${orig.length ? '<span><i class="lk orig"></i>Original Payment Schedule</span>' : ''}${fut.length ? '<span><i class="lk fut"></i>Current Track</span>' : ''}</div>
     ${P ? `<div class="loan-track">${fut.length ? `Your monthly payment of <strong class="num">${fmt(P)}</strong> keeps you on track to pay off this loan in ${yrs ? yrs + ' yr' + (yrs > 1 ? 's' : '') + ', ' : ''}${mos} mo${mos > 1 ? 's' : ''}` : bal <= 0 ? 'Paid off 🎉' : 'Your payment does not cover the interest.'}</div>` : `<div class="loan-track">Add the minimum payment in <button class="linkbtn" data-a="acctEdit" data-id="${a.id}">Edit Account</button> to see your payoff date.</div>`}
   </div>`;
 }
+
+/* loan chart hover: month, original schedule, past balance / current track (like YNAB) */
+document.addEventListener('pointermove', e => {
+  const box = e.target.closest && e.target.closest('.loan-chart'); const all = document.querySelectorAll('.loan-chart .lg-tip:not([hidden])');
+  if (!box) { all.forEach(t => { t.hidden = true; t.parentElement.querySelector('.lg-hov').innerHTML = ''; }); return; }
+  let d; try { d = JSON.parse(box.dataset.loan); } catch (x) { return; }
+  const svg = box.querySelector('svg'), r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * d.W;
+  const k = Math.round((sx - d.L0) / (d.W - d.L0 - d.R) * d.span); if (k < 0 || k > d.span) return;
+  const m = addMonths(d.first, k), find = l => (l.find(p => p[0] === m) || [])[1];
+  const X = d.L0 + (d.W - d.L0 - d.R) * k / d.span, Y = v => d.T + (d.H - d.T - d.B) * (1 - v / d.top);
+  const o = find(d.orig), pb = find(d.past), ft = find(d.fut);
+  box.querySelector('.lg-hov').innerHTML = `<line x1="${X}" x2="${X}" y1="${d.T}" y2="${d.H - d.B}" class="lg-vl"/>` + (o != null ? `<circle cx="${X}" cy="${Y(o)}" r="5" class="lg-dot o"/>` : '') + (pb != null ? `<circle cx="${X}" cy="${Y(pb)}" r="5" class="lg-dot p"/>` : ft != null ? `<circle cx="${X}" cy="${Y(ft)}" r="5" class="lg-dot p"/>` : '');
+  const tip = box.querySelector('.lg-tip'); const row = (cls, l, v) => `<div class="lt-r"><span><i class="lk ${cls}"></i>${l}</span><b class="num">${fmt(v)}</b></div>`;
+  tip.innerHTML = `<div class="lt-h">${cap(MONTHS[+m.slice(5, 7) - 1])} ${m.slice(0, 4)}</div>` + (o != null ? row('orig', 'Original Payment Schedule', o) : '') + (pb != null ? row('', 'Past Balance', pb) : ft != null ? row('fut', 'Current Track', ft) : '');
+  tip.hidden = false; const br = box.getBoundingClientRect(), px = e.clientX - br.left;
+  tip.style.left = Math.min(Math.max(8, px + 14), br.width - tip.offsetWidth - 8) + 'px'; tip.style.top = Math.max(0, e.clientY - br.top - tip.offsetHeight - 12) + 'px';
+});
 /* ================= Budget — sheets (bottom panels) ================= */
 let SH = null; // { render(), onClose }
 function openSheet(title, body, foot = '', opts = {}) {
