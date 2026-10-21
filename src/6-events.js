@@ -61,7 +61,8 @@ const ACT = {
     const id = el.dataset.id; const name = $('#aName').value.trim(); if (!name) return toast('Enter an account name');
     const rate = parseFloat(($('#aRate')?.value || '0').replace(',', '.')) || 0; const minPay = evalExpr($('#aMin')?.value) || 0; const note = $('#aNote').value;
     if (id) { const a = L.acct[id]; const wv = $('#aWork') ? evalExpr($('#aWork').value) : null; const diff = wv == null ? 0 : wv - balances()[id].working;
-      mutate('Account updated', () => { a.name = name; a.rate = rate; a.minPay = Math.abs(minPay); a.note = note; const c = L.ccCat[id]; if (c) c.name = name;
+      const ov = $('#aOver') ? Math.abs(evalExpr($('#aOver').value || '0') || 0) : (a.overdraft || 0);
+      mutate('Account updated', () => { a.overdraft = ov || 0; a.name = name; a.rate = rate; a.minPay = Math.abs(minPay); a.note = note; const c = L.ccCat[id]; if (c) c.name = name;
         if (diff) A.tx.push({ id: uid(), acct: id, date: todayISO(), payee: getPayee('Balance adjustment').id, cat: onBudget(a) && !isCredit(a) ? 'rta' : '__start', memo: '', amount: diff, cleared: 'c', flag: null, approved: true }); }); }
     else {
       const type = $('#aType').value; let bal = evalExpr($('#aBal').value) || 0; if (ACCT[type].debt || ACCT[type].credit) bal = -Math.abs(bal);

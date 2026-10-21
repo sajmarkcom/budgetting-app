@@ -98,7 +98,8 @@ function sidebar() {
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
     if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
-      const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); h += `<div class="side-after" title="Balance once the deferred card is debited"><span class="grow ellip">after card</span><span class="num ${after < 0 ? 'amt-bad' : ''}">${fmt(after)}</span></div>`; } }
+      const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); const ov = a.overdraft || 0, cls = after >= 0 ? '' : after < -ov ? 'amt-bad' : 'amt-warn';
+        h += `<div class="side-after" title="Balance once the deferred card is debited${ov ? ' · authorized overdraft ' + fmt(ov) : ''}"><span class="grow ellip">after card${after < 0 && ov ? ' · ' + (after < -ov ? 'over limit' : fmt(ov + after) + ' left') : ''}</span><span class="num ${cls}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
   }
   const closed = p.accounts.filter(a => a.closed);
