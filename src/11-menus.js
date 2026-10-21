@@ -211,7 +211,7 @@ async function applePayPull() {
         const amt = -Math.abs(apParseAmount(it.amount)); if (!amt) continue;
         const acct = apAccount(it.card); if (!acct) continue;
         const raw = it.payee || 'Apple Pay';
-        const y = (typeof learnedPayee === 'function' && learnedPayee(raw)) || (typeof guessPayee === 'function' && guessPayee(raw)) || getPayee(typeof cleanPayee === 'function' ? cleanPayee(raw) : raw);
+        const y = (typeof learnedPayee === 'function' && learnedPayee(raw)) || getPayee(typeof cleanPayee === 'function' ? cleanPayee(raw) : raw);
         const t = { id: uid(), acct, date: isoOf(new Date(it.at || Date.now())), payee: y.id, cat: y.lastCat && L.cat[y.lastCat] ? y.lastCat : null, memo: 'Apple Pay' + (it.card ? ' · ' + it.card : ''), amount: amt, cleared: 'u', flag: null, approved: false, rawPayee: raw };
         A.tx.push(t); last = t;
       }

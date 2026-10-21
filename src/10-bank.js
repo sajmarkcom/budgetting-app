@@ -314,10 +314,10 @@ function importRows(acct, rows, from) {
     if (!match && !r.pending) { const pair = findPair(existing.filter(t => !isBankImp(t) && !used.has(t.id)), r); if (pair) { used.add(pair[1].id); pair[1].importId = key + '#2'; match = pair[0]; } }
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
     const self = !r.pending && isSelfLabel(r.payee);
-    const ruled = payeeRuleApply(r.payee); const y = self ? getPayee(cleanPayee(r.payee)) : ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || guessPayee(r.payee) || getPayee(cleanPayee(r.payee)));
+    const ruled = payeeRuleApply(r.payee); const y = self ? getPayee(cleanPayee(r.payee)) : ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = !self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
     if (!cat && !self && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
-    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(self ? { self: true } : {}), ...(r.pending ? { pend: true } : {}) });
+    A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(cat && cat !== 'rta' ? { auto: true } : {}), ...(self ? { self: true } : {}), ...(r.pending ? { pend: true } : {}) });
     if (r.pending) pendSeen.add(key);
     ids.add(key); nn++;
   }
@@ -371,9 +371,9 @@ function autoCategorize(quiet) {
       if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
       const cur = L.payee[t.payee]; if (isSelfLabel(t.rawPayee || cur?.name || '')) { t.self = true; continue; }
       const lp = learnedPayee(cur?.name || '');
-      if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) t.cat = lp.lastCat; n++; continue; }
-      const g = cur?.lastCat && L.cat[cur.lastCat] ? cur : guessPayee(cur?.name || '');
-      if (g) { t.payee = g.id; t.cat = g.lastCat; n++; }
+      if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) { t.cat = lp.lastCat; t.auto = true; } n++; continue; }
+      // only what YOU chose before for this exact merchant; looser guesses stay as suggestions in the category list
+      if (cur?.lastCat && L.cat[cur.lastCat]) { t.cat = cur.lastCat; t.auto = true; n++; }
     }
   });
   let pairs = 0; mutate('Transfers linked', () => { pairs = pairSelfTransfers(); }, { silent: true }); n += pairs;
