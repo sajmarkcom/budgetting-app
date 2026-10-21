@@ -29,6 +29,12 @@ function handle(p) {
       if (!p.key || p.key.length < 24) return { error: 'bad_key' };
       P.setProperty('SECRET', p.key); return { ok: true };
     }
+    if (p.action === 'readExport') { // read-only copy for Claude (separate key, bank connection data removed); cannot write anything
+      if (!P.getProperty('READ_KEY') || p.rkey !== P.getProperty('READ_KEY')) return { error: 'unauthorized' };
+      const f = dataFile(); if (!f) return { content: null };
+      const clean = JSON.stringify(JSON.parse(f.getBlob().getDataAsString(), (k, v) => k === 'bank' ? undefined : v));
+      return { content: clean, at: f.getLastUpdated().getTime() };
+    }
     if (!P.getProperty('SECRET') || p.key !== P.getProperty('SECRET')) return { error: 'unauthorized' };
     if (p.action === 'load') { const f = dataFile(); return { content: f ? f.getBlob().getDataAsString() : null, at: f ? f.getLastUpdated().getTime() : 0 }; }
     if (p.action === 'save') {
@@ -132,4 +138,15 @@ function test() {
 function authorize() {
   const f = DriveApp.createFile('budget-auth-check.txt', 'ok'); f.setTrashed(true);
   Logger.log('Drive access OK');
+}
+
+/* Run once (▶ Run with this function selected): gives Claude read-only access to your budget.
+   Creates a random read key and writes it, with this script's URL, to “budget-app-claude-access.txt” in your Drive.
+   To revoke: delete READ_KEY in Project Settings → Script properties. */
+function setupReadKey() {
+  const key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  P.setProperty('READ_KEY', key);
+  const txt = 'Budget app: read-only access for Claude (cannot change anything).\nURL: ' + ScriptApp.getService().getUrl() + '\nREAD_KEY: ' + key + '\nRevoke: delete READ_KEY in the script properties.\n';
+  const old = DriveApp.getFilesByName('budget-app-claude-access.txt'); while (old.hasNext()) { const f = old.next(); f.setContent(txt); Logger.log('Updated'); return; }
+  DriveApp.createFile('budget-app-claude-access.txt', txt, 'text/plain'); Logger.log('Created');
 }
