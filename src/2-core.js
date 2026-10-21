@@ -245,17 +245,13 @@ function calc(toMonth) {
     prevCashOver = M.cashOver;
     res.months[m] = M; prev = M;
   }
-  // Ready to Assign for a month = money left at the end of that month that no later month relied on (like YNAB):
-  // the lowest cumulative balance from that month onwards, money assigned beyond the last computed month included.
-  // Current/future months: money assigned in later months reduces it. Past months: they don't show later months' assignments.
-  const ms = Object.keys(res.months).sort();
-  let tail = Infinity;
-  for (let i = ms.length - 1; i >= 0; i--) {
-    const m = ms[i];
-    let after = 0; if (i === ms.length - 1) for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > m) after += v;
-    tail = Math.min(tail, res.months[m].rtaBase - after);
-    res.months[m].future = res.months[m].rtaBase - tail;
-    res.months[m].rta = tail;
+  // Ready to Assign like YNAB: past months always show 0 (“All Money Assigned”: what was left rolled forward);
+  // current and future months subtract money already assigned in later months
+  const ms = Object.keys(res.months), cur = curMonth();
+  for (const m of ms) {
+    let future = 0; for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > m) future += v;
+    res.months[m].future = m < cur ? 0 : future;
+    res.months[m].rta = m < cur ? 0 : res.months[m].rtaBase - future;
   }
   _calc = res; _calcV = A.calcV; _calcTo = want;
   return res;

@@ -194,7 +194,7 @@ function viewPlan() {
     if (st.overN) chips.push(`<span class="achip bad"><button data-a="filter" data-f="over">${st.overN} overspent</button></span>`);
     if (unapproved) chips.push(`<span class="achip info"><button data-a="openAll" data-f="unapproved">${unapproved} to approve</button><button class="sub" data-a="approveCat" title="Approve every imported transaction that already has a category">✓ categorized</button></span>`);
     if (uncatN) chips.push(`<span class="achip warn"><button data-a="openAll" data-f="uncat">${uncatN} need${uncatN > 1 ? '' : 's'} a category</button><button class="sub" data-a="autoCat" title="Use your past choices for the same merchants">Auto</button></span>`);
-    if (md.prevCashOver > 0) chips.push(`<span class="achip warn" title="Cash overspending from ${esc(monthLabel(addMonths(m, -1)))} is taken from Ready to Assign"><button data-a="rtaSheet">${esc(MSHORT[+addMonths(m, -1).slice(5, 7) - 1] || '')} overspending −${fmt(md.prevCashOver)}</button></span>`);
+    if (md.prevCashOver > 0 && m === curMonth()) chips.push(`<span class="achip warn" title="Cash overspending from ${esc(monthLabel(addMonths(m, -1)))} is taken from Ready to Assign"><button data-a="rtaSheet">${esc(MSHORT[+addMonths(m, -1).slice(5, 7) - 1] || '')} overspending −${fmt(md.prevCashOver)}</button></span>`);
     if (chips.length) h += `<div class="achips">${chips.join('')}</div>`;
   }
   const F = A.ui.filter;
