@@ -604,13 +604,13 @@ function calc(toMonth) {
     prevCashOver = M.cashOver;
     res.months[m] = M; prev = M;
   }
-  // Ready to Assign like YNAB: past months always show 0 (“All Money Assigned”: what was left rolled forward);
-  // current and future months subtract money already assigned in later months
+  // Ready to Assign like YNAB (checked against YNAB month by month): a past month shows only what was over-assigned
+  // that month (negative), money left over rolled forward so it shows 0; current and future months subtract money assigned in later months
   const ms = Object.keys(res.months), cur = curMonth();
   for (const m of ms) {
     let future = 0; for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > m) future += v;
     res.months[m].future = m < cur ? 0 : future;
-    res.months[m].rta = m < cur ? 0 : res.months[m].rtaBase - future;
+    res.months[m].rta = m < cur ? Math.min(0, res.months[m].rtaBase) : res.months[m].rtaBase - future;
   }
   _calc = res; _calcV = A.calcV; _calcTo = want;
   return res;
