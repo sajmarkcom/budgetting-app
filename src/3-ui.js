@@ -427,13 +427,14 @@ function viewRegister() {
   const bdup = all || !bankAcctOf(id) ? [] : bankDupes(id);
   if (bdup.length) bk0 = `<div class="banner warn" style="margin-top:8px">${I.info}<span>${bdup.length} bank transaction${bdup.length > 1 ? 's were' : ' was'} imported twice (they were already here from YNAB or typed by hand)</span><button class="btn sm" data-a="bankDupMerge" data-id="${id}">Merge</button></div>` + (bk0 || '');
   h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>${bk0 || ''}`;
+  if (!all && ACCT[a.type]?.grp === 'loan') h += loanPanel(a);
   const dups = all ? [] : cardDups(id);
   if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;
   h += `<div class="toolbar">
     ${desk ? `<button class="tbtn" data-a="newTx">${I.plus} Add Transaction</button>` : ''}
     ${!all ? `<button class="tbtn" data-a="reconcile" data-id="${id}">${I.lock} Reconcile</button>` : ''}
     <button class="tbtn" data-a="importSheet" data-id="${all ? '' : id}">${I.upload} File Import</button>
-    ${!all && isDebt(a) ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
+    ${!all && isDebt(a) && ACCT[a.type]?.grp !== 'loan' ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
     ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
     <button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>
   </div>`;
@@ -508,4 +509,46 @@ function actionBar() {
   return `<div role="toolbar" aria-label="Bulk actions"><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n} selected</span>
     <button data-a="bulk" data-k="cat">Categorize</button><button data-a="bulk" data-k="approve">Approve</button><button data-a="bulk" data-k="clear">Clear</button>
     <button data-a="bulk" data-k="flag">Flag</button><button data-a="bulk" data-k="date">Date</button><button data-a="bulk" data-k="del">Delete</button><button data-a="bulk" data-k="none" aria-label="Deselect all">${I.close.replace('<svg', '<svg width="18" height="18"')}</button></div>`;
+}
+
+/* ---------- loan account: YNAB-style progress (past balance, original schedule, current track) ---------- */
+function loanPanel(a) {
+  const own = A.tx.filter(t => t.acct === a.id).sort((x, y) => x.date < y.date ? -1 : 1);
+  if (!own.length) return '';
+  const cur = curMonth(), first = monthOf(own[0].date);
+  const r = (a.rate || 0) / 100 / 12, P = a.minPay || 0;
+  // YNAB accrues loan interest every month but hands it over as one balance adjustment: spread it back over the months (by balance) for the curve
+  const isAdj = t => /^(YNAB balance adjustment|Ajustement YNAB)/i.test(L.payee[t.payee]?.name || '');
+  const adj = own.filter(isAdj).reduce((x, t) => x + t.amount, 0);
+  const past = []; let run = 0, i = 0; const rawB = [];
+  for (let m = first; m <= cur; m = addMonths(m, 1)) { while (i < own.length && monthOf(own[i].date) <= m) { if (!isAdj(own[i])) run += own[i].amount; i++; } rawB.push([m, run]); }
+  const w = rawB.map(x => Math.max(0, -x[1])), wsum = w.reduce((x, y) => x + y, 0) || 1; let acc = 0;
+  rawB.forEach((x, k) => { acc += adj * w[k] / wsum; past.push([x[0], Math.max(0, -Math.round(x[1] + acc))]); });
+  const step = b => Math.max(0, b + Math.round(b * r) - P);
+  const orig = []; if (P > 0) { let b = past[0][1]; for (let m = first, k = 0; k < 600 && b > 0; m = addMonths(m, 1), k++) { orig.push([m, b]); b = step(b); } }
+  const bal = past[past.length - 1][1];
+  const fut = []; if (P > 0 && bal > 0 && P > Math.round(bal * r)) { let b = bal; for (let m = cur, k = 0; k < 600; m = addMonths(m, 1), k++) { fut.push([m, b]); if (b <= 0) break; b = step(b); } }
+  // a month's payment is made during that month (like YNAB): the loan is paid off in the month of the last payment
+  const payoff = fut.length > 1 ? fut[fut.length - 2][0] : null, n = fut.length > 1 ? fut.length - 2 : 0;
+  const top = Math.max(...past.map(x => x[1]), ...orig.map(x => x[1]), 1);
+  const end = [past, orig, fut].reduce((mx, l) => l.length && l[l.length - 1][0] > mx ? l[l.length - 1][0] : mx, cur);
+  const months = (x, y) => (+y.slice(0, 4) - +x.slice(0, 4)) * 12 + (+y.slice(5, 7) - +x.slice(5, 7));
+  const span = Math.max(1, months(first, end)), W = DESK() ? 640 : 360, H = DESK() ? 220 : 200, L0 = 56, B = 26, T = 10, R = 8;
+  const X = m => L0 + (W - L0 - R) * months(first, m) / span, Y = v => T + (H - T - B) * (1 - v / top);
+  const path = l => l.map((pt, k) => (k ? 'L' : 'M') + X(pt[0]).toFixed(1) + ' ' + Y(pt[1]).toFixed(1)).join(' ');
+  const raw = top / 4, pw = Math.pow(10, Math.floor(Math.log10(raw))); const tick = Math.ceil(raw / pw * 2) / 2 * pw;
+  let grid = ''; for (let v = 0; v <= top; v += tick) grid += `<line x1="${L0}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" class="lg-grid"/><text x="${L0 - 6}" y="${Y(v) + 4}" text-anchor="end" class="lg-t">${Math.round(v / 100).toLocaleString('fr-FR')}€</text>`;
+  let xl = ''; const years = new Set(); for (let m = first; m <= end; m = addMonths(m, 1)) if (m === first || m.endsWith('-01')) { const y = m.slice(2, 4); if (years.has(y)) continue; years.add(y); xl += `<text x="${X(m)}" y="${H - 6}" text-anchor="middle" class="lg-t">${MSHORT[+m.slice(5, 7) - 1]} '${y}</text>`; }
+  if (years.size > 8) xl = xl.split('</text>').filter((t, k) => t && k % 2 === 0).map(t => t + '</text>').join('');
+  const area = path(past) + ` L${X(past[past.length - 1][0]).toFixed(1)} ${Y(0)} L${X(first)} ${Y(0)} Z`;
+  const pct = past[0][1] ? Math.round(bal / past[0][1] * 1000) / 10 : 0;
+  const stat = (v, l) => `<div><span class="num">${v}</span><small>${l}</small></div>`;
+  const yrs = Math.floor(n / 12), mos = n % 12;
+  return `<div class="balbar loan-stats">${stat(fmt(bal), 'Remaining Balance')}${stat((a.rate || 0).toLocaleString('fr-FR') + '%', 'Interest Rate')}${stat(P ? fmt(P) : '—', 'Minimum Payment')}${stat(payoff ? MSHORT[+payoff.slice(5, 7) - 1] + ' ' + payoff.slice(0, 4) : '—', 'Payoff Date')}</div>
+  <div class="card loan-card"><div class="loan-h"><strong>Your Loan's Progress</strong><button class="btn sm" data-a="loanPlanner" data-id="${a.id}">Open Payoff Simulator</button></div>
+    <div class="small muted">Balance Remaining</div><div class="loan-big num">${fmt(bal)} <span class="muted" style="font-size:15px">(${pct.toLocaleString('fr-FR')}%)</span></div>
+    <svg viewBox="0 0 ${W} ${H}" class="loan-svg" role="img" aria-label="Loan balance over time">${grid}<path d="${area}" class="lg-area"/><path d="${path(past)}" class="lg-past"/>${orig.length ? `<path d="${path(orig)}" class="lg-orig"/>` : ''}${fut.length ? `<path d="${path(fut)}" class="lg-fut"/>` : ''}${xl}</svg>
+    <div class="loan-leg small"><span><i class="lk past"></i>Past Balance</span>${orig.length ? '<span><i class="lk orig"></i>Original Payment Schedule</span>' : ''}${fut.length ? '<span><i class="lk fut"></i>Current Track</span>' : ''}</div>
+    ${P ? `<div class="loan-track">${fut.length ? `Your monthly payment of <strong class="num">${fmt(P)}</strong> keeps you on track to pay off this loan in ${yrs ? yrs + ' yr' + (yrs > 1 ? 's' : '') + ', ' : ''}${mos} mo${mos > 1 ? 's' : ''}` : bal <= 0 ? 'Paid off 🎉' : 'Your payment does not cover the interest.'}</div>` : `<div class="loan-track">Add the minimum payment in <button class="linkbtn" data-a="acctEdit" data-id="${a.id}">Edit Account</button> to see your payoff date.</div>`}
+  </div>`;
 }

@@ -139,6 +139,10 @@ let L = {};
 function rebuildLookups() {
   const p = A.plan; L = { acct: {}, cat: {}, group: {}, payee: {}, payeeByName: {}, ccCat: {} };
   if (!p) return;
+  { // same wording as YNAB: older imports named the opening line “Solde initial”
+    const fr = p.payees.find(y => y.name === 'Solde initial');
+    if (fr) { const en = p.payees.find(y => y.name === 'Starting Balance'); if (!en) fr.name = 'Starting Balance'; else { for (const t of A.tx || []) if (t.payee === fr.id) t.payee = en.id; fr.name = 'Starting Balance (old)'; } }
+  }
   for (const a of p.accounts) L.acct[a.id] = a;
   for (const g of p.groups) L.group[g.id] = g;
   for (const c of p.cats) { L.cat[c.id] = c; if (c.cc) L.ccCat[c.cc] = c; }
