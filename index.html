@@ -350,6 +350,7 @@ button.li:hover{background:var(--surface-2)}
 kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; background:var(--surface-2); font:600 12px/1.4 inherit; text-align:center}
 @media (min-width:1024px){ .shell.noside{grid-template-columns:minmax(0,1fr)} .shell.noside.with-insp{grid-template-columns:minmax(0,1fr) 340px}
   .side-open{position:fixed; left:0; bottom:16px; z-index:30; border:1px solid var(--line); border-left:none; background:var(--surface); border-radius:0 10px 10px 0; padding:8px 6px; cursor:pointer} .side-open svg{width:16px; height:16px} }
+.vw-list{max-height:50vh; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:6px 10px} .vw-c{padding-left:26px; font-weight:500}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -1215,7 +1216,7 @@ function viewPlan() {
   }
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
-    ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${F === 'over' ? chip('over', 'Overspent') : ''}</div>
+    ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${(A.plan.views || []).map(v => chip('v:' + v.id, esc(v.name))).join('')}${F === 'over' ? chip('over', 'Overspent') : ''}<button class="chip" data-a="viewsMenu" aria-label="Views Menu" title="Views Menu">⋯</button></div>
     <div class="toolbar">
       <button class="tbtn" data-a="groupNew">${I.plus} Category Group</button>
       <button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button>
@@ -1233,7 +1234,9 @@ function viewPlan() {
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
     let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden));
-    if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
+    const VW = F.startsWith('v:') ? (A.plan.views || []).find(v => 'v:' + v.id === F) : null;
+    if (VW) cats = cats.filter(c => VW.cats.includes(c.id));
+    else if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
     if (!cats.length && (F !== 'all' || (!A.ui.edit && g.sys))) continue;
     const col = !!A.ui.collapsed[g.id] && F === 'all';
     let ga = 0, gact = 0, gav = 0; for (const c of cats) { const x = catM(m, c.id); ga += x.assigned; gact += x.activity; gav += x.available; }
@@ -4029,6 +4032,31 @@ Object.assign(ACT, {
     closeSheet();
   },
 });
+
+/* ---------- Plan custom views (YNAB “Views Menu”: New View / Manage Views) ---------- */
+Object.assign(ACT, {
+  viewsMenu: el => { const r = el.getBoundingClientRect(); popMenu(r.left, r.bottom + 6, mi(I.edit, 'Manage Views', 'viewsManage') + mi(I.plus, 'New View', 'viewEdit'), 'pm-views'); },
+  viewsManage: () => {
+    const vs = A.plan.views || [];
+    openSheet('Manage Views', vs.length ? `<div class="card">${vs.map(v => `<div class="li"><span class="grow"><strong>${esc(v.name)}</strong><div class="small muted">${v.cats.length} categor${v.cats.length > 1 ? 'ies' : 'y'}</div></span><button class="btn sm" data-a="viewEdit" data-id="${v.id}">Edit</button><button class="btn sm danger" data-a="viewDel" data-id="${v.id}">Delete</button></div>`).join('')}</div>` : '<div class="muted">No custom views yet.</div>', `<button class="btn pri block" data-a="viewEdit">${I.plus} New View</button>`);
+  },
+  viewEdit: el => {
+    closePop(); const v = (A.plan.views || []).find(x => x.id === el?.dataset?.id) || { id: '', name: '', cats: [] };
+    const body = `<p class="small muted" style="margin:0">Choose a set of categories to include in this custom view.</p>
+      <div class="field"><label for="vwName">View Name</label><input id="vwName" class="in" value="${esc(v.name)}" placeholder="e.g. Bills"></div>
+      <div class="vw-list">${A.plan.groups.filter(g => g.sys !== 'cc').map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden); if (!cs.length) return ''; return `<label class="pm-chk vw-g"><input type="checkbox" data-vwg="${g.id}" ${cs.every(c => v.cats.includes(c.id)) ? 'checked' : ''}> <b>${esc(g.name)}</b></label>` + cs.map(c => `<label class="pm-chk vw-c"><input type="checkbox" data-vwc="${c.id}" data-g="${g.id}" ${v.cats.includes(c.id) ? 'checked' : ''}> ${esc(catName(c.id))}</label>`).join(''); }).join('')}</div>`;
+    openSheet(v.id ? 'Edit Custom View' : 'New Custom View', body, `<button class="btn pri block" data-a="viewSave" data-id="${v.id}">Save</button>`, { focus: '#vwName' });
+  },
+  viewSave: el => {
+    const name = ($('#vwName')?.value || '').trim(); const cats = $$('[data-vwc]').filter(i => i.checked).map(i => i.dataset.vwc);
+    if (!name) { toast('Give the view a name'); return; } if (!cats.length) { toast('Pick at least one category'); return; }
+    let id = el.dataset.id;
+    mutate('View saved', () => { const vs = [...(A.plan.views || [])]; if (id) { const i = vs.findIndex(x => x.id === id); vs[i] = { ...vs[i], name, cats }; } else { id = uid(); vs.push({ id, name, cats }); } A.plan.views = vs; });
+    closeSheet(); A.ui.filter = 'v:' + id; render();
+  },
+  viewDel: el => { const id = el.dataset.id; mutate('View deleted', () => { A.plan.views = (A.plan.views || []).filter(v => v.id !== id); }); if (A.ui.filter === 'v:' + id) A.ui.filter = 'all'; ACT.viewsManage(); },
+});
+document.addEventListener('change', e => { const g = e.target.dataset?.vwg; if (g) $$(`[data-vwc][data-g="${g}"]`).forEach(i => { i.checked = e.target.checked; }); });
 </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})</script>
 </body></html>

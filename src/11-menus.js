@@ -331,3 +331,28 @@ Object.assign(ACT, {
     closeSheet();
   },
 });
+
+/* ---------- Plan custom views (YNAB “Views Menu”: New View / Manage Views) ---------- */
+Object.assign(ACT, {
+  viewsMenu: el => { const r = el.getBoundingClientRect(); popMenu(r.left, r.bottom + 6, mi(I.edit, 'Manage Views', 'viewsManage') + mi(I.plus, 'New View', 'viewEdit'), 'pm-views'); },
+  viewsManage: () => {
+    const vs = A.plan.views || [];
+    openSheet('Manage Views', vs.length ? `<div class="card">${vs.map(v => `<div class="li"><span class="grow"><strong>${esc(v.name)}</strong><div class="small muted">${v.cats.length} categor${v.cats.length > 1 ? 'ies' : 'y'}</div></span><button class="btn sm" data-a="viewEdit" data-id="${v.id}">Edit</button><button class="btn sm danger" data-a="viewDel" data-id="${v.id}">Delete</button></div>`).join('')}</div>` : '<div class="muted">No custom views yet.</div>', `<button class="btn pri block" data-a="viewEdit">${I.plus} New View</button>`);
+  },
+  viewEdit: el => {
+    closePop(); const v = (A.plan.views || []).find(x => x.id === el?.dataset?.id) || { id: '', name: '', cats: [] };
+    const body = `<p class="small muted" style="margin:0">Choose a set of categories to include in this custom view.</p>
+      <div class="field"><label for="vwName">View Name</label><input id="vwName" class="in" value="${esc(v.name)}" placeholder="e.g. Bills"></div>
+      <div class="vw-list">${A.plan.groups.filter(g => g.sys !== 'cc').map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden); if (!cs.length) return ''; return `<label class="pm-chk vw-g"><input type="checkbox" data-vwg="${g.id}" ${cs.every(c => v.cats.includes(c.id)) ? 'checked' : ''}> <b>${esc(g.name)}</b></label>` + cs.map(c => `<label class="pm-chk vw-c"><input type="checkbox" data-vwc="${c.id}" data-g="${g.id}" ${v.cats.includes(c.id) ? 'checked' : ''}> ${esc(catName(c.id))}</label>`).join(''); }).join('')}</div>`;
+    openSheet(v.id ? 'Edit Custom View' : 'New Custom View', body, `<button class="btn pri block" data-a="viewSave" data-id="${v.id}">Save</button>`, { focus: '#vwName' });
+  },
+  viewSave: el => {
+    const name = ($('#vwName')?.value || '').trim(); const cats = $$('[data-vwc]').filter(i => i.checked).map(i => i.dataset.vwc);
+    if (!name) { toast('Give the view a name'); return; } if (!cats.length) { toast('Pick at least one category'); return; }
+    let id = el.dataset.id;
+    mutate('View saved', () => { const vs = [...(A.plan.views || [])]; if (id) { const i = vs.findIndex(x => x.id === id); vs[i] = { ...vs[i], name, cats }; } else { id = uid(); vs.push({ id, name, cats }); } A.plan.views = vs; });
+    closeSheet(); A.ui.filter = 'v:' + id; render();
+  },
+  viewDel: el => { const id = el.dataset.id; mutate('View deleted', () => { A.plan.views = (A.plan.views || []).filter(v => v.id !== id); }); if (A.ui.filter === 'v:' + id) A.ui.filter = 'all'; ACT.viewsManage(); },
+});
+document.addEventListener('change', e => { const g = e.target.dataset?.vwg; if (g) $$(`[data-vwc][data-g="${g}"]`).forEach(i => { i.checked = e.target.checked; }); });

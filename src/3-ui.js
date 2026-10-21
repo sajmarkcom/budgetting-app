@@ -199,7 +199,7 @@ function viewPlan() {
   }
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
-    ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${F === 'over' ? chip('over', 'Overspent') : ''}</div>
+    ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${(A.plan.views || []).map(v => chip('v:' + v.id, esc(v.name))).join('')}${F === 'over' ? chip('over', 'Overspent') : ''}<button class="chip" data-a="viewsMenu" aria-label="Views Menu" title="Views Menu">⋯</button></div>
     <div class="toolbar">
       <button class="tbtn" data-a="groupNew">${I.plus} Category Group</button>
       <button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button>
@@ -217,7 +217,9 @@ function viewPlan() {
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
     let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden));
-    if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
+    const VW = F.startsWith('v:') ? (A.plan.views || []).find(v => 'v:' + v.id === F) : null;
+    if (VW) cats = cats.filter(c => VW.cats.includes(c.id));
+    else if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
     if (!cats.length && (F !== 'all' || (!A.ui.edit && g.sys))) continue;
     const col = !!A.ui.collapsed[g.id] && F === 'all';
     let ga = 0, gact = 0, gav = 0; for (const c of cats) { const x = catM(m, c.id); ga += x.assigned; gact += x.activity; gav += x.available; }
