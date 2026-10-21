@@ -3179,7 +3179,7 @@ const ACT = {
   collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed, compact: !!A.ui.compact })); } catch (e) { } render._keepScroll = true; render(); },
   rtaSheet: (el, e) => { if (e.target.closest('.cta')) return; rtaSheet(); },
   assignSheet: (el, e) => { e.stopPropagation(); assignSheet(); },
-  fixOver: (el, e) => { e.stopPropagation(); const m = A.month; const c = A.plan.cats.filter(c => getAssigned(m, c.id) > 0).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0]; if (c) moveSheet(c.id, 'rta', Math.min(-monthData(m).rta, Math.max(0, catM(m, c.id).available)), 'Fix This'); else toast('Nothing to take back this month'); },
+  fixOver: (el, e) => { e.stopPropagation(); const m = A.month; const c = A.plan.cats.filter(c => !c.cc && !c.hidden && getAssigned(m, c.id) > 0 && catM(m, c.id).available > 0).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0]; if (c) moveSheet(c.id, 'rta', Math.min(-monthData(m).rta, Math.max(0, catM(m, c.id).available)), 'Fix This'); else toast('Nothing to take back this month'); },
   statInfo: el => {
     const k = el.dataset.k;
     if (k === 'aom') openSheet('Age of Money', `<p style="margin:0">The average number of days between earning money and spending it, based on your last 10 cash outflows. Aim for 30+ days so this month is paid with last month's income.</p><button class="btn block" data-a="goReflect" data-k="aom">View history</button>`);
