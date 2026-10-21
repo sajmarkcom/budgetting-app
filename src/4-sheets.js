@@ -167,7 +167,7 @@ function moveSheet(fromCid, toCid, amount, title) {
 }
 function coverSheet(cid) {
   const m = A.month, need = -catM(m, cid).available;
-  const best = A.plan.cats.filter(c => c.id !== cid && !c.hidden && catM(m, c.id).available >= need).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0];
+  const best = A.plan.cats.filter(c => c.id !== cid && !c.hidden && !c.cc && catM(m, c.id).available >= need) // never the card payment money: it is set aside to pay the card.sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0];
   moveSheet(monthData(m).rta >= need ? 'rta' : (best?.id || 'rta'), cid, need, 'Cover Overspending');
 }
 function movesSheet() {
