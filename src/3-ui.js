@@ -481,7 +481,8 @@ function viewRegister() {
     if (desk) {
       const rv = regView(), showBal = rv.bal && !all;
       h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}${rv.flags ? '<th></th>' : ''}${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
-      for (const t of list.slice(0, lim)) h += txTr(t, all, showBal ? run[t.id] : null);
+      if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
+      for (const t of list.slice(0, lim)) h += A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
       h += `</tbody></table></div>`;
     } else {
       let day = '';
@@ -593,3 +594,28 @@ document.addEventListener('pointermove', e => {
   tip.hidden = false; const br = box.getBoundingClientRect(), px = e.clientX - br.left;
   tip.style.left = Math.min(Math.max(8, px + 14), br.width - tip.offsetWidth - 8) + 'px'; tip.style.top = Math.max(0, e.clientY - br.top - tip.offsetHeight - 12) + 'px';
 });
+
+/* ---------- inline transaction editing in the register (desktop), like YNAB ---------- */
+function inlRow(t, all, showBal, rv) {
+  const id = A.acct === 'all' ? null : A.acct;
+  const acct = t ? t.acct : (A.ui.inl.acct || id || A.plan.accounts.find(a => !a.closed && onBudget(a))?.id);
+  const tr = t?.transferAcct ? 'Transfer : ' + (L.acct[t.transferAcct]?.name || '') : (t ? payeeName(t) || '' : '');
+  const a = L.acct[acct], tb = t?.transferAcct ? L.acct[t.transferAcct] : null;
+  const catOff = !onBudget(a) || (tb && onBudget(tb));
+  const out = t && t.amount < 0 ? fmtIn(-t.amount) : '', inn = t && t.amount > 0 ? fmtIn(t.amount) : '';
+  const cols = (A.ui.select ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
+  const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="Transfer : ${esc(x.name)}">`).join('');
+  return `<tr class="inl" data-inl="${t ? t.id : 'new'}">
+    ${A.ui.select ? '<td></td>' : ''}${rv.flags ? `<td style="width:10px">${t?.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>` : ''}
+    ${all ? `<td><select class="in inl-in" id="inlAcct">${A.plan.accounts.filter(x => !x.closed).map(x => `<option value="${x.id}" ${x.id === acct ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></td>` : `<input type="hidden" id="inlAcct" value="${acct}">`}
+    <td><input class="in inl-in" type="date" id="inlDate" value="${t ? t.date : (A.ui.inl.date || todayISO())}"></td>
+    <td><input class="in inl-in" id="inlPayee" list="inlPayees" value="${esc(tr)}" placeholder="Payee" autocomplete="off"><datalist id="inlPayees">${pl}</datalist></td>
+    <td>${t?.splits?.length ? `<button class="btn sm" data-a="inlMore">Split (Multiple Categories)…</button>` : `<select class="in inl-in" id="inlCat" ${catOff ? 'disabled' : ''}>${catOff ? '<option value="">Category not needed</option>' : catOptions(t?.cat || '', { amounts: true })}</select>`}</td>
+    <td><input class="in inl-in" id="inlMemo" value="${esc(t?.memo || '')}" placeholder="Memo"></td>
+    <td class="r"><input class="in inl-in r" id="inlOut" inputmode="decimal" value="${out}" placeholder="Outflow"></td>
+    <td class="r"><input class="in inl-in r" id="inlIn" inputmode="decimal" value="${inn}" placeholder="Inflow"></td>
+    ${showBal ? '<td></td>' : ''}<td></td></tr>
+  <tr class="inl inl-btns"><td colspan="${cols}"><div class="row" style="justify-content:flex-end; gap:8px">
+    <button class="btn sm" data-a="inlMore" title="Split, flag, repeat…">More…</button><span style="flex:1"></span>
+    <button class="btn sm" data-a="inlCancel">Cancel</button>${t ? '' : `<button class="btn sm" data-a="inlSave" data-again="1">Save and add another</button>`}<button class="btn sm pri" data-a="inlSave">Save</button></div></td></tr>`;
+}

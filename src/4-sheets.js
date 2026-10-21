@@ -15,13 +15,13 @@ function openSheet(title, body, foot = '', opts = {}) {
 function closeSheet(silent) { const s = $('#scrim'); if (s) s.remove(); document.body.style.overflow = ''; SH = null; }
 function refreshSheetBody(html) { const b = $('#scrim .sheet-b'); if (b) b.innerHTML = html; }
 
-function catOptions(sel, { rta = true, none = true, m = A.month, noneLabel = 'Category Needed' } = {}) {
+function catOptions(sel, { rta = true, none = true, m = A.month, noneLabel = 'Category Needed', amounts = true } = {}) {
   let o = none ? `<option value="">${noneLabel}</option>` : '';
-  if (rta) o += `<option value="rta" ${sel === 'rta' ? 'selected' : ''}>💶 Inflow: Ready to Assign (${fmt(monthData(m).rta)})</option>`;
+  if (rta) o += `<option value="rta" ${sel === 'rta' ? 'selected' : ''}>💶 Inflow: Ready to Assign${amounts ? ' (' + fmt(monthData(m).rta) + ')' : ''}</option>`;
   for (const g of A.plan.groups) {
     if (g.sys === 'cc') continue;
     const cats = A.plan.cats.filter(c => c.gid === g.id && (!c.hidden || c.id === sel)); if (!cats.length) continue;
-    o += `<optgroup label="${esc(g.name)}">` + cats.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))} · ${fmt(catM(m, c.id).available)}</option>`).join('') + `</optgroup>`;
+    o += `<optgroup label="${esc(g.name)}">` + cats.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))}${amounts ? ' · ' + fmt(catM(m, c.id).available) : ''}</option>`).join('') + `</optgroup>`;
   }
   return o;
 }
@@ -341,7 +341,7 @@ function payeesSheet() {
   const body = `<div class="small muted">Rename a payee to another payee's name to combine them. The default category is suggested when you add or import transactions.</div>
     <input class="in" type="search" placeholder="Search payees…" aria-label="Search payees" oninput="const q=this.value.toLowerCase(); this.nextElementSibling.querySelectorAll('.li').forEach(r => { const i = r.querySelector('input'); r.style.display = !q || (i && i.value.toLowerCase().includes(q)) ? '' : 'none'; })">
     <div class="card">${list.map(y => `<div class="li" style="flex-wrap:wrap"><div class="grow" style="min-width:150px"><input class="in" value="${esc(y.name)}" data-py="name" data-id="${y.id}" aria-label="Payee name" style="height:40px"></div>
-      <select class="in" style="height:40px; width:auto; max-width:46%" data-py="lastCat" data-id="${y.id}" aria-label="Default category">${catOptions(y.lastCat, { noneLabel: 'No default category' })}</select>
+      <select class="in" style="height:40px; width:auto; max-width:46%" data-py="lastCat" data-id="${y.id}" aria-label="Default category">${catOptions(y.lastCat, { noneLabel: 'No default category', amounts: false })}</select>
       <span class="small muted" style="width:56px; text-align:right">${cnt[y.id] || 0} txns</span>
       ${!cnt[y.id] ? `<button class="ibtn" data-a="pyDel" data-id="${y.id}" aria-label="Delete">${I.trash}</button>` : ''}</div>`).join('') || '<div class="li muted">No payees</div>'}</div>
     <div class="sec-t"><span>Rename rules (imports)</span></div>

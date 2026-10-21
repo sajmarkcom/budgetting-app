@@ -96,8 +96,11 @@ const ACT = {
   toggleSelect: () => { A.ui.select = !A.ui.select; A.ui.selected.clear(); render._keepScroll = true; render(); },
   clr: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t || t.cleared === 'r') { if (t) toast('Reconciled transaction: edit it to unlock'); return; } render._keepScroll = true; mutate(t.cleared === 'u' ? 'Cleared' : 'Uncleared', () => { t.cleared = t.cleared === 'u' ? 'c' : 'u'; }, { silent: true }); },
   approve: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t) return; if (!t.cat && !t.splits && onBudget(L.acct[t.acct]) && !t.transferAcct) { txSheet(t.id); return; } render._keepScroll = true; mutate('Transaction approved', () => { t.approved = true; }, { silent: true }); },
-  newTx: () => { closeSheet(); txSheet(null); },
-  txEdit: el => txSheet(el.dataset.id),
+  newTx: () => { closeSheet(); if (DESK() && A.view !== 'plan' && A.acct && $('.rtable')) { A.ui.inl = { id: 'new', acct: A.acct === 'all' ? null : A.acct }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.focus(), 30); return; } txSheet(null); },
+  txEdit: el => { if (DESK() && el.closest && el.closest('.rtable')) { const t = A.tx.find(x => x.id === el.dataset.id); if (t && !(t.splits && t.splits.length)) { A.ui.inl = { id: t.id }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.select(), 30); return; } } txSheet(el.dataset.id); },
+  inlCancel: () => { A.ui.inl = null; render._keepScroll = true; render(); },
+  inlMore: () => { const i = A.ui.inl; A.ui.inl = null; render._keepScroll = true; render(); i && i.id !== 'new' ? txSheet(i.id) : txSheet(null, { acct: i?.acct || undefined }); },
+  inlSave: el => inlSave(el.dataset.again === '1'),
   kind: el => { D.kind = el.dataset.v; if (D.kind === 'transfer') { D.splits = null; } else D.transferAcct = ''; if (D.kind === 'in' && !D.cat) D.cat = 'rta'; if (D.kind === 'out' && D.cat === 'rta') D.cat = ''; txRefresh(); },
   dFlag: el => { D.flag = el.dataset.v || null; txRefresh(); },
   spOn: () => { D.splits = [{ cat: D.cat || '', amount: D.amount, memo: '' }, { cat: '', amount: 0, memo: '' }]; txRefresh(); },
@@ -339,3 +342,25 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   render();
   initDb().then(() => gdSync()).then(() => { if (A.plan) { bankWatchPending(); bankAutoSync(); } });
 })();
+
+function inlSave(again) {
+  const i = A.ui.inl; if (!i) return; const t = i.id === 'new' ? null : A.tx.find(x => x.id === i.id);
+  const acct = $('#inlAcct')?.value, date = $('#inlDate')?.value || todayISO(), payee = ($('#inlPayee')?.value || '').trim(), memo = $('#inlMemo')?.value || '';
+  const o = evalExpr($('#inlOut')?.value || '') || 0, n = evalExpr($('#inlIn')?.value || '') || 0; const amount = Math.abs(n) - Math.abs(o);
+  if (!acct) return toast('Choose an account'); if (!amount) { toast('Enter an outflow or an inflow'); $('#inlOut')?.focus(); return; }
+  const trm = payee.match(/^Transfer\s*:\s*(.+)$/i); const tra = trm ? A.plan.accounts.find(x => x.name.trim().toLowerCase() === trm[1].trim().toLowerCase() && x.id !== acct) : null;
+  let cat = $('#inlCat') && !$('#inlCat').disabled ? ($('#inlCat').value || null) : (t?.cat || null);
+  if (!tra && !cat && payee) { const y = L.payeeByName[payee.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat] && onBudget(L.acct[acct])) cat = y.lastCat; }
+  const draft = { id: t?.id, acct, date, payee: tra ? '' : payee, cat, memo, amount, cleared: t ? t.cleared : 'u', flag: t?.flag || null, approved: true, transferAcct: tra ? tra.id : null, splits: t?.splits && t.splits.length > 1 ? t.splits : null };
+  if (!t && date > todayISO()) { mutate('Transaction scheduled', () => { A.plan.scheduled.push({ id: uid(), acct, payee, cat, memo, amount, transferAcct: draft.transferAcct, splits: null, freq: 'never', next: date, flag: null }); runScheduled(); }); }
+  else mutate(t ? 'Transaction saved' : 'Transaction added', () => saveTx(draft));
+  A.ui.inl = again ? { id: 'new', acct: i.acct, date } : null; render._keepScroll = true; render(); if (again) setTimeout(() => $('#inlPayee')?.focus(), 30);
+}
+document.addEventListener('keydown', e => {
+  if (!A.ui?.inl || !e.target.closest?.('tr.inl')) return;
+  if (e.key === 'Enter' && e.target.id === 'inlPayee') { e.preventDefault(); ($('#inlCat:not([disabled])') || $('#inlMemo'))?.focus(); }
+  else if (e.key === 'Enter') { e.preventDefault(); inlSave(false); }
+  else if (e.key === 'Escape') { e.preventDefault(); ACT.inlCancel(); }
+});
+// choosing a payee fills its default category, like YNAB
+document.addEventListener('change', e => { if (e.target.id !== 'inlPayee') return; const v = e.target.value.trim(), c = $('#inlCat'); if (!c || c.value) return; const y = L.payeeByName[v.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat]) c.value = y.lastCat; });

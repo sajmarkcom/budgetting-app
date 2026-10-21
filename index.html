@@ -351,6 +351,10 @@ kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(
 @media (min-width:1024px){ .shell.noside{grid-template-columns:minmax(0,1fr)} .shell.noside.with-insp{grid-template-columns:minmax(0,1fr) 340px}
   .side-open{position:fixed; left:0; bottom:16px; z-index:30; border:1px solid var(--line); border-left:none; background:var(--surface); border-radius:0 10px 10px 0; padding:8px 6px; cursor:pointer} .side-open svg{width:16px; height:16px} }
 .vw-list{max-height:50vh; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:6px 10px} .vw-c{padding-left:26px; font-weight:500}
+/* inline register editing */
+.rtable tr.inl td{background:var(--accent-soft); border-top:none; padding:4px 6px} .rtable tr.inl:first-child td, .rtable tr.inl[data-inl] td{border-top:1px solid var(--accent)}
+.inl-in{height:30px; padding:0 8px; font-size:13.5px; border-radius:6px; width:100%; min-width:0} .inl-in.r{text-align:right} .rtable tr.inl select.inl-in{padding:0 24px 0 8px; height:30px!important; min-height:0; font-size:13.5px}
+.rtable tr.inl-btns td{padding:6px 10px 10px; border-bottom:1px solid var(--accent)}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -834,7 +838,7 @@ function mergePlanPair(l, r) {
     (out.assigned[m] ||= {}); if (v) out.assigned[m][cid] = v; else delete out.assigned[m][cid]; out.au[k] = ru;
   }
   for (const [m, o] of Object.entries(rp.assigned || {})) for (const [cid, v] of Object.entries(o)) { const k = m + '|' + cid; if (!out.au[k] && out.assigned[m]?.[cid] == null) { (out.assigned[m] ||= {})[cid] = v; } }
-  for (const k of ['learned', 'learnedTr']) if (lp[k] || rp[k]) out[k] = newer === rp ? { ...(lp[k] || {}), ...(rp[k] || {}) } : { ...(rp[k] || {}), ...(lp[k] || {}) };
+  for (const k of ['learned', 'learnedTr', 'learnedCat']) if (lp[k] || rp[k]) out[k] = newer === rp ? { ...(lp[k] || {}), ...(rp[k] || {}) } : { ...(rp[k] || {}), ...(lp[k] || {}) };
   out.updatedAt = Math.max(lp.updatedAt || 0, rp.updatedAt || 0);
   return { plan: out, tx: tm.list };
 }
@@ -983,6 +987,7 @@ function saveTx(d) {
     if (y && t.cat && t.cat !== '__start') y.lastCat = t.cat;
     // remember the payee you chose for this bank label: the next payment with a different reference gets it too
     if (y && t.rawPayee && typeof learnKey === 'function') { const k = learnKey(t.rawPayee); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
+    if (typeof learnCat === 'function') learnCat(t);
   }
   if (isNew) A.tx.push(t);
   return t;
@@ -1498,7 +1503,8 @@ function viewRegister() {
     if (desk) {
       const rv = regView(), showBal = rv.bal && !all;
       h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}${rv.flags ? '<th></th>' : ''}${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
-      for (const t of list.slice(0, lim)) h += txTr(t, all, showBal ? run[t.id] : null);
+      if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
+      for (const t of list.slice(0, lim)) h += A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
       h += `</tbody></table></div>`;
     } else {
       let day = '';
@@ -1610,6 +1616,31 @@ document.addEventListener('pointermove', e => {
   tip.hidden = false; const br = box.getBoundingClientRect(), px = e.clientX - br.left;
   tip.style.left = Math.min(Math.max(8, px + 14), br.width - tip.offsetWidth - 8) + 'px'; tip.style.top = Math.max(0, e.clientY - br.top - tip.offsetHeight - 12) + 'px';
 });
+
+/* ---------- inline transaction editing in the register (desktop), like YNAB ---------- */
+function inlRow(t, all, showBal, rv) {
+  const id = A.acct === 'all' ? null : A.acct;
+  const acct = t ? t.acct : (A.ui.inl.acct || id || A.plan.accounts.find(a => !a.closed && onBudget(a))?.id);
+  const tr = t?.transferAcct ? 'Transfer : ' + (L.acct[t.transferAcct]?.name || '') : (t ? payeeName(t) || '' : '');
+  const a = L.acct[acct], tb = t?.transferAcct ? L.acct[t.transferAcct] : null;
+  const catOff = !onBudget(a) || (tb && onBudget(tb));
+  const out = t && t.amount < 0 ? fmtIn(-t.amount) : '', inn = t && t.amount > 0 ? fmtIn(t.amount) : '';
+  const cols = (A.ui.select ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
+  const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="Transfer : ${esc(x.name)}">`).join('');
+  return `<tr class="inl" data-inl="${t ? t.id : 'new'}">
+    ${A.ui.select ? '<td></td>' : ''}${rv.flags ? `<td style="width:10px">${t?.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>` : ''}
+    ${all ? `<td><select class="in inl-in" id="inlAcct">${A.plan.accounts.filter(x => !x.closed).map(x => `<option value="${x.id}" ${x.id === acct ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></td>` : `<input type="hidden" id="inlAcct" value="${acct}">`}
+    <td><input class="in inl-in" type="date" id="inlDate" value="${t ? t.date : (A.ui.inl.date || todayISO())}"></td>
+    <td><input class="in inl-in" id="inlPayee" list="inlPayees" value="${esc(tr)}" placeholder="Payee" autocomplete="off"><datalist id="inlPayees">${pl}</datalist></td>
+    <td>${t?.splits?.length ? `<button class="btn sm" data-a="inlMore">Split (Multiple Categories)…</button>` : `<select class="in inl-in" id="inlCat" ${catOff ? 'disabled' : ''}>${catOff ? '<option value="">Category not needed</option>' : catOptions(t?.cat || '', { amounts: true })}</select>`}</td>
+    <td><input class="in inl-in" id="inlMemo" value="${esc(t?.memo || '')}" placeholder="Memo"></td>
+    <td class="r"><input class="in inl-in r" id="inlOut" inputmode="decimal" value="${out}" placeholder="Outflow"></td>
+    <td class="r"><input class="in inl-in r" id="inlIn" inputmode="decimal" value="${inn}" placeholder="Inflow"></td>
+    ${showBal ? '<td></td>' : ''}<td></td></tr>
+  <tr class="inl inl-btns"><td colspan="${cols}"><div class="row" style="justify-content:flex-end; gap:8px">
+    <button class="btn sm" data-a="inlMore" title="Split, flag, repeat…">More…</button><span style="flex:1"></span>
+    <button class="btn sm" data-a="inlCancel">Cancel</button>${t ? '' : `<button class="btn sm" data-a="inlSave" data-again="1">Save and add another</button>`}<button class="btn sm pri" data-a="inlSave">Save</button></div></td></tr>`;
+}
 /* ================= Budget — sheets (bottom panels) ================= */
 let SH = null; // { render(), onClose }
 function openSheet(title, body, foot = '', opts = {}) {
@@ -1627,13 +1658,13 @@ function openSheet(title, body, foot = '', opts = {}) {
 function closeSheet(silent) { const s = $('#scrim'); if (s) s.remove(); document.body.style.overflow = ''; SH = null; }
 function refreshSheetBody(html) { const b = $('#scrim .sheet-b'); if (b) b.innerHTML = html; }
 
-function catOptions(sel, { rta = true, none = true, m = A.month, noneLabel = 'Category Needed' } = {}) {
+function catOptions(sel, { rta = true, none = true, m = A.month, noneLabel = 'Category Needed', amounts = true } = {}) {
   let o = none ? `<option value="">${noneLabel}</option>` : '';
-  if (rta) o += `<option value="rta" ${sel === 'rta' ? 'selected' : ''}>💶 Inflow: Ready to Assign (${fmt(monthData(m).rta)})</option>`;
+  if (rta) o += `<option value="rta" ${sel === 'rta' ? 'selected' : ''}>💶 Inflow: Ready to Assign${amounts ? ' (' + fmt(monthData(m).rta) + ')' : ''}</option>`;
   for (const g of A.plan.groups) {
     if (g.sys === 'cc') continue;
     const cats = A.plan.cats.filter(c => c.gid === g.id && (!c.hidden || c.id === sel)); if (!cats.length) continue;
-    o += `<optgroup label="${esc(g.name)}">` + cats.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))} · ${fmt(catM(m, c.id).available)}</option>`).join('') + `</optgroup>`;
+    o += `<optgroup label="${esc(g.name)}">` + cats.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))}${amounts ? ' · ' + fmt(catM(m, c.id).available) : ''}</option>`).join('') + `</optgroup>`;
   }
   return o;
 }
@@ -1953,7 +1984,7 @@ function payeesSheet() {
   const body = `<div class="small muted">Rename a payee to another payee's name to combine them. The default category is suggested when you add or import transactions.</div>
     <input class="in" type="search" placeholder="Search payees…" aria-label="Search payees" oninput="const q=this.value.toLowerCase(); this.nextElementSibling.querySelectorAll('.li').forEach(r => { const i = r.querySelector('input'); r.style.display = !q || (i && i.value.toLowerCase().includes(q)) ? '' : 'none'; })">
     <div class="card">${list.map(y => `<div class="li" style="flex-wrap:wrap"><div class="grow" style="min-width:150px"><input class="in" value="${esc(y.name)}" data-py="name" data-id="${y.id}" aria-label="Payee name" style="height:40px"></div>
-      <select class="in" style="height:40px; width:auto; max-width:46%" data-py="lastCat" data-id="${y.id}" aria-label="Default category">${catOptions(y.lastCat, { noneLabel: 'No default category' })}</select>
+      <select class="in" style="height:40px; width:auto; max-width:46%" data-py="lastCat" data-id="${y.id}" aria-label="Default category">${catOptions(y.lastCat, { noneLabel: 'No default category', amounts: false })}</select>
       <span class="small muted" style="width:56px; text-align:right">${cnt[y.id] || 0} txns</span>
       ${!cnt[y.id] ? `<button class="ibtn" data-a="pyDel" data-id="${y.id}" aria-label="Delete">${I.trash}</button>` : ''}</div>`).join('') || '<div class="li muted">No payees</div>'}</div>
     <div class="sec-t"><span>Rename rules (imports)</span></div>
@@ -3138,6 +3169,19 @@ function cleanPayee(raw) {
   const words = x.split(' ').slice(0, 3).join(' ');
   return words === words.toUpperCase() ? words.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, m => m.toUpperCase()) : words;
 }
+/* category you chose for this exact bank label (one payee like “Abonnements Tech” can cover Apple, Spotify…) */
+function learnCat(t) { if (!A.plan || !t || !t.rawPayee || !t.cat || t.cat === 'rta' || t.cat === '__start' || !L.cat[t.cat]) return; const k = learnKey(t.rawPayee); if (k) A.plan.learnedCat = { ...(A.plan.learnedCat || {}), [k]: t.cat }; }
+function catForRaw(raw) {
+  const m = A.plan?.learnedCat; if (!m || !raw) return null; const k = learnKey(raw); if (!k) return null;
+  if (m[k] && L.cat[m[k]]) return m[k];
+  const w = k.split(' '); for (let n = w.length - 1; n >= 1; n--) { const pre = w.slice(0, n).join(' '); if (pre.length < 4) break; const hits = new Set(Object.entries(m).filter(([kk]) => kk === pre || kk.startsWith(pre + ' ')).map(([, v]) => v)); if (hits.size === 1) { const c = [...hits][0]; if (L.cat[c]) return c; } }
+  return null;
+}
+function backfillLearnedCat() {
+  if (!A.plan || A.plan.learnedCat) return; const m = {};
+  for (const t of A.tx.slice().sort((a, b) => a.date < b.date ? -1 : 1)) if (t.rawPayee && t.cat && t.approved !== false && L.cat[t.cat] && t.cat !== 'rta' && !(t.splits && t.splits.length)) { const k = learnKey(t.rawPayee); if (k) m[k] = t.cat; }
+  A.plan.learnedCat = m;
+}
 function learnKey(raw) { return norm(cleanPayee(raw)).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim(); }
 /* payee you gave this bank label before (learned from YNAB) */
 function learnedPayee(raw) {
@@ -3295,7 +3339,7 @@ function importRows(acct, rows, from) {
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
     const self = !r.pending && isSelfLabel(r.payee, acct);
     const ruled = payeeRuleApply(r.payee); const y = self ? getPayee(cleanPayee(r.payee)) : ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || getPayee(cleanPayee(r.payee)));
-    const acc = L.acct[acct]; let cat = !self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
+    const acc = L.acct[acct]; const rc = !self && onBudget(acc) ? catForRaw(r.payee) : null; let cat = rc || (!self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null);
     if (!cat && !self && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
     A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(cat && cat !== 'rta' ? { auto: true } : {}), ...(self ? { self: true } : {}), ...(r.pending ? { pend: true } : {}) });
     if (r.pending) pendSeen.add(key);
@@ -3350,6 +3394,7 @@ function autoCategorize(quiet) {
       const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !isBankImp(t)) continue;
       if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
       const cur = L.payee[t.payee]; if (isSelfLabel(t.rawPayee || cur?.name || '')) { t.self = true; continue; }
+      const rc = catForRaw(t.rawPayee); if (rc) { t.cat = rc; t.auto = true; n++; continue; }
       const lp = learnedPayee(cur?.name || '');
       if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) { t.cat = lp.lastCat; t.auto = true; } n++; continue; }
       // only what YOU chose before for this exact merchant; looser guesses stay as suggestions in the category list
@@ -3458,8 +3503,11 @@ const ACT = {
   toggleSelect: () => { A.ui.select = !A.ui.select; A.ui.selected.clear(); render._keepScroll = true; render(); },
   clr: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t || t.cleared === 'r') { if (t) toast('Reconciled transaction: edit it to unlock'); return; } render._keepScroll = true; mutate(t.cleared === 'u' ? 'Cleared' : 'Uncleared', () => { t.cleared = t.cleared === 'u' ? 'c' : 'u'; }, { silent: true }); },
   approve: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t) return; if (!t.cat && !t.splits && onBudget(L.acct[t.acct]) && !t.transferAcct) { txSheet(t.id); return; } render._keepScroll = true; mutate('Transaction approved', () => { t.approved = true; }, { silent: true }); },
-  newTx: () => { closeSheet(); txSheet(null); },
-  txEdit: el => txSheet(el.dataset.id),
+  newTx: () => { closeSheet(); if (DESK() && A.view !== 'plan' && A.acct && $('.rtable')) { A.ui.inl = { id: 'new', acct: A.acct === 'all' ? null : A.acct }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.focus(), 30); return; } txSheet(null); },
+  txEdit: el => { if (DESK() && el.closest && el.closest('.rtable')) { const t = A.tx.find(x => x.id === el.dataset.id); if (t && !(t.splits && t.splits.length)) { A.ui.inl = { id: t.id }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.select(), 30); return; } } txSheet(el.dataset.id); },
+  inlCancel: () => { A.ui.inl = null; render._keepScroll = true; render(); },
+  inlMore: () => { const i = A.ui.inl; A.ui.inl = null; render._keepScroll = true; render(); i && i.id !== 'new' ? txSheet(i.id) : txSheet(null, { acct: i?.acct || undefined }); },
+  inlSave: el => inlSave(el.dataset.again === '1'),
   kind: el => { D.kind = el.dataset.v; if (D.kind === 'transfer') { D.splits = null; } else D.transferAcct = ''; if (D.kind === 'in' && !D.cat) D.cat = 'rta'; if (D.kind === 'out' && D.cat === 'rta') D.cat = ''; txRefresh(); },
   dFlag: el => { D.flag = el.dataset.v || null; txRefresh(); },
   spOn: () => { D.splits = [{ cat: D.cat || '', amount: D.amount, memo: '' }, { cat: '', amount: 0, memo: '' }]; txRefresh(); },
@@ -3701,6 +3749,28 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   render();
   initDb().then(() => gdSync()).then(() => { if (A.plan) { bankWatchPending(); bankAutoSync(); } });
 })();
+
+function inlSave(again) {
+  const i = A.ui.inl; if (!i) return; const t = i.id === 'new' ? null : A.tx.find(x => x.id === i.id);
+  const acct = $('#inlAcct')?.value, date = $('#inlDate')?.value || todayISO(), payee = ($('#inlPayee')?.value || '').trim(), memo = $('#inlMemo')?.value || '';
+  const o = evalExpr($('#inlOut')?.value || '') || 0, n = evalExpr($('#inlIn')?.value || '') || 0; const amount = Math.abs(n) - Math.abs(o);
+  if (!acct) return toast('Choose an account'); if (!amount) { toast('Enter an outflow or an inflow'); $('#inlOut')?.focus(); return; }
+  const trm = payee.match(/^Transfer\s*:\s*(.+)$/i); const tra = trm ? A.plan.accounts.find(x => x.name.trim().toLowerCase() === trm[1].trim().toLowerCase() && x.id !== acct) : null;
+  let cat = $('#inlCat') && !$('#inlCat').disabled ? ($('#inlCat').value || null) : (t?.cat || null);
+  if (!tra && !cat && payee) { const y = L.payeeByName[payee.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat] && onBudget(L.acct[acct])) cat = y.lastCat; }
+  const draft = { id: t?.id, acct, date, payee: tra ? '' : payee, cat, memo, amount, cleared: t ? t.cleared : 'u', flag: t?.flag || null, approved: true, transferAcct: tra ? tra.id : null, splits: t?.splits && t.splits.length > 1 ? t.splits : null };
+  if (!t && date > todayISO()) { mutate('Transaction scheduled', () => { A.plan.scheduled.push({ id: uid(), acct, payee, cat, memo, amount, transferAcct: draft.transferAcct, splits: null, freq: 'never', next: date, flag: null }); runScheduled(); }); }
+  else mutate(t ? 'Transaction saved' : 'Transaction added', () => saveTx(draft));
+  A.ui.inl = again ? { id: 'new', acct: i.acct, date } : null; render._keepScroll = true; render(); if (again) setTimeout(() => $('#inlPayee')?.focus(), 30);
+}
+document.addEventListener('keydown', e => {
+  if (!A.ui?.inl || !e.target.closest?.('tr.inl')) return;
+  if (e.key === 'Enter' && e.target.id === 'inlPayee') { e.preventDefault(); ($('#inlCat:not([disabled])') || $('#inlMemo'))?.focus(); }
+  else if (e.key === 'Enter') { e.preventDefault(); inlSave(false); }
+  else if (e.key === 'Escape') { e.preventDefault(); ACT.inlCancel(); }
+});
+// choosing a payee fills its default category, like YNAB
+document.addEventListener('change', e => { if (e.target.id !== 'inlPayee') return; const v = e.target.value.trim(), c = $('#inlCat'); if (!c || c.value) return; const y = L.payeeByName[v.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat]) c.value = y.lastCat; });
 /* ================= Budget — menus: right-click on transactions, plan menu, quick category rename ================= */
 let POP_TRIGGER = null, POP_SWALLOW = false;
 function closePop() { $$('.pmenu').forEach(e => e.remove()); POP_TRIGGER = null; }
@@ -3835,12 +3905,14 @@ function dropFutureBankLines() {
   if (fut.length) { A.tx = A.tx.filter(t => !fut.includes(t.id)); scheduleSave(); render(); }
 }
 setTimeout(dropFutureBankLines, 1500);
+setTimeout(() => { try { if (A.plan && !A.plan.learnedCat) { backfillLearnedCat(); scheduleSave(); } } catch (e) { } }, 2500);
 
 /* ---------- click on a category in the register: quick picker, best guesses first ---------- */
 function suggestCats(t) {
   const out = [], add = c => { if (c && c !== '__start' && (c === 'rta' || (L.cat[c] && !L.cat[c].cc && !L.cat[c].hidden)) && !out.includes(c)) out.push(c); };
   const a = L.acct[t.acct]; const y = L.payee[t.payee]; const raw = t.rawPayee || y?.name || '';
   if (t.amount > 0 && onBudget(a) && !isCredit(a)) add('rta');
+  try { if (typeof catForRaw === 'function') add(catForRaw(t.rawPayee)); } catch (e) { }
   try { const g = (typeof learnedPayee === 'function' && learnedPayee(raw)) || (typeof guessPayee === 'function' && guessPayee(raw)); add(g?.lastCat); } catch (e) { }
   add(y?.lastCat);
   // a category whose name appears in the bank label (e.g. “PHARMACIE …” → Santé/Pharmacie)
@@ -3912,7 +3984,7 @@ Object.assign(ACT, {
   catPickDo: el => {
     const t = A.tx.find(x => x.id === el.dataset.id); const c = el.dataset.c; if (!t) return;
     mutate('Categorized and approved: ' + (c === 'rta' ? 'Ready to Assign' : catName(c)), () => {
-      t.cat = c; t.splits = null; t.approved = true;
+      t.cat = c; t.splits = null; t.approved = true; if (typeof learnCat === 'function') learnCat(t);
       const y = L.payee[t.payee]; if (y && c !== 'rta') y.lastCat = c;
       if (y && t.importId && /^ebp?:/.test(t.importId) && typeof learnKey === 'function') { const k = learnKey(t.rawPayee || y.name); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
     });

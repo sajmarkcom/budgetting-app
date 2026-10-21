@@ -348,6 +348,10 @@ kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(
 @media (min-width:1024px){ .shell.noside{grid-template-columns:minmax(0,1fr)} .shell.noside.with-insp{grid-template-columns:minmax(0,1fr) 340px}
   .side-open{position:fixed; left:0; bottom:16px; z-index:30; border:1px solid var(--line); border-left:none; background:var(--surface); border-radius:0 10px 10px 0; padding:8px 6px; cursor:pointer} .side-open svg{width:16px; height:16px} }
 .vw-list{max-height:50vh; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:6px 10px} .vw-c{padding-left:26px; font-weight:500}
+/* inline register editing */
+.rtable tr.inl td{background:var(--accent-soft); border-top:none; padding:4px 6px} .rtable tr.inl:first-child td, .rtable tr.inl[data-inl] td{border-top:1px solid var(--accent)}
+.inl-in{height:30px; padding:0 8px; font-size:13.5px; border-radius:6px; width:100%; min-width:0} .inl-in.r{text-align:right} .rtable tr.inl select.inl-in{padding:0 24px 0 8px; height:30px!important; min-height:0; font-size:13.5px}
+.rtable tr.inl-btns td{padding:6px 10px 10px; border-bottom:1px solid var(--accent)}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}

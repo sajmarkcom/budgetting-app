@@ -187,6 +187,19 @@ function cleanPayee(raw) {
   const words = x.split(' ').slice(0, 3).join(' ');
   return words === words.toUpperCase() ? words.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, m => m.toUpperCase()) : words;
 }
+/* category you chose for this exact bank label (one payee like “Abonnements Tech” can cover Apple, Spotify…) */
+function learnCat(t) { if (!A.plan || !t || !t.rawPayee || !t.cat || t.cat === 'rta' || t.cat === '__start' || !L.cat[t.cat]) return; const k = learnKey(t.rawPayee); if (k) A.plan.learnedCat = { ...(A.plan.learnedCat || {}), [k]: t.cat }; }
+function catForRaw(raw) {
+  const m = A.plan?.learnedCat; if (!m || !raw) return null; const k = learnKey(raw); if (!k) return null;
+  if (m[k] && L.cat[m[k]]) return m[k];
+  const w = k.split(' '); for (let n = w.length - 1; n >= 1; n--) { const pre = w.slice(0, n).join(' '); if (pre.length < 4) break; const hits = new Set(Object.entries(m).filter(([kk]) => kk === pre || kk.startsWith(pre + ' ')).map(([, v]) => v)); if (hits.size === 1) { const c = [...hits][0]; if (L.cat[c]) return c; } }
+  return null;
+}
+function backfillLearnedCat() {
+  if (!A.plan || A.plan.learnedCat) return; const m = {};
+  for (const t of A.tx.slice().sort((a, b) => a.date < b.date ? -1 : 1)) if (t.rawPayee && t.cat && t.approved !== false && L.cat[t.cat] && t.cat !== 'rta' && !(t.splits && t.splits.length)) { const k = learnKey(t.rawPayee); if (k) m[k] = t.cat; }
+  A.plan.learnedCat = m;
+}
 function learnKey(raw) { return norm(cleanPayee(raw)).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim(); }
 /* payee you gave this bank label before (learned from YNAB) */
 function learnedPayee(raw) {
@@ -344,7 +357,7 @@ function importRows(acct, rows, from) {
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
     const self = !r.pending && isSelfLabel(r.payee, acct);
     const ruled = payeeRuleApply(r.payee); const y = self ? getPayee(cleanPayee(r.payee)) : ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || getPayee(cleanPayee(r.payee)));
-    const acc = L.acct[acct]; let cat = !self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
+    const acc = L.acct[acct]; const rc = !self && onBudget(acc) ? catForRaw(r.payee) : null; let cat = rc || (!self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null);
     if (!cat && !self && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
     A.tx.push({ id: uid(), acct, date: r.date, payee: y?.id || null, cat, memo: r.memo || '', amount: r.amount, cleared: r.pending ? 'u' : 'c', flag: null, approved: false, importId: key, rawPayee: r.payee, ...(cat && cat !== 'rta' ? { auto: true } : {}), ...(self ? { self: true } : {}), ...(r.pending ? { pend: true } : {}) });
     if (r.pending) pendSeen.add(key);
@@ -399,6 +412,7 @@ function autoCategorize(quiet) {
       const a = L.acct[t.acct]; if (t.cat || t.transferAcct || (t.splits && t.splits.length) || !onBudget(a) || !isBankImp(t)) continue;
       if (t.amount > 0 && !isCredit(a)) { t.cat = 'rta'; n++; continue; }
       const cur = L.payee[t.payee]; if (isSelfLabel(t.rawPayee || cur?.name || '')) { t.self = true; continue; }
+      const rc = catForRaw(t.rawPayee); if (rc) { t.cat = rc; t.auto = true; n++; continue; }
       const lp = learnedPayee(cur?.name || '');
       if (lp) { t.payee = lp.id; if (lp.lastCat && L.cat[lp.lastCat]) { t.cat = lp.lastCat; t.auto = true; } n++; continue; }
       // only what YOU chose before for this exact merchant; looser guesses stay as suggestions in the category list

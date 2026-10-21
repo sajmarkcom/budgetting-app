@@ -132,12 +132,14 @@ function dropFutureBankLines() {
   if (fut.length) { A.tx = A.tx.filter(t => !fut.includes(t.id)); scheduleSave(); render(); }
 }
 setTimeout(dropFutureBankLines, 1500);
+setTimeout(() => { try { if (A.plan && !A.plan.learnedCat) { backfillLearnedCat(); scheduleSave(); } } catch (e) { } }, 2500);
 
 /* ---------- click on a category in the register: quick picker, best guesses first ---------- */
 function suggestCats(t) {
   const out = [], add = c => { if (c && c !== '__start' && (c === 'rta' || (L.cat[c] && !L.cat[c].cc && !L.cat[c].hidden)) && !out.includes(c)) out.push(c); };
   const a = L.acct[t.acct]; const y = L.payee[t.payee]; const raw = t.rawPayee || y?.name || '';
   if (t.amount > 0 && onBudget(a) && !isCredit(a)) add('rta');
+  try { if (typeof catForRaw === 'function') add(catForRaw(t.rawPayee)); } catch (e) { }
   try { const g = (typeof learnedPayee === 'function' && learnedPayee(raw)) || (typeof guessPayee === 'function' && guessPayee(raw)); add(g?.lastCat); } catch (e) { }
   add(y?.lastCat);
   // a category whose name appears in the bank label (e.g. “PHARMACIE …” → Santé/Pharmacie)
@@ -209,7 +211,7 @@ Object.assign(ACT, {
   catPickDo: el => {
     const t = A.tx.find(x => x.id === el.dataset.id); const c = el.dataset.c; if (!t) return;
     mutate('Categorized and approved: ' + (c === 'rta' ? 'Ready to Assign' : catName(c)), () => {
-      t.cat = c; t.splits = null; t.approved = true;
+      t.cat = c; t.splits = null; t.approved = true; if (typeof learnCat === 'function') learnCat(t);
       const y = L.payee[t.payee]; if (y && c !== 'rta') y.lastCat = c;
       if (y && t.importId && /^ebp?:/.test(t.importId) && typeof learnKey === 'function') { const k = learnKey(t.rawPayee || y.name); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
     });

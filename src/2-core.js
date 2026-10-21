@@ -422,7 +422,7 @@ function mergePlanPair(l, r) {
     (out.assigned[m] ||= {}); if (v) out.assigned[m][cid] = v; else delete out.assigned[m][cid]; out.au[k] = ru;
   }
   for (const [m, o] of Object.entries(rp.assigned || {})) for (const [cid, v] of Object.entries(o)) { const k = m + '|' + cid; if (!out.au[k] && out.assigned[m]?.[cid] == null) { (out.assigned[m] ||= {})[cid] = v; } }
-  for (const k of ['learned', 'learnedTr']) if (lp[k] || rp[k]) out[k] = newer === rp ? { ...(lp[k] || {}), ...(rp[k] || {}) } : { ...(rp[k] || {}), ...(lp[k] || {}) };
+  for (const k of ['learned', 'learnedTr', 'learnedCat']) if (lp[k] || rp[k]) out[k] = newer === rp ? { ...(lp[k] || {}), ...(rp[k] || {}) } : { ...(rp[k] || {}), ...(lp[k] || {}) };
   out.updatedAt = Math.max(lp.updatedAt || 0, rp.updatedAt || 0);
   return { plan: out, tx: tm.list };
 }
@@ -571,6 +571,7 @@ function saveTx(d) {
     if (y && t.cat && t.cat !== '__start') y.lastCat = t.cat;
     // remember the payee you chose for this bank label: the next payment with a different reference gets it too
     if (y && t.rawPayee && typeof learnKey === 'function') { const k = learnKey(t.rawPayee); if (k) A.plan.learned = { ...(A.plan.learned || {}), [k]: y.name }; }
+    if (typeof learnCat === 'function') learnCat(t);
   }
   if (isNew) A.tx.push(t);
   return t;
