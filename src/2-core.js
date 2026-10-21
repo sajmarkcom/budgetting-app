@@ -12,7 +12,7 @@ const monthOf = iso => iso.slice(0, 7);
 function addMonths(m, n) { let [y, mo] = m.split('-').map(Number); mo += n; y += Math.floor((mo - 1) / 12); mo = ((mo - 1) % 12 + 12) % 12 + 1; return y + '-' + pad(mo); }
 function monthDiff(a, b) { const [ay, am] = a.split('-').map(Number), [by, bm] = b.split('-').map(Number); return (by - ay) * 12 + (bm - am); }
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-const MSHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MSHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 function monthLabel(m, short) { const [y, mo] = m.split('-').map(Number); return short ? MSHORT[mo - 1] + ' ' + String(y).slice(2) : cap(MONTHS[mo - 1]) + ' ' + y; }
@@ -415,6 +415,7 @@ function mergePlanPair(l, r) {
     (out.assigned[m] ||= {}); if (v) out.assigned[m][cid] = v; else delete out.assigned[m][cid]; out.au[k] = ru;
   }
   for (const [m, o] of Object.entries(rp.assigned || {})) for (const [cid, v] of Object.entries(o)) { const k = m + '|' + cid; if (!out.au[k] && out.assigned[m]?.[cid] == null) { (out.assigned[m] ||= {})[cid] = v; } }
+  for (const k of ['learned', 'learnedTr']) if (lp[k] || rp[k]) out[k] = newer === rp ? { ...(lp[k] || {}), ...(rp[k] || {}) } : { ...(rp[k] || {}), ...(lp[k] || {}) };
   out.updatedAt = Math.max(lp.updatedAt || 0, rp.updatedAt || 0);
   return { plan: out, tx: tm.list };
 }

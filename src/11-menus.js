@@ -162,13 +162,18 @@ function catPickList(t, q) {
   q = norm(q || '');
   const sug = q ? [] : suggestCats(t).slice(0, 5);
   const row = c => `<button class="pm-i" data-a="catPickDo" data-c="${c}" data-id="${t.id}"><span class="grow">${esc(c === 'rta' ? 'Inflow: Ready to Assign' : catName(c))}</span>${c !== 'rta' ? `<span class="small muted num">${fmt(catM(monthOf(t.date), c).available)}</span>` : ''}</button>`;
-  let h = sug.length ? `<div class="pm-h">Suggested</div>` + sug.map(row).join('') + msep : '';
+  const raw = t.rawPayee || L.payee[t.payee]?.name || '';
+  const trTo = !q && typeof ownAcctInLabel === 'function' ? ownAcctInLabel(raw, t.acct) : null;
+  const trRow = id => `<button class="pm-i" data-a="catPickTr" data-ac="${id}" data-id="${t.id}"><span class="grow">${t.amount < 0 ? 'Transfer to' : 'Transfer from'} ${esc(L.acct[id].name)}</span><span class="small muted">no category</span></button>`;
+  let h = (trTo ? `<div class="pm-h">Looks like a transfer</div>` + trRow(trTo) + msep : '') + (sug.length ? `<div class="pm-h">Suggested</div>` + sug.map(row).join('') + msep : '');
   for (const g of A.plan.groups) {
     if (g.sys === 'cc') continue;
     const cats = A.plan.cats.filter(c => c.gid === g.id && !c.hidden && (!q || norm(catName(c.id)).includes(q) || norm(g.name).includes(q)));
     if (cats.length) h += `<div class="pm-h">${esc(g.name)}</div>` + cats.map(c => row(c.id)).join('');
   }
   if (!q || 'inflow ready to assign'.includes(q)) h += msep + row('rta');
+  const accs = A.plan.accounts.filter(a => a.id !== t.acct && !a.closed && (!q || norm(a.name).includes(q) || 'transfer'.includes(q) || q.startsWith('transf')));
+  if (accs.length) h += msep + `<div class="pm-h">Transfer (no category)</div>` + accs.map(a => trRow(a.id)).join('');
   return h || '<div class="pm-h">No category found</div>';
 }
 Object.assign(ACT, {
@@ -178,6 +183,17 @@ Object.assign(ACT, {
     const inp = d.querySelector('#catPickQ');
     inp.addEventListener('input', () => { d.querySelector('#catPickL').innerHTML = catPickList(t, inp.value); });
     inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); d.querySelector('#catPickL [data-a=catPickDo]')?.click(); } });
+  },
+  catPickTr: el => {
+    const t = A.tx.find(x => x.id === el.dataset.id); const to = el.dataset.ac; if (!t || !L.acct[to]) return;
+    mutate((t.amount < 0 ? 'Transfer to ' : 'Transfer from ') + L.acct[to].name, () => {
+      // the other side may already be there (imported from that bank or typed by hand); otherwise add it
+      let o = A.tx.find(x => x.acct === to && !x.transferAcct && x.amount === -t.amount && Math.abs(daysBetween(x.date, t.date)) <= 5);
+      if (!o) { o = { id: uid(), acct: to, date: t.date, payee: null, cat: null, memo: t.memo || '', amount: -t.amount, cleared: 'u', flag: null, approved: true }; A.tx.push(o); }
+      t.transferAcct = to; t.transferId = o.id; t.payee = null; t.cat = null; t.splits = null; t.approved = true; t.self = true; delete t.auto;
+      o.transferAcct = t.acct; o.transferId = t.id; o.payee = null; o.cat = null; o.splits = null; o.approved = true;
+      if (t.rawPayee && typeof learnKey === 'function') { const k = learnKey(t.rawPayee); if (k) A.plan.learnedTr = { ...(A.plan.learnedTr || {}), [k]: to }; }
+    });
   },
   catPickDo: el => {
     const t = A.tx.find(x => x.id === el.dataset.id); const c = el.dataset.c; if (!t) return;

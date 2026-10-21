@@ -174,7 +174,7 @@ function ebRow(t) {
 /* free auto-categorisation: tidy the bank's label, then reuse a payee you already have (and its last category) */
 function cleanPayee(raw) {
   // bank labels change at every payment (dates, references, card numbers): keep only the merchant / person
-  let x = ' ' + String(raw || '').replace(/\s+/g, ' ').replace(/\bcomptabilis[ée]e?s?(\s+le)?\b/gi, ' ') + ' ';
+  let x = ' ' + String(raw || '').normalize('NFC').replace(/\s+/g, ' ').replace(/\bcomptabilis[ée]e?s?(\s+le)?\b/gi, ' ') + ' ';
   const m = x.match(/\s(?:DE|POUR)\s?:\s*(.+?)(?=\s(?:ID|MOTIF|REF|DATE|IBAN|BQ|CPT|LIB|LIBELLE|NUM)\s?:|\s\d{2}\s\d{2}\sBQ\s|\sBQ\s|$)/i);
   if (m) x = ' ' + m[1] + ' ';
   else {
@@ -229,7 +229,15 @@ function ownerNames() {
   for (const c of A.plan.bank?.conns || []) for (const x of c.accounts) { const w = norm(x.name || '').replace(/[^\p{L} ]/gu, ' ').split(/\s+/).filter(t => t.length >= 3); if (w.length >= 2 && w.length <= 4) out.add(w.sort().join(' ')); }
   return [...out];
 }
-function isSelfLabel(raw) {
+/* one of your own accounts named in the bank label (e.g. a card top-up “REVOLUT”), or a label you already marked as a transfer */
+function ownAcctInLabel(raw, notAcct) {
+  const k = learnKey(raw || ''); const tr = A.plan.learnedTr?.[k]; if (tr && L.acct[tr] && !L.acct[tr].closed && tr !== notAcct) return tr;
+  const w = new Set(norm(cleanPayee(raw) + ' ' + String(raw || '')).split(/[^\p{L}\p{N}]+/u));
+  const hit = A.plan.accounts.filter(a => a.id !== notAcct && !a.closed && a.type !== 'cash' && norm(a.name).length >= 4 && !/^(cash|especes|epargne|savings|checking|courant|compte|card|carte|loan|pret)$/.test(norm(a.name)) && norm(a.name).split(/[^\p{L}\p{N}]+/u).filter(Boolean).every(x => w.has(x)));
+  return hit.length === 1 ? hit[0].id : null;
+}
+function isSelfLabel(raw, acct) {
+  if (acct && ownAcctInLabel(raw, acct)) return true;
   const own = ownerNames(); if (!own.length) return false;
   const w = new Set(norm(cleanPayee(raw) + ' ' + String(raw || '')).replace(/[^\p{L} ]/gu, ' ').split(/\s+/));
   return own.some(n => n.split(' ').every(t => w.has(t)));
@@ -250,8 +258,14 @@ function linkCardDebits() {
   return n;
 }
 /* money you moved between your own accounts: link both bank lines as one transfer */
-function pairSelfTransfers() {
+function fixBankPayees() {
   let n = 0;
+  for (const t of A.tx) { const y = L.payee[t.payee]; if (y && t.rawPayee && /comptabilis/i.test(y.name)) { const c = cleanPayee(t.rawPayee); if (c && !/comptabilis/i.test(c)) { t.payee = getPayee(c).id; n++; } } }
+  for (const t of A.tx) if (t.self === undefined && !t.transferAcct && !t.approved && (!t.cat || t.auto) && t.rawPayee && isBankImp(t) && ownAcctInLabel(t.rawPayee, t.acct)) { t.self = true; t.cat = null; t.auto = false; n++; }
+  return n;
+}
+function pairSelfTransfers() {
+  let n = 0; try { fixBankPayees(); } catch (e) { }
   const cand = A.tx.filter(t => t.self && !t.transferAcct && !t.approved);
   for (const t of cand) {
     if (t.transferAcct) continue;
@@ -328,7 +342,7 @@ function importRows(acct, rows, from) {
     let match = existing.find(t => !isBankImp(t) && !t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (!match && !r.pending) { const pair = findPair(existing.filter(t => !isBankImp(t) && !used.has(t.id)), r); if (pair) { used.add(pair[1].id); pair[1].importId = key + '#2'; match = pair[0]; } }
     if (match) { used.add(match.id); match.importId = key; if (r.pending) { match.pend = true; pendSeen.add(key); } else if (match.cleared === 'u') match.cleared = 'c'; nm++; continue; }
-    const self = !r.pending && isSelfLabel(r.payee);
+    const self = !r.pending && isSelfLabel(r.payee, acct);
     const ruled = payeeRuleApply(r.payee); const y = self ? getPayee(cleanPayee(r.payee)) : ruled && ruled !== r.payee ? getPayee(ruled) : (learnedPayee(r.payee) || L.payeeByName[(r.payee || '').toLowerCase()] || getPayee(cleanPayee(r.payee)));
     const acc = L.acct[acct]; let cat = !self && y?.lastCat && L.cat[y.lastCat] && onBudget(acc) ? y.lastCat : null;
     if (!cat && !self && r.amount > 0 && onBudget(acc) && !isCredit(acc)) cat = 'rta';
