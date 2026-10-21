@@ -1,3 +1,4 @@
+function savePref(k, v) { try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u[k] = v; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } }
 /* ================= Budget — events & boot ================= */
 const ACT = {
   nav: el => { A.ui.catFilter = null; A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
@@ -6,11 +7,14 @@ const ACT = {
   monthToday: () => { A.month = curMonth(); render(); },
   month: el => { A.month = addMonths(A.month, +el.dataset.d); render(); },
   filter: el => { A.ui.filter = el.dataset.f; if (A.view !== 'plan') A.view = 'plan'; render(); },
-  setCompact: el => { A.ui.compact = el.dataset.v === '1'; try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u.compact = A.ui.compact; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } render._keepScroll = true; render(); },
+  setCompact: el => { A.ui.compact = el.dataset.v === '1'; savePref('compact', A.ui.compact); render._keepScroll = true; render(); },
   toggleEdit: () => { A.ui.edit = !A.ui.edit; render(); },
   toggleEditPlan: () => { A.view = 'plan'; A.ui.edit = true; render(); },
   toggleHidden: () => { A.ui.showHidden = !A.ui.showHidden; render(); },
-  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed, compact: !!A.ui.compact })); } catch (e) { } render._keepScroll = true; render(); },
+  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; savePref('collapsed', A.ui.collapsed); render._keepScroll = true; render(); },
+  collapseAll: () => { const gs = A.plan.groups; const allCol = gs.every(g => A.ui.collapsed[g.id]); A.ui.collapsed = {}; if (!allCol) for (const g of gs) A.ui.collapsed[g.id] = true; savePref('collapsed', A.ui.collapsed); render._keepScroll = true; render(); },
+  inspToggle: () => { A.ui.inspHide = !A.ui.inspHide; savePref('inspHide', A.ui.inspHide); render._keepScroll = true; render(); },
+  inspFold: el => { const k = el.dataset.k; A.ui.inspFold = { ...(A.ui.inspFold || {}), [k]: !(A.ui.inspFold || {})[k] }; savePref('inspFold', A.ui.inspFold); render._keepScroll = true; render(); },
   rtaSheet: (el, e) => { if (e.target.closest('.cta')) return; rtaSheet(); },
   assignSheet: (el, e) => { e.stopPropagation(); assignSheet(); },
   fixOver: (el, e) => { e.stopPropagation(); const m = A.month; const c = A.plan.cats.filter(c => !c.cc && !c.hidden && getAssigned(m, c.id) > 0 && catM(m, c.id).available > 0).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0]; if (c) moveSheet(c.id, 'rta', Math.min(-monthData(m).rta, Math.max(0, catM(m, c.id).available)), 'Fix This'); else toast('Nothing to take back this month'); },
@@ -320,7 +324,7 @@ window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;

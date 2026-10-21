@@ -362,6 +362,33 @@ button.li:hover{background:var(--surface-2)}
 .actbtn{border:none; background:transparent; font:inherit; cursor:pointer; padding:4px 6px; border-radius:7px; text-align:right} .actbtn:hover{background:var(--surface-2); color:var(--fg)}
 .catcell{color:inherit; font-weight:inherit; text-align:left; padding:4px 6px; margin:-4px -6px; border-radius:7px} .catcell:hover{background:var(--surface-2)} .catcell.todo{color:var(--warn); font-weight:700}
 body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
+
+/* YNAB-style flat plan table + foldable inspector (desktop) */
+@media (min-width:1024px){
+  .group{background:none; border:none; border-radius:0; margin-top:0; overflow:visible}
+  .ghead{background:var(--surface-2); min-height:36px; padding:2px 14px 2px 6px; border-top:1px solid var(--line); border-radius:0}
+  .ghead .gname{font-size:14px; font-weight:700; font-family:var(--f-body, inherit)}
+  .ghead .gname svg{width:15px; height:15px}
+  .ghead .gsum{font-size:13px; color:var(--fg); font-weight:700}
+  .ghead .gadd{width:22px; height:22px}
+  .cat{min-height:44px; padding:5px 14px 5px 34px; border-top:1px solid var(--line); background:var(--bg)}
+  .cat:hover{background:var(--surface)}
+  .cat .cname{gap:4px}
+  .cat .cname .t{font-size:14px; font-weight:600}
+  .cat .cname .note{font-size:12px}
+  .cat .bar{height:4px}
+  .ass-in{height:30px; font-size:13.5px; border-radius:6px}
+  .pill{height:24px; font-size:13px; padding:0 9px}
+  .colhead{border-bottom:1px solid var(--line); padding:8px 14px 6px 34px}
+  .compact .cat{min-height:34px; padding-block:2px}
+  .insp{padding:12px}
+  .itop{display:flex; justify-content:flex-end; margin-bottom:4px}
+  .ipanel{border-radius:10px; padding:0; margin-bottom:10px; overflow:hidden}
+  .ih{display:flex; width:100%; justify-content:space-between; align-items:center; gap:8px; border:none; background:none; padding:12px 14px; font:inherit; font-weight:800; font-size:14.5px; color:var(--fg); cursor:pointer; text-align:left}
+  .ih > span:first-child{display:flex; align-items:center; gap:8px} .ih svg{width:16px; height:16px}
+  .ich svg{transition:transform .15s} .ich.shut svg{transform:rotate(-90deg)}
+  .ibody{padding:0 14px 12px}
+}
 </style>
 </head><body>
 <div id="app"></div>
@@ -1034,7 +1061,7 @@ function render() {
   else if (A.view === 'reflect') html = viewReflect();
   else if (A.view === 'settings') html = viewSettings();
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
-  const insp = A.view === 'plan' && DESK() ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
+  const insp = A.view === 'plan' && DESK() && !A.ui.inspHide ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
   app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
@@ -1181,6 +1208,8 @@ function viewPlan() {
       <button class="tbtn" data-a="moves">${I.swap} Recent Moves</button>
       <button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${I.edit} ${A.ui.edit ? 'Done' : 'Edit'}</button>
       <span style="flex:1"></span>
+      <button class="tbtn" data-a="collapseAll" title="Collapse or expand all groups">${A.plan.groups.every(g => A.ui.collapsed[g.id]) ? 'Expand all' : 'Collapse all'}</button>
+      ${DESK() ? `<button class="tbtn" data-a="inspToggle" title="${A.ui.inspHide ? 'Show' : 'Hide'} the month summary panel">${A.ui.inspHide ? 'Show summary' : 'Hide summary'}</button>` : ''}
       <span class="viewsw" role="group" aria-label="Row size"><button class="${A.ui.compact ? '' : 'on'}" data-a="setCompact" data-v="0" aria-label="Expanded rows with progress bars">${ico('<rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/>')}</button><button class="${A.ui.compact ? 'on' : ''}" data-a="setCompact" data-v="1" aria-label="Compact rows">${ico('<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>')}</button></span>
     </div>`;
   h += `<div class="colhead"><span class="c-name">Category</span><span class="w-ass">Assigned</span><span class="w-act hide-s">Activity</span><span class="w-av">Available</span></div>`;
@@ -1242,19 +1271,20 @@ function inspector() {
   const opts = autoOptions(m, A.plan.cats.filter(c => !c.hidden));
   const aom = ageOfMoney().at(m === curMonth() ? '9999-12-31' : addMonths(m, 1) + '-00');
   const pct = income ? Math.min(100, Math.round(st.cost / income * 100)) : 0;
-  return `<div class="ipanel"><h3>${cap(mn)}'s Summary</h3>
+  const F = A.ui.inspFold || {};
+  const head = (k, t) => `<button class="ih" data-a="inspFold" data-k="${k}" aria-expanded="${!F[k]}"><span>${t}</span><span class="ich ${F[k] ? 'shut' : ''}">${I.down}</span></button>`;
+  const sec = (k, t, inner) => `<div class="ipanel">${head(k, t)}${F[k] ? '' : `<div class="ibody">${inner}</div>`}</div>`;
+  return `<div class="itop"><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div>` + sec('sum', `${cap(mn)}'s Summary`, `
       <div class="irow"><span>Left Over from Last Month</span><b class="num">${fmt(prevLeft)}</b></div>
       <div class="irow"><span>Assigned in ${cap(mn)}</span><b class="num">${fmt(md.assigned)}</b></div>
       <div class="irow"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div>
       <div class="irow big"><span>Available</span><b class="num">${fmt(md.available)}</b></div>
-      <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div></div>
-    <div class="ipanel"><h3>Cost to Be Me</h3>
+      <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div>`) + sec('cost', 'Cost to Be Me', `
       <div class="irow"><span>${cap(mn)}'s Targets</span><b class="num">${fmt(st.cost)}</b></div>
       <div class="bar ${income && st.cost > income ? 'bad' : ''}" style="margin-top:6px"><i style="width:${income ? pct : 0}%"></i></div>
       ${(() => { const nm = addMonths(m, 1); let nc = 0; for (const c of A.plan.cats) { if (c.hidden) continue; const ti = targetInfo(c, nm); if (ti) nc += ti.need; } return nc > st.cost ? `<div class="hint-box">Next month's targets could increase your total to ${fmt(nc)}</div>` : ''; })()}
-      <div class="irow" style="margin-top:8px"><label for="expInc">Expected Income</label><input id="expInc" class="mini num" inputmode="decimal" value="${income ? fmtIn(income) : ''}" placeholder="0,00" data-set="expectedIncome"></div></div>
-    <div class="ipanel"><h3>${I.wand} Auto-Assign</h3>
-      ${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}</div>`;
+      <div class="irow" style="margin-top:8px"><label for="expInc">Expected Income</label><input id="expInc" class="mini num" inputmode="decimal" value="${income ? fmtIn(income) : ''}" placeholder="0,00" data-set="expectedIncome"></div>`) + sec('auto', `${I.wand} Auto-Assign`, `
+      ${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}`);
 }
 
 /* ---------- ACCOUNTS (mobile list) ---------- */
@@ -3273,6 +3303,7 @@ function autoCategorize(quiet) {
   if (quiet) return n;
   toast(n ? `${n} transaction${n > 1 ? 's' : ''} categorized: check them, then approve` : 'Nothing recognised: categorize a few by hand and the app learns them');
 }
+function savePref(k, v) { try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u[k] = v; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } }
 /* ================= Budget — events & boot ================= */
 const ACT = {
   nav: el => { A.ui.catFilter = null; A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
@@ -3281,11 +3312,14 @@ const ACT = {
   monthToday: () => { A.month = curMonth(); render(); },
   month: el => { A.month = addMonths(A.month, +el.dataset.d); render(); },
   filter: el => { A.ui.filter = el.dataset.f; if (A.view !== 'plan') A.view = 'plan'; render(); },
-  setCompact: el => { A.ui.compact = el.dataset.v === '1'; try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u.compact = A.ui.compact; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } render._keepScroll = true; render(); },
+  setCompact: el => { A.ui.compact = el.dataset.v === '1'; savePref('compact', A.ui.compact); render._keepScroll = true; render(); },
   toggleEdit: () => { A.ui.edit = !A.ui.edit; render(); },
   toggleEditPlan: () => { A.view = 'plan'; A.ui.edit = true; render(); },
   toggleHidden: () => { A.ui.showHidden = !A.ui.showHidden; render(); },
-  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; try { localStorage.setItem('pecule.ui', JSON.stringify({ collapsed: A.ui.collapsed, compact: !!A.ui.compact })); } catch (e) { } render._keepScroll = true; render(); },
+  collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; savePref('collapsed', A.ui.collapsed); render._keepScroll = true; render(); },
+  collapseAll: () => { const gs = A.plan.groups; const allCol = gs.every(g => A.ui.collapsed[g.id]); A.ui.collapsed = {}; if (!allCol) for (const g of gs) A.ui.collapsed[g.id] = true; savePref('collapsed', A.ui.collapsed); render._keepScroll = true; render(); },
+  inspToggle: () => { A.ui.inspHide = !A.ui.inspHide; savePref('inspHide', A.ui.inspHide); render._keepScroll = true; render(); },
+  inspFold: el => { const k = el.dataset.k; A.ui.inspFold = { ...(A.ui.inspFold || {}), [k]: !(A.ui.inspFold || {})[k] }; savePref('inspFold', A.ui.inspFold); render._keepScroll = true; render(); },
   rtaSheet: (el, e) => { if (e.target.closest('.cta')) return; rtaSheet(); },
   assignSheet: (el, e) => { e.stopPropagation(); assignSheet(); },
   fixOver: (el, e) => { e.stopPropagation(); const m = A.month; const c = A.plan.cats.filter(c => !c.cc && !c.hidden && getAssigned(m, c.id) > 0 && catM(m, c.id).available > 0).sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0]; if (c) moveSheet(c.id, 'rta', Math.min(-monthData(m).rta, Math.max(0, catM(m, c.id).available)), 'Fix This'); else toast('Nothing to take back this month'); },
@@ -3595,7 +3629,7 @@ window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;

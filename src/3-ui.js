@@ -60,7 +60,7 @@ function render() {
   else if (A.view === 'reflect') html = viewReflect();
   else if (A.view === 'settings') html = viewSettings();
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
-  const insp = A.view === 'plan' && DESK() ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
+  const insp = A.view === 'plan' && DESK() && !A.ui.inspHide ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
   app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
@@ -207,6 +207,8 @@ function viewPlan() {
       <button class="tbtn" data-a="moves">${I.swap} Recent Moves</button>
       <button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${I.edit} ${A.ui.edit ? 'Done' : 'Edit'}</button>
       <span style="flex:1"></span>
+      <button class="tbtn" data-a="collapseAll" title="Collapse or expand all groups">${A.plan.groups.every(g => A.ui.collapsed[g.id]) ? 'Expand all' : 'Collapse all'}</button>
+      ${DESK() ? `<button class="tbtn" data-a="inspToggle" title="${A.ui.inspHide ? 'Show' : 'Hide'} the month summary panel">${A.ui.inspHide ? 'Show summary' : 'Hide summary'}</button>` : ''}
       <span class="viewsw" role="group" aria-label="Row size"><button class="${A.ui.compact ? '' : 'on'}" data-a="setCompact" data-v="0" aria-label="Expanded rows with progress bars">${ico('<rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/>')}</button><button class="${A.ui.compact ? 'on' : ''}" data-a="setCompact" data-v="1" aria-label="Compact rows">${ico('<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>')}</button></span>
     </div>`;
   h += `<div class="colhead"><span class="c-name">Category</span><span class="w-ass">Assigned</span><span class="w-act hide-s">Activity</span><span class="w-av">Available</span></div>`;
@@ -268,19 +270,20 @@ function inspector() {
   const opts = autoOptions(m, A.plan.cats.filter(c => !c.hidden));
   const aom = ageOfMoney().at(m === curMonth() ? '9999-12-31' : addMonths(m, 1) + '-00');
   const pct = income ? Math.min(100, Math.round(st.cost / income * 100)) : 0;
-  return `<div class="ipanel"><h3>${cap(mn)}'s Summary</h3>
+  const F = A.ui.inspFold || {};
+  const head = (k, t) => `<button class="ih" data-a="inspFold" data-k="${k}" aria-expanded="${!F[k]}"><span>${t}</span><span class="ich ${F[k] ? 'shut' : ''}">${I.down}</span></button>`;
+  const sec = (k, t, inner) => `<div class="ipanel">${head(k, t)}${F[k] ? '' : `<div class="ibody">${inner}</div>`}</div>`;
+  return `<div class="itop"><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div>` + sec('sum', `${cap(mn)}'s Summary`, `
       <div class="irow"><span>Left Over from Last Month</span><b class="num">${fmt(prevLeft)}</b></div>
       <div class="irow"><span>Assigned in ${cap(mn)}</span><b class="num">${fmt(md.assigned)}</b></div>
       <div class="irow"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div>
       <div class="irow big"><span>Available</span><b class="num">${fmt(md.available)}</b></div>
-      <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div></div>
-    <div class="ipanel"><h3>Cost to Be Me</h3>
+      <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div>`) + sec('cost', 'Cost to Be Me', `
       <div class="irow"><span>${cap(mn)}'s Targets</span><b class="num">${fmt(st.cost)}</b></div>
       <div class="bar ${income && st.cost > income ? 'bad' : ''}" style="margin-top:6px"><i style="width:${income ? pct : 0}%"></i></div>
       ${(() => { const nm = addMonths(m, 1); let nc = 0; for (const c of A.plan.cats) { if (c.hidden) continue; const ti = targetInfo(c, nm); if (ti) nc += ti.need; } return nc > st.cost ? `<div class="hint-box">Next month's targets could increase your total to ${fmt(nc)}</div>` : ''; })()}
-      <div class="irow" style="margin-top:8px"><label for="expInc">Expected Income</label><input id="expInc" class="mini num" inputmode="decimal" value="${income ? fmtIn(income) : ''}" placeholder="0,00" data-set="expectedIncome"></div></div>
-    <div class="ipanel"><h3>${I.wand} Auto-Assign</h3>
-      ${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}</div>`;
+      <div class="irow" style="margin-top:8px"><label for="expInc">Expected Income</label><input id="expInc" class="mini num" inputmode="decimal" value="${income ? fmtIn(income) : ''}" placeholder="0,00" data-set="expectedIncome"></div>`) + sec('auto', `${I.wand} Auto-Assign`, `
+      ${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}`);
 }
 
 /* ---------- ACCOUNTS (mobile list) ---------- */

@@ -359,4 +359,31 @@ button.li:hover{background:var(--surface-2)}
 .actbtn{border:none; background:transparent; font:inherit; cursor:pointer; padding:4px 6px; border-radius:7px; text-align:right} .actbtn:hover{background:var(--surface-2); color:var(--fg)}
 .catcell{color:inherit; font-weight:inherit; text-align:left; padding:4px 6px; margin:-4px -6px; border-radius:7px} .catcell:hover{background:var(--surface-2)} .catcell.todo{color:var(--warn); font-weight:700}
 body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
+
+/* YNAB-style flat plan table + foldable inspector (desktop) */
+@media (min-width:1024px){
+  .group{background:none; border:none; border-radius:0; margin-top:0; overflow:visible}
+  .ghead{background:var(--surface-2); min-height:36px; padding:2px 14px 2px 6px; border-top:1px solid var(--line); border-radius:0}
+  .ghead .gname{font-size:14px; font-weight:700; font-family:var(--f-body, inherit)}
+  .ghead .gname svg{width:15px; height:15px}
+  .ghead .gsum{font-size:13px; color:var(--fg); font-weight:700}
+  .ghead .gadd{width:22px; height:22px}
+  .cat{min-height:44px; padding:5px 14px 5px 34px; border-top:1px solid var(--line); background:var(--bg)}
+  .cat:hover{background:var(--surface)}
+  .cat .cname{gap:4px}
+  .cat .cname .t{font-size:14px; font-weight:600}
+  .cat .cname .note{font-size:12px}
+  .cat .bar{height:4px}
+  .ass-in{height:30px; font-size:13.5px; border-radius:6px}
+  .pill{height:24px; font-size:13px; padding:0 9px}
+  .colhead{border-bottom:1px solid var(--line); padding:8px 14px 6px 34px}
+  .compact .cat{min-height:34px; padding-block:2px}
+  .insp{padding:12px}
+  .itop{display:flex; justify-content:flex-end; margin-bottom:4px}
+  .ipanel{border-radius:10px; padding:0; margin-bottom:10px; overflow:hidden}
+  .ih{display:flex; width:100%; justify-content:space-between; align-items:center; gap:8px; border:none; background:none; padding:12px 14px; font:inherit; font-weight:800; font-size:14.5px; color:var(--fg); cursor:pointer; text-align:left}
+  .ih > span:first-child{display:flex; align-items:center; gap:8px} .ih svg{width:16px; height:16px}
+  .ich svg{transition:transform .15s} .ich.shut svg{transform:rotate(-90deg)}
+  .ibody{padding:0 14px 12px}
+}
 </style>
