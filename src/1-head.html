@@ -365,6 +365,9 @@ kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(
 body.nocolor .pill.bad::before{content:'▼ '} body.nocolor .pill.credit::before{content:'◆ '}
 body.nocolor .amt-bad, body.nocolor .amt-warn{text-decoration:underline dotted} body.nocolor .bar.bad > i{background-image:repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.5) 4px 6px)}
 .rnav{display:flex; align-items:center; gap:8px; margin:8px 0 4px; flex-wrap:wrap} .rnav strong{min-width:140px; text-align:center}
+.rtable th.sortable{position:relative; padding:0} .sortb{all:unset; display:flex; align-items:center; gap:4px; width:100%; box-sizing:border-box; padding:10px; cursor:pointer; font:inherit; color:inherit; text-transform:inherit; letter-spacing:inherit}
+.rtable th.r .sortb{justify-content:flex-end} .sarr{font-size:10px; opacity:.35} .rtable th.on .sarr{opacity:1; color:var(--accent)} .rtable th.sortable:hover .sarr{opacity:.8}
+.colgrip{position:absolute; right:0; top:6px; bottom:6px; width:6px; cursor:col-resize; border-right:2px solid transparent} .colgrip:hover, body.colresize .colgrip{border-right-color:var(--accent)} body.colresize{cursor:col-resize; user-select:none}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}

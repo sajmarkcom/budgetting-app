@@ -299,6 +299,7 @@ document.addEventListener('change', e => {
   if (el.dataset.c === 'bkSearch') { bankListRender(el.value); return; }
   if (el.dataset.c === 'ynFile' && el.files.length) { ynFiles([...el.files]); return; }
   if (el.dataset.c === 'restore' && el.files[0]) { restoreFile(el.files[0]); el.value = ''; return; }
+  if (el.dataset.c === 'selAll') { const ids = regList().slice(0, A.ui.regLimit || 150).map(t => t.id); if (el.checked) ids.forEach(id => A.ui.selected.add(id)); else A.ui.selected.clear(); render._keepScroll = true; render(); return; }
   if (el.dataset.c === 'selTx') { if (el.checked) A.ui.selected.add(el.dataset.id); else A.ui.selected.delete(el.dataset.id); $('#actionbar').innerHTML = A.ui.selected.size ? actionBar() : ''; return; }
 });
 $('#fab').addEventListener('click', () => txSheet(null));
@@ -329,7 +330,7 @@ window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.pendCol) A.ui.pendCol = true; if (u.balStyle) A.ui.balStyle = u.balStyle; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.pendCol) A.ui.pendCol = true; if (u.balStyle) A.ui.balStyle = u.balStyle; if (u.sort) A.ui.sort = u.sort; if (u.colW) A.ui.colW = u.colW; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;

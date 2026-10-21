@@ -68,7 +68,7 @@ function render() {
   </div>`;
   const showFab = !DESK() && (A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
   $('#fab').hidden = !showFab;
-  if (A.ui.select && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
+  if (selOn() && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
 }
 const navBtn = (v, l, icn) => `<button data-a="nav" data-v="${v}" class="${A.view === v ? 'on' : ''}" aria-current="${A.view === v ? 'page' : 'false'}">${icn}<span>${l}</span></button>`;
 function topBar(title, sub, left = '', right = '') {
@@ -347,7 +347,9 @@ function regList() {
   if (!rv.rec) list = list.filter(t => t.cleared !== 'r');
   if (A.ui.catFilter) { const { cid, m } = A.ui.catFilter; list = list.filter(t => monthOf(t.date) === m && txLines(t).some(l => l.cat === cid)); }
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
-  return list.sort((a, b) => a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1);
+  const so = A.ui.sort || { k: 'date', d: -1 }, byDate = (a, b) => a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1;
+  const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag || '' }[so.k];
+  return list.sort((a, b) => { if (key) { const x = key(a), y = key(b); if (x !== y) return (x < y ? -1 : 1) * so.d; } return byDate(a, b) * (key ? -1 : so.d); });
 }
 function txCatLabel(t) {
   const a = L.acct[t.acct];
@@ -454,7 +456,7 @@ function viewRegister() {
   const bdup = all || !bankAcctOf(id) ? [] : bankDupes(id);
   if (bdup.length) bk0 = `<div class="banner warn" style="margin-top:8px">${I.info}<span>${bdup.length} bank transaction${bdup.length > 1 ? 's were' : ' was'} imported twice (they were already here from YNAB or typed by hand)</span><button class="btn sm" data-a="bankDupMerge" data-id="${id}">Merge</button></div>` + (bk0 || '');
   h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>${bk0 || ''}`;
-  if (!all && ACCT[a.type]?.grp === 'loan') h += loanPanel(a);
+  if (!all && ACCT[a.type]?.grp === 'loan') { try { h += loanPanel(a); } catch (e) { console.warn('loan panel', e); } }
   const dups = all ? [] : cardDups(id);
   if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;
   h += `<div class="toolbar">
@@ -464,7 +466,7 @@ function viewRegister() {
     ${!all && isDebt(a) && ACCT[a.type]?.grp !== 'loan' ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
     ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
     ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year' })[regView().range] : ''}</button>` : ''}
-    <button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>
+    ${desk ? `<button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button><button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>` : `<button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>`}
   </div>`;
   h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
   const rf = (f, l) => `<button class="chip ${A.ui.regFilter === f ? 'on' : ''}" data-a="regFilter" data-f="${f}">${l}</button>`;
@@ -488,9 +490,9 @@ function viewRegister() {
     const lim = A.ui.regLimit || 150;
     if (desk) {
       const rv = regView(), showBal = rv.bal && !all;
-      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}${rv.flags ? '<th></th>' : ''}${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
+      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${selOn() ? `<th style="width:28px"><input type="checkbox" class="chk" data-c="selAll" aria-label="Check all" ${list.length && list.slice(0, lim).every(t => A.ui.selected.has(t.id)) ? 'checked' : ''}></th>` : ''}${rv.flags ? '<th></th>' : ''}${all ? sth('acct', 'Account') : ''}${sth('date', 'Date')}${sth('payee', 'Payee')}${sth('cat', 'Category')}${sth('memo', 'Memo')}${sth('out', 'Outflow', 'r')}${sth('in', 'Inflow', 'r')}${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
       if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
-      const cols = (A.ui.select ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
+      const cols = (selOn() ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
       const rowOf = t => A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
       const pend = list.filter(t => t.pend), rest = list.filter(t => !t.pend);
       if (pend.length) { h += `<tr class="pend-h"><td colspan="${cols}"><button class="cellbtn" data-a="pendToggle">${A.ui.pendCol ? I.right : I.down} Pending Transactions <span class="muted">(${pend.length})</span></button></td></tr>`; if (!A.ui.pendCol) for (const t of pend) h += rowOf(t); }
@@ -515,7 +517,7 @@ function clrBtn(t) {
 function txTr(t, all, runBal) {
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
   return `<tr data-tid="${t.id}" data-a="txEdit" data-id="${t.id}" class="rowclick ${t.approved === false ? 'unapproved' : ''}">
-    ${A.ui.select ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
+    ${selOn() ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
     ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
@@ -562,7 +564,7 @@ function loanPanel(a) {
   const step = b => Math.max(0, b + Math.round(b * r) - P);
   // original schedule: like the bank's amortization table — flat while repayments are deferred, then the fixed monthly payment
   const fp = past.findIndex((x, k) => k && x[1] < past[k - 1][1] - (P ? P / 2 : 0));
-  const orig = []; if (P > 0) { let b = past[0][1]; for (let m = first, k = 0; k < 600 && b > 0; m = addMonths(m, 1), k++) { if (fp > 0 && k >= fp) b = step(b); orig.push([m, b]); } if (b <= 0) orig.push([addMonths(orig[orig.length - 1][0], 1), 0]); }
+  const orig = []; if (P > 0) { let b = past[0][1]; for (let m = first, k = 0; k < 600 && b > 0; m = addMonths(m, 1), k++) { if (fp > 0 && k >= fp) b = step(b); orig.push([m, b]); } if (b <= 0 && orig.length) orig.push([addMonths(orig[orig.length - 1][0], 1), 0]); }
   const bal = past[past.length - 1][1];
   const fut = []; if (P > 0 && bal > 0 && P > Math.round(bal * r)) { let b = bal; for (let m = cur, k = 0; k < 600; m = addMonths(m, 1), k++) { fut.push([m, b]); if (b <= 0) break; b = step(b); } }
   // a month's payment is made during that month (like YNAB): the loan is paid off in the month of the last payment
@@ -615,10 +617,10 @@ function inlRow(t, all, showBal, rv) {
   const a = L.acct[acct], tb = t?.transferAcct ? L.acct[t.transferAcct] : null;
   const catOff = !onBudget(a) || (tb && onBudget(tb));
   const out = t && t.amount < 0 ? fmtIn(-t.amount) : '', inn = t && t.amount > 0 ? fmtIn(t.amount) : '';
-  const cols = (A.ui.select ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
+  const cols = (selOn() ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
   const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="Transfer : ${esc(x.name)}">`).join('');
   return `<tr class="inl" data-inl="${t ? t.id : 'new'}">
-    ${A.ui.select ? '<td></td>' : ''}${rv.flags ? `<td style="width:10px">${t?.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>` : ''}
+    ${selOn() ? '<td></td>' : ''}${rv.flags ? `<td style="width:10px">${t?.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>` : ''}
     ${all ? `<td><select class="in inl-in" id="inlAcct">${A.plan.accounts.filter(x => !x.closed).map(x => `<option value="${x.id}" ${x.id === acct ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></td>` : `<input type="hidden" id="inlAcct" value="${acct}">`}
     <td><input class="in inl-in" type="date" id="inlDate" value="${t ? t.date : (A.ui.inl.date || todayISO())}"></td>
     <td><input class="in inl-in" id="inlPayee" list="inlPayees" value="${esc(tr)}" placeholder="Payee" autocomplete="off"><datalist id="inlPayees">${pl}</datalist></td>
@@ -631,3 +633,11 @@ function inlRow(t, all, showBal, rv) {
     <button class="btn sm" data-a="inlMore" title="Split, flag, repeat…">More…</button><span style="flex:1"></span>
     <button class="btn sm" data-a="inlCancel">Cancel</button>${t ? '' : `<button class="btn sm" data-a="inlSave" data-again="1">Save and add another</button>`}<button class="btn sm pri" data-a="inlSave">Save</button></div></td></tr>`;
 }
+
+/* sortable register columns (click a header, click again to reverse), like YNAB */
+function sth(k, label, cls = '') {
+  const so = A.ui.sort || { k: 'date', d: -1 }, on = so.k === k;
+  return `<th class="${cls} sortable ${on ? 'on' : ''}" data-col="${k}" style="${(A.ui.colW || {})[k] ? `width:${A.ui.colW[k]}px` : ''}"><button class="sortb" data-a="regSort" data-k="${k}" aria-label="Sort by ${label}">${label}<span class="sarr">${on ? (so.d > 0 ? '▲' : '▼') : '▾'}</span></button><span class="colgrip" data-grip="${k}" aria-hidden="true"></span></th>`;
+}
+
+const selOn = () => A.ui.select || (DESK() && A.view !== 'plan' && A.view !== 'reflect' && A.view !== 'settings');

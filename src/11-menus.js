@@ -463,3 +463,12 @@ document.addEventListener('change', e => { const el = e.target; if (el.dataset?.
 Object.assign(ACT, { dispBal: el => { A.ui.balStyle = el.dataset.v || ''; savePref('balStyle', A.ui.balStyle); render._keepScroll = true; render(); ACT.displayOpts(); } });
 document.addEventListener('change', e => { if (e.target.dataset?.c !== 'dispNoColor') return; document.body.classList.toggle('nocolor', e.target.checked); try { localStorage.setItem('budget.nocolor', e.target.checked ? '1' : ''); } catch (x) { } });
 try { if (localStorage.getItem('budget.nocolor')) document.body.classList.add('nocolor'); } catch (e) { }
+
+Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || { k: 'date', d: -1 }; A.ui.sort = so.k === k ? { k, d: -so.d } : { k, d: k === 'date' || k === 'out' || k === 'in' ? -1 : 1 }; savePref('sort', A.ui.sort); render._keepScroll = true; render(); } });
+// resize register columns by dragging the header edge (widths are remembered)
+{
+  let g = null;
+  document.addEventListener('pointerdown', e => { const h = e.target.closest?.('[data-grip]'); if (!h) return; e.preventDefault(); e.stopPropagation(); const th = h.closest('th'); g = { k: h.dataset.grip, x: e.clientX, w: th.getBoundingClientRect().width, th }; document.body.classList.add('colresize'); });
+  document.addEventListener('pointermove', e => { if (!g) return; const w = Math.max(60, Math.round(g.w + e.clientX - g.x)); g.th.style.width = w + 'px'; g.nw = w; });
+  document.addEventListener('pointerup', () => { if (!g) return; if (g.nw) { A.ui.colW = { ...(A.ui.colW || {}), [g.k]: g.nw }; savePref('colW', A.ui.colW); } g = null; document.body.classList.remove('colresize'); });
+}
