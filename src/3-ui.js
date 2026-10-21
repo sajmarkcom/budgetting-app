@@ -170,14 +170,14 @@ function viewPlan() {
     h = `<div class="dhead wrap"><div class="row">
         <button class="ibtn round" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>
         <div><h1 class="dmonth">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
-        <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button></div>
+        <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}</div>
       <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
         ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
       <span></span></div>`;
   } else {
     h = topBar(monthLabel(m, false, true), esc(p.name),
       `<button class="ibtn" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>`,
-      `<button class="ibtn" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>`);
+      `<button class="ibtn" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}`);
     h += `<div class="wrap"><button class="rta ${rtaCls}" data-a="rtaSheet">
       <div><div class="lbl">${rtaLbl}</div><div class="amt num">${fmt(rta)}</div></div>
       ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : `<span class="cta" data-a="assignSheet">Auto-Assign</span>`}

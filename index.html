@@ -604,14 +604,17 @@ function calc(toMonth) {
     prevCashOver = M.cashOver;
     res.months[m] = M; prev = M;
   }
-  // RTA shown for a month also subtracts money already assigned in months after it — but only future months:
-  // in a past month, later months were funded by income that came after it (otherwise every old month shows a huge negative)
-  const ms = Object.keys(res.months), cur = curMonth();
-  for (const m of ms) {
-    const lim = m > cur ? m : cur;
-    let future = 0; for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > lim) future += v;
-    res.months[m].future = future;
-    res.months[m].rta = res.months[m].rtaBase - future;
+  // Ready to Assign for a month = money left at the end of that month that no later month relied on (like YNAB):
+  // the lowest cumulative balance from that month onwards, money assigned beyond the last computed month included.
+  // Current/future months: money assigned in later months reduces it. Past months: they don't show later months' assignments.
+  const ms = Object.keys(res.months).sort();
+  let tail = Infinity;
+  for (let i = ms.length - 1; i >= 0; i--) {
+    const m = ms[i];
+    let after = 0; if (i === ms.length - 1) for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > m) after += v;
+    tail = Math.min(tail, res.months[m].rtaBase - after);
+    res.months[m].future = res.months[m].rtaBase - tail;
+    res.months[m].rta = tail;
   }
   _calc = res; _calcV = A.calcV; _calcTo = want;
   return res;
@@ -1129,14 +1132,14 @@ function viewPlan() {
     h = `<div class="dhead wrap"><div class="row">
         <button class="ibtn round" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>
         <div><h1 class="dmonth">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
-        <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button></div>
+        <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}</div>
       <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
         ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
       <span></span></div>`;
   } else {
     h = topBar(monthLabel(m, false, true), esc(p.name),
       `<button class="ibtn" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>`,
-      `<button class="ibtn" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>`);
+      `<button class="ibtn" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}`);
     h += `<div class="wrap"><button class="rta ${rtaCls}" data-a="rtaSheet">
       <div><div class="lbl">${rtaLbl}</div><div class="amt num">${fmt(rta)}</div></div>
       ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : `<span class="cta" data-a="assignSheet">Auto-Assign</span>`}
@@ -3220,6 +3223,7 @@ const ACT = {
   nav: el => { A.ui.catFilter = null; A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
   undo: () => undo(), redo: () => redo(),
   closeSheet: () => closeSheet(),
+  monthToday: () => { A.month = curMonth(); render(); },
   month: el => { A.month = addMonths(A.month, +el.dataset.d); render(); },
   filter: el => { A.ui.filter = el.dataset.f; if (A.view !== 'plan') A.view = 'plan'; render(); },
   setCompact: el => { A.ui.compact = el.dataset.v === '1'; try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u.compact = A.ui.compact; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } render._keepScroll = true; render(); },
