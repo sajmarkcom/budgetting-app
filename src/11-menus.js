@@ -316,3 +316,18 @@ document.addEventListener('keydown', e => {
   else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') { const s = $('#regSearch'); if (s) { e.preventDefault(); s.focus(); } }
   else if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && A.view === 'plan') { e.preventDefault(); ACT.collapseAll(); }
 });
+
+/* loan: Update Balance (like YNAB) — the bank's figure includes interest; the gap is recorded as an interest adjustment */
+Object.assign(ACT, {
+  loanUpd: el => {
+    const id = el.dataset.id, cur = -balances()[id].working;
+    openSheet('Update Balance', `<p class="small muted" style="margin:0">Enter the remaining balance shown by your bank. The difference is recorded as interest.</p><input id="luAmt" class="bigamt in-amt" inputmode="decimal" value="${fmtIn(cur)}" aria-label="Remaining balance">`,
+      `<button class="btn pri block" data-a="loanUpdDo" data-id="${id}">Update</button>`, { focus: '#luAmt' });
+  },
+  loanUpdDo: el => {
+    const id = el.dataset.id, v = evalExpr($("#luAmt").value); if (v == null) return;
+    const diff = -Math.abs(v) - balances()[id].working; if (!diff) return closeSheet();
+    mutate('Balance updated', () => A.tx.push({ id: uid(), acct: id, date: todayISO(), payee: getPayee('Balance adjustment (interest)').id, cat: '__start', memo: '', amount: diff, cleared: 'c', flag: null, approved: true }));
+    closeSheet();
+  },
+});

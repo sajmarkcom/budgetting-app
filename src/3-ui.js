@@ -431,10 +431,14 @@ function viewRegister() {
   if (!all && !a) { A.acct = null; return viewAccounts(); }
   const b = balances();
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
-  let h = topBar(all ? 'All Accounts' : esc(a.name), all ? 'Budget accounts' : ACCT[a.type].label,
+  const ago = d => { const n = daysBetween(d, todayISO()); return n < 1 ? 'today' : n < 31 ? n + ' day' + (n > 1 ? 's' : '') + ' ago' : n < 365 ? Math.round(n / 30) + ' month' + (Math.round(n / 30) > 1 ? 's' : '') + ' ago' : Math.round(n / 365) + ' year' + (Math.round(n / 365) > 1 ? 's' : '') + ' ago'; };
+  const sub2 = all ? 'Budget accounts' : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
+  let h = topBar(all ? 'All Accounts' : esc(a.name), sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
     all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
+  { const un = (all ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id)).filter(t => t.approved === false).length;
+    if (un && A.ui.regFilter !== 'unapproved') h += `<div class="banner info" style="margin-top:8px">${I.info}<span>${un} new transaction${un > 1 ? 's' : ''} to approve or categorize</span><button class="btn sm pri" data-a="regFilter" data-f="unapproved">View</button></div>`; }
   let bk0 = all ? null : bankBalLine(id, bal);
   const bdup = all || !bankAcctOf(id) ? [] : bankDupes(id);
   if (bdup.length) bk0 = `<div class="banner warn" style="margin-top:8px">${I.info}<span>${bdup.length} bank transaction${bdup.length > 1 ? 's were' : ' was'} imported twice (they were already here from YNAB or typed by hand)</span><button class="btn sm" data-a="bankDupMerge" data-id="${id}">Merge</button></div>` + (bk0 || '');
@@ -562,7 +566,7 @@ function loanPanel(a) {
   const stat = (v, l) => `<div><span class="num">${v}</span><small>${l}</small></div>`;
   const yrs = Math.floor(n / 12), mos = n % 12;
   return `<div class="balbar loan-stats">${stat(fmt(bal), 'Remaining Balance')}${stat((a.rate || 0).toLocaleString('fr-FR') + '%', 'Interest Rate')}${stat(P ? fmt(P) : '—', 'Minimum Payment')}${stat(payoff ? MSHORT[+payoff.slice(5, 7) - 1] + ' ' + payoff.slice(0, 4) : '—', 'Payoff Date')}</div>
-  <div class="card loan-card"><div class="loan-h"><strong>Your Loan's Progress</strong><button class="btn sm" data-a="loanPlanner" data-id="${a.id}">Open Payoff Simulator</button></div>
+  <div class="card loan-card"><div class="loan-h"><strong>Your Loan's Progress</strong><span class="row" style="gap:8px"><button class="btn sm" data-a="loanUpd" data-id="${a.id}">Update Balance</button><button class="btn sm" data-a="loanPlanner" data-id="${a.id}">Open Payoff Simulator</button></span></div>
     <div class="small muted">Balance Remaining</div><div class="loan-big num">${fmt(bal)} <span class="muted" style="font-size:15px">(${pct.toLocaleString('fr-FR')}%)</span></div>
     <div class="loan-chart" data-loan='${esc(JSON.stringify({ W, L0, R, T, B, H, first, span, top, past, orig, fut }))}'><svg viewBox="0 0 ${W} ${H}" class="loan-svg" role="img" aria-label="Loan balance over time">${grid}<path d="${area}" class="lg-area"/><path d="${path(past)}" class="lg-past"/>${orig.length ? `<path d="${path(orig)}" class="lg-orig"/>` : ''}${fut.length ? `<path d="${path(fut)}" class="lg-fut"/>` : ''}${xl}<g class="lg-hov"></g></svg><div class="lg-tip" hidden></div></div>
     <div class="loan-leg small"><span><i class="lk past"></i>Past Balance</span>${orig.length ? '<span><i class="lk orig"></i>Original Payment Schedule</span>' : ''}${fut.length ? '<span><i class="lk fut"></i>Current Track</span>' : ''}</div>
