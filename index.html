@@ -1330,8 +1330,12 @@ async function diffSheet(acctId, bankV) {
   try {
     const from = addDays(todayISO(), -60), rows = []; let ck = null, guard = 0;
     do { const r = await bk('tx', { uid: x.uid, from, ...(ck ? { ck } : {}) }); for (const t of r.transactions || []) rows.push(ebRow(t)); ck = r.continuation_key || null; } while (ck && guard++ < 20);
-    const booked = rows.filter(r => !r.pending && r.date && r.amount && r.date >= from);
-    const here = A.tx.filter(t => t.acct === acctId && !t.pend && t.date >= from);
+    // deferred card: its pending lines count in the bank balance, and lines bought before the account's starting balance are already in it
+    const isCard = Object.values(deferredCards()).some(l => l.includes(acctId));
+    const sb = A.tx.find(t => t.acct === acctId && L.payee[t.payee]?.name === 'Starting Balance'); const start = isCard && sb ? sb.date : '';
+    const opDate = r => { const m = String(r.payee || '').match(/CARTE\s+X\d+\s+(?:REMBT\s+|TRANSF\s+)?(\d{2})\/(\d{2})/i); if (!m) return r.date; const y = +r.date.slice(0, 4) - (+m[2] > +r.date.slice(5, 7) ? 1 : 0); return `${y}-${m[2]}-${m[1]}`; };
+    const booked = rows.filter(r => (isCard || !r.pending) && r.date && r.amount && r.date >= from && (!start || opDate(r) > start));
+    const here = A.tx.filter(t => t.acct === acctId && (isCard || !t.pend) && t.date >= from && t !== sb);
     const used = new Set(), missing = [];
     for (const r of booked) {
       const key = r.fitid ? 'eb:' + r.fitid : null;
@@ -1342,7 +1346,7 @@ async function diffSheet(acctId, bankV) {
     }
     const extra = here.filter(t => !used.has(t.id));
     const sum = l => l.reduce((s, t) => s + t.amount, 0);
-    const appV = balances()[acctId].working - sum(A.tx.filter(t => t.acct === acctId && t.pend));
+    const appV = balances()[acctId].working - (isCard ? 0 : sum(A.tx.filter(t => t.acct === acctId && t.pend)));
     const bankBefore = bankV - sum(booked), appBefore = appV - sum(here);
     A.ui.diffMissing = missing; A.ui.diffAcct = acctId;
     const row = t => `<button class="li" data-a="txEdit" data-id="${t.id}"><span class="grow"><strong>${esc(payeeName(t) || '—')}</strong><div class="small muted">${esc(fmtDate(t.date))}${t.transferAcct ? ' · transfer' : ''}${t.cat ? ' · ' + esc(catName(t.cat)) : ''}</div></span><span class="num">${fmt(t.amount)}</span></button>`;
@@ -1363,7 +1367,7 @@ async function diffSheet(acctId, bankV) {
       <div class="sec-t"><span>Here, not at the bank (${fmt(sum(extra))})</span></div>
       <p class="small muted" style="margin:0">Not found on your bank account in the last 60 days. Tap one to open it: delete it only if it really is not on your statement.</p>
       <div class="card">${extra.map(row).join('') || '<div class="li muted">None</div>'}</div>
-      ${bankBefore !== appBefore ? `<div class="banner warn">${I.info}<span>Before ${esc(fmtDate(from))} the balances already differ by ${fmt(appBefore - bankBefore)}: that part is older than 60 days (use Reconcile to fix it with one adjustment).</span></div>` : ''}`;
+      ${!isCard && bankBefore !== appBefore ? `<div class="banner warn">${I.info}<span>Before ${esc(fmtDate(from))} the balances already differ by ${fmt(appBefore - bankBefore)}: that part is older than 60 days (use Reconcile to fix it with one adjustment).</span></div>` : ''}`;
     $('.sheet-b') && ($('.sheet-b').innerHTML = body);
   } catch (e) { $('.sheet-b') && ($('.sheet-b').innerHTML = `<div class="banner bad">${I.info}<span>${esc(e.message)}</span></div>`); }
 }
