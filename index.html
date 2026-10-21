@@ -352,6 +352,7 @@ kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(
   .side-open{position:fixed; left:0; bottom:16px; z-index:30; border:1px solid var(--line); border-left:none; background:var(--surface); border-radius:0 10px 10px 0; padding:8px 6px; cursor:pointer} .side-open svg{width:16px; height:16px} }
 .vw-list{max-height:50vh; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:6px 10px} .vw-c{padding-left:26px; font-weight:500}
 /* inline register editing */
+.rtable tr.rowclick{cursor:pointer} .rtable tr.rowclick:hover td{background:var(--surface-2)}
 .rtable tr.inl td{background:var(--accent-soft); border-top:none; padding:4px 6px} .rtable tr.inl:first-child td, .rtable tr.inl[data-inl] td{border-top:1px solid var(--accent)}
 .inl-in{height:30px; padding:0 8px; font-size:13.5px; border-radius:6px; width:100%; min-width:0} .inl-in.r{text-align:right} .rtable tr.inl select.inl-in{padding:0 24px 0 8px; height:30px!important; min-height:0; font-size:13.5px}
 .rtable tr.inl-btns td{padding:6px 10px 10px; border-bottom:1px solid var(--accent)}
@@ -1524,7 +1525,7 @@ function clrBtn(t) {
 }
 function txTr(t, all, runBal) {
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
-  return `<tr data-tid="${t.id}" class="${t.approved === false ? 'unapproved' : ''}">
+  return `<tr data-tid="${t.id}" data-a="txEdit" data-id="${t.id}" class="rowclick ${t.approved === false ? 'unapproved' : ''}">
     ${A.ui.select ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
     ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
@@ -3504,7 +3505,7 @@ const ACT = {
   clr: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t || t.cleared === 'r') { if (t) toast('Reconciled transaction: edit it to unlock'); return; } render._keepScroll = true; mutate(t.cleared === 'u' ? 'Cleared' : 'Uncleared', () => { t.cleared = t.cleared === 'u' ? 'c' : 'u'; }, { silent: true }); },
   approve: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t) return; if (!t.cat && !t.splits && onBudget(L.acct[t.acct]) && !t.transferAcct) { txSheet(t.id); return; } render._keepScroll = true; mutate('Transaction approved', () => { t.approved = true; }, { silent: true }); },
   newTx: () => { closeSheet(); if (DESK() && A.view !== 'plan' && A.acct && $('.rtable')) { A.ui.inl = { id: 'new', acct: A.acct === 'all' ? null : A.acct }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.focus(), 30); return; } txSheet(null); },
-  txEdit: el => { if (DESK() && el.closest && el.closest('.rtable')) { const t = A.tx.find(x => x.id === el.dataset.id); if (t && !(t.splits && t.splits.length)) { A.ui.inl = { id: t.id }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.select(), 30); return; } } txSheet(el.dataset.id); },
+  txEdit: (el, e) => { if (e && e.target && e.target.closest && e.target.closest('input,select,textarea,label,tr.inl')) return; if (DESK() && el.closest && el.closest('.rtable')) { const t = A.tx.find(x => x.id === el.dataset.id); if (t && !(t.splits && t.splits.length)) { A.ui.inl = { id: t.id }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.select(), 30); return; } } txSheet(el.dataset.id); },
   inlCancel: () => { A.ui.inl = null; render._keepScroll = true; render(); },
   inlMore: () => { const i = A.ui.inl; A.ui.inl = null; render._keepScroll = true; render(); i && i.id !== 'new' ? txSheet(i.id) : txSheet(null, { acct: i?.acct || undefined }); },
   inlSave: el => inlSave(el.dataset.again === '1'),
