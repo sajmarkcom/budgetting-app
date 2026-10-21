@@ -339,6 +339,7 @@ button.li:hover{background:var(--surface-2)}
 .pm-h{padding:8px 10px 4px; font-size:12px; font-weight:700; color:var(--muted)}
 .pm-cat{min-width:420px; padding:14px}
 .pm-pick{width:320px; max-height:60vh}
+.actbtn{border:none; background:transparent; font:inherit; cursor:pointer; padding:4px 6px; border-radius:7px; text-align:right} .actbtn:hover{background:var(--surface-2); color:var(--fg)}
 .catcell{color:inherit; font-weight:inherit; text-align:left; padding:4px 6px; margin:-4px -6px; border-radius:7px} .catcell:hover{background:var(--surface-2)} .catcell.todo{color:var(--warn); font-weight:700}
 body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
 </style>
@@ -1199,7 +1200,7 @@ function catRow(c, m) {
       <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="1" aria-label="Move down">${I.down}</button>
       <button class="ibtn" data-a="cHide" data-c="${c.id}" aria-label="${c.hidden ? 'Unhide' : 'Hide'}">${c.hidden ? I.eye : I.eyeoff}</button></div>` : `
     <input class="ass-in w-ass" inputmode="decimal" enterkeyhint="done" aria-label="Assigned to ${esc(c.name)}" data-assign="${c.id}" value="${fmtIn(x.assigned)}">
-    <span class="w-act hide-s num muted act">${fmt(x.activity)}</span>
+    <button class="w-act hide-s num muted act actbtn" data-a="catActivity" data-c="${c.id}" title="See these transactions">${fmt(x.activity)}</button>
     <span class="w-av"><button class="pill ${s.cls}" data-a="pillTap" data-c="${c.id}">${pillIcon}${fmt(x.available)}</button></span>`}
   </div>`;
 }
@@ -1265,6 +1266,7 @@ function regList() {
   else if (f === 'cleared') list = list.filter(t => t.cleared !== 'u');
   else if (f === 'flagged') list = list.filter(t => t.flag);
   else if (f === 'uncat') list = list.filter(t => onBudget(L.acct[t.acct]) && !t.transferAcct && !(t.splits && t.splits.length) && !t.cat);
+  if (A.ui.catFilter) { const { cid, m } = A.ui.catFilter; list = list.filter(t => monthOf(t.date) === m && txLines(t).some(l => l.cat === cid)); }
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
   return list.sort((a, b) => a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1);
 }
@@ -1376,6 +1378,7 @@ function viewRegister() {
   </div>`;
   h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
   const rf = (f, l) => `<button class="chip ${A.ui.regFilter === f ? 'on' : ''}" data-a="regFilter" data-f="${f}">${l}</button>`;
+  if (A.ui.catFilter) h += `<div class="banner info">${I.info}<span>${esc(catName(A.ui.catFilter.cid))} · ${esc(monthLabel(A.ui.catFilter.m))} · ${fmt(regList().reduce((s, t) => s + txLines(t).filter(l => l.cat === A.ui.catFilter.cid).reduce((a, l) => a + l.amount, 0), 0))}</span><button class="btn sm" data-a="catActivityOff">Show all</button></div>`;
   h += `<div class="chips">${rf('all', 'All')}${rf('unapproved', 'Unapproved')}${rf('uncat', 'Category Needed')}${rf('uncleared', 'Uncleared')}${rf('cleared', 'Cleared')}${rf('flagged', 'Flagged')}</div>`;
   const sch = A.plan.scheduled.filter(s => all || s.acct === id || s.transferAcct === id).sort((x, y) => x.next < y.next ? -1 : 1);
   if (sch.length && A.ui.regFilter === 'all' && !A.ui.search) {
@@ -3164,7 +3167,7 @@ function autoCategorize(quiet) {
 }
 /* ================= Budget — events & boot ================= */
 const ACT = {
-  nav: el => { A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
+  nav: el => { A.ui.catFilter = null; A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
   undo: () => undo(), redo: () => redo(),
   closeSheet: () => closeSheet(),
   month: el => { A.month = addMonths(A.month, +el.dataset.d); render(); },
@@ -3237,12 +3240,14 @@ const ACT = {
   acctClose: el => { const a = L.acct[el.dataset.id]; if (!a.closed && balances()[a.id].working !== 0) { toast('The balance must be 0 to close the account'); return; } mutate(a.closed ? 'Account reopened' : 'Account closed', () => { a.closed = !a.closed; }); closeSheet(); },
   acctDelete: el => confirmSheet('Delete Account', 'All its transactions will be deleted. You can undo right after.', 'Delete', 'acctDeleteDo', { id: el.dataset.id }),
   acctDeleteDo: el => { const id = el.dataset.id; mutate('Account deleted', () => { deleteTx(A.tx.filter(t => t.acct === id).map(t => t.id)); A.plan.accounts = A.plan.accounts.filter(a => a.id !== id); A.plan.cats = A.plan.cats.filter(c => c.cc !== id); A.plan.scheduled = A.plan.scheduled.filter(s => s.acct !== id && s.transferAcct !== id); }); closeSheet(); A.acct = null; render(); },
-  openAcctNav: el => { A.view = 'accounts'; A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; A.ui.select = false; A.ui.selected.clear(); render(); },
+  openAcctNav: el => { A.ui.catFilter = null; A.view = 'accounts'; A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; A.ui.select = false; A.ui.selected.clear(); render(); },
   collapseClosed: () => { A.ui.collapsed.s_closed = A.ui.collapsed.s_closed === false ? true : false; render._keepScroll = true; render(); },
   toggleReorder: () => { A.ui.reorder = !A.ui.reorder; render(); },
   aMove: el => { moveAccount(el.dataset.id, +el.dataset.d); },
   openAcct: el => { A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; window.scrollTo(0, 0); render(); },
-  openAll: el => { A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = el.dataset.f; A.ui.search = ''; window.scrollTo(0, 0); render(); },
+  catActivity: el => { A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.catFilter = { cid: el.dataset.c, m: A.month }; window.scrollTo(0, 0); render(); },
+  catActivityOff: () => { A.ui.catFilter = null; render(); },
+  openAll: el => { A.ui.catFilter = null; A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = el.dataset.f; A.ui.search = ''; window.scrollTo(0, 0); render(); },
   backAccts: () => { A.acct = null; A.ui.select = false; A.ui.selected.clear(); render(); },
   regFilter: el => { A.ui.regFilter = el.dataset.f; render(); },
   more: () => { A.ui.regLimit = (A.ui.regLimit || 150) + 300; render._keepScroll = true; render(); },

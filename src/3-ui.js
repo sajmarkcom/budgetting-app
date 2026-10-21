@@ -252,7 +252,7 @@ function catRow(c, m) {
       <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="1" aria-label="Move down">${I.down}</button>
       <button class="ibtn" data-a="cHide" data-c="${c.id}" aria-label="${c.hidden ? 'Unhide' : 'Hide'}">${c.hidden ? I.eye : I.eyeoff}</button></div>` : `
     <input class="ass-in w-ass" inputmode="decimal" enterkeyhint="done" aria-label="Assigned to ${esc(c.name)}" data-assign="${c.id}" value="${fmtIn(x.assigned)}">
-    <span class="w-act hide-s num muted act">${fmt(x.activity)}</span>
+    <button class="w-act hide-s num muted act actbtn" data-a="catActivity" data-c="${c.id}" title="See these transactions">${fmt(x.activity)}</button>
     <span class="w-av"><button class="pill ${s.cls}" data-a="pillTap" data-c="${c.id}">${pillIcon}${fmt(x.available)}</button></span>`}
   </div>`;
 }
@@ -318,6 +318,7 @@ function regList() {
   else if (f === 'cleared') list = list.filter(t => t.cleared !== 'u');
   else if (f === 'flagged') list = list.filter(t => t.flag);
   else if (f === 'uncat') list = list.filter(t => onBudget(L.acct[t.acct]) && !t.transferAcct && !(t.splits && t.splits.length) && !t.cat);
+  if (A.ui.catFilter) { const { cid, m } = A.ui.catFilter; list = list.filter(t => monthOf(t.date) === m && txLines(t).some(l => l.cat === cid)); }
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
   return list.sort((a, b) => a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1);
 }
@@ -429,6 +430,7 @@ function viewRegister() {
   </div>`;
   h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
   const rf = (f, l) => `<button class="chip ${A.ui.regFilter === f ? 'on' : ''}" data-a="regFilter" data-f="${f}">${l}</button>`;
+  if (A.ui.catFilter) h += `<div class="banner info">${I.info}<span>${esc(catName(A.ui.catFilter.cid))} · ${esc(monthLabel(A.ui.catFilter.m))} · ${fmt(regList().reduce((s, t) => s + txLines(t).filter(l => l.cat === A.ui.catFilter.cid).reduce((a, l) => a + l.amount, 0), 0))}</span><button class="btn sm" data-a="catActivityOff">Show all</button></div>`;
   h += `<div class="chips">${rf('all', 'All')}${rf('unapproved', 'Unapproved')}${rf('uncat', 'Category Needed')}${rf('uncleared', 'Uncleared')}${rf('cleared', 'Cleared')}${rf('flagged', 'Flagged')}</div>`;
   const sch = A.plan.scheduled.filter(s => all || s.acct === id || s.transferAcct === id).sort((x, y) => x.next < y.next ? -1 : 1);
   if (sch.length && A.ui.regFilter === 'all' && !A.ui.search) {
