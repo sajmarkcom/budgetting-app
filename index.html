@@ -356,6 +356,18 @@ kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(
 .rtable tr.inl td{background:var(--accent-soft); border-top:none; padding:4px 6px} .rtable tr.inl:first-child td, .rtable tr.inl[data-inl] td{border-top:1px solid var(--accent)}
 .inl-in{height:30px; padding:0 8px; font-size:13.5px; border-radius:6px; width:100%; min-width:0} .inl-in.r{text-align:right} .rtable tr.inl select.inl-in{padding:0 24px 0 8px; height:30px!important; min-height:0; font-size:13.5px}
 .rtable tr.inl-btns td{padding:6px 10px 10px; border-bottom:1px solid var(--accent)}
+/* parity round 3 */
+.pend-h td{background:var(--surface-2); font-weight:700; font-size:13px} .pend-h svg{width:14px; height:14px; vertical-align:-2px}
+.star{border:none; background:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0 2px; vertical-align:2px} .star.on{color:var(--warn)} .star-s{color:var(--warn); font-size:11px}
+.mpick{border:none; background:none; color:inherit; font:inherit; cursor:pointer; padding:0} .mpick .caret{font-size:14px; color:var(--muted)}
+.mp{padding:6px; width:260px} .mp-h{display:flex; justify-content:space-between; align-items:center; padding:2px 2px 8px} .mp-g{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+.mp-m{border:1px solid var(--line); background:var(--surface); border-radius:8px; padding:8px 0; font-weight:700; cursor:pointer; color:var(--fg)} .mp-m.on{background:var(--accent); color:#fff; border-color:var(--accent)} .mp-m.today{outline:2px solid var(--accent-soft)}
+.cchk{width:15px; height:15px; margin:0 8px 0 -22px; flex:none; accent-color:var(--accent); cursor:pointer} .ghead .cchk{margin:0 4px 0 6px}
+.cat.dragging{opacity:.4} .cat.drop-before{box-shadow:inset 0 3px 0 var(--accent)} .ghead.drop-into{box-shadow:inset 0 -3px 0 var(--accent)}
+/* differentiate without color: shapes on top of colors */
+body.nocolor .pill.bad::before{content:'▼ '} body.nocolor .pill.credit::before{content:'◆ '}
+body.nocolor .amt-bad, body.nocolor .amt-warn{text-decoration:underline dotted} body.nocolor .bar.bad > i{background-image:repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.5) 4px 6px)}
+.rnav{display:flex; align-items:center; gap:8px; margin:8px 0 4px; flex-wrap:wrap} .rnav strong{min-width:140px; text-align:center}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -456,7 +468,8 @@ function fmt(c, opts = {}) {
   const key = cur + (opts.short ? 's' : '');
   if (_nfKey !== key) { _nf = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: opts.short ? 0 : 2, maximumFractionDigits: opts.short ? 0 : 2 }); _nfKey = key; }
   const v = (c || 0) / 100;
-  return _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
+  const s = _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
+  return A.ui?.balStyle === 'paren' && v < 0 ? '(' + s.replace('−', '') + ')' : s;
 }
 const fmtS = c => fmt(c, { short: true });
 const fmtIn = c => (c / 100).toFixed(2).replace('.', ',');
@@ -966,6 +979,7 @@ function saveTx(d) {
   const t = isNew ? { id: uid() } : A.tx.find(x => x.id === d.id);
   if (!t) return;
   const old = { ...t };
+  if ('img' in d) t.img = d.img || null;
   t.acct = d.acct; t.date = d.date; t.memo = d.memo || ''; t.amount = d.amount; t.cleared = d.cleared || 'u'; t.flag = d.flag || null; t.approved = d.approved !== false;
   const a = L.acct[t.acct];
   if (d.transferAcct) {
@@ -1116,11 +1130,11 @@ function sidebar() {
   let h = `<div class="side-head"><button class="side-plan" data-a="planMenu" aria-haspopup="menu"><span class="logo" aria-hidden="true">${I.plan}</span><span class="grow"><strong class="ellip" style="display:block">${esc(p.name)}</strong><span class="small muted syncState">${syncLabel()}</span></span></button></div>
     <nav class="side-nav">${sideNav('plan', 'Plan', I.plan)}${sideNav('reflect', 'Reflect', I.reflect)}${sideNav('tx', 'All Accounts', I.bank)}${sideNav('settings', 'Settings', I.gear)}</nav>`;
   for (const [key, label, fn] of SECTIONS) {
-    const list = p.accounts.filter(a => !a.closed && fn(a)); if (!list.length) continue;
+    const list = p.accounts.filter(a => !a.closed && fn(a)).sort((x, y) => (y.star ? 1 : 0) - (x.star ? 1 : 0)); if (!list.length) continue;
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${a.star ? '<span class="star-s">★</span> ' : ''}${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
       const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); const ov = a.overdraft || 0, cls = after >= 0 ? '' : after < -ov ? 'amt-bad' : 'amt-warn';
         h += `<div class="side-after" title="Balance once the deferred card is debited${ov ? ' · authorized overdraft ' + fmt(ov) : ''}"><span class="grow ellip">after card${after < 0 && ov ? ' · ' + (after < -ov ? 'over limit' : fmt(ov + after) + ' left') : ''}</span><span class="num ${cls}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
@@ -1192,7 +1206,7 @@ function viewPlan() {
   if (desk) {
     h = `<div class="dhead wrap"><div class="row">
         <button class="ibtn round" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>
-        <div><h1 class="dmonth">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
+        <div><h1 class="dmonth"><button class="mpick" data-a="monthPick" aria-label="Choose a month">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)} <span class="caret">▾</span></button></h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
         <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}</div>
       <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
         ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
@@ -1248,7 +1262,7 @@ function viewPlan() {
     let ga = 0, gact = 0, gav = 0; for (const c of cats) { const x = catM(m, c.id); ga += x.assigned; gact += x.activity; gav += x.available; }
     h += `<section class="group" aria-label="${esc(g.name)}">
       <div class="ghead ${col ? 'collapsed' : ''}">
-        <button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}">${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>${!g.sys && !A.ui.edit ? `<button class="gadd" data-a="catNew" data-g="${g.id}" aria-label="Add a category to ${esc(g.name)}">${I.plus}</button>` : ''}<span style="flex:1"></span>
+        ${DESK() ? `<input type="checkbox" class="cchk" data-c="grpChk" data-g="${g.id}" ${cats.length && cats.every(c => (A.ui.selCats || new Set()).has(c.id)) ? 'checked' : ''} aria-label="Select all in ${esc(g.name)}">` : ''}<button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}" ${DESK() ? `data-gdrop="${g.id}"` : ''}>${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>${!g.sys && !A.ui.edit ? `<button class="gadd" data-a="catNew" data-g="${g.id}" aria-label="Add a category to ${esc(g.name)}">${I.plus}</button>` : ''}<span style="flex:1"></span>
         ${A.ui.edit && !g.sys ? `<div class="editrow">
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="-1" aria-label="Move group up">${I.up}</button>
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="1" aria-label="Move group down">${I.down}</button>
@@ -1274,7 +1288,8 @@ function catRow(c, m) {
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
   const note = targetText(c, m, s);
   const pillIcon = s.cls === 'good' && ti ? '✓ ' : s.cls === 'warn' ? '! ' : '';
-  return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id ? 'sel' : ''}" data-a="catSel" data-c="${c.id}">
+  const ck = (A.ui.selCats || new Set()).has(c.id);
+  return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id || ck ? 'sel' : ''}" data-a="catSel" data-c="${c.id}" ${DESK() && !c.cc ? `draggable="true" data-cdrag="${c.id}"` : ''}>${DESK() ? `<input type="checkbox" class="cchk" data-c="catChk" data-id="${c.id}" ${ck ? 'checked' : ''} aria-label="Select ${esc(c.name)}">` : ''}
     <div class="cname">
       <span class="ctop"><button class="t" data-a="catSheet" data-c="${c.id}">${c.emoji ? esc(c.emoji) + ' ' : ''}${esc(c.name)}${c.hidden ? ' (hidden)' : ''}</button>${note ? `<span class="note">${esc(note)}</span>` : ''}</span>
       ${ti && ti.total > 0 && !A.ui.noBars ? `<span class="bar ${barCls}"><i style="width:${Math.round(ti.pct * 100)}%"></i></span>` : ''}
@@ -1289,6 +1304,13 @@ function catRow(c, m) {
   </div>`;
 }
 function inspector() {
+  if (A.ui.selCats && A.ui.selCats.size) {
+    const m = A.month, cs = A.plan.cats.filter(c => A.ui.selCats.has(c.id)); let as = 0, ac = 0, av = 0; for (const c of cs) { const x = catM(m, c.id); as += x.assigned; ac += x.activity; av += x.available; }
+    const opts = autoOptions(m, cs);
+    return `<div class="itop cat-top"><strong class="grow">${cs.length} categor${cs.length > 1 ? 'ies' : 'y'} selected</strong><button class="btn sm" data-a="catChkNone">Clear</button></div>
+      <div class="ipanel"><div class="ibody" style="padding-top:12px"><div class="irow"><span>Assigned</span><b class="num">${fmt(as)}</b></div><div class="irow"><span>Activity</span><b class="num">${fmt(ac)}</b></div><div class="irow big"><span>Available</span><b class="num">${fmt(av)}</b></div></div></div>
+      <div class="ipanel"><div class="ih" style="cursor:default"><span>${I.wand} Auto-Assign</span></div><div class="ibody">${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" data-sel="1" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}</div></div>`;
+  }
   if (A.ui.selCat && L.cat[A.ui.selCat]) { const c = L.cat[A.ui.selCat]; return `<div class="itop cat-top"><button class="ibtn" data-a="catDesel" aria-label="Back to the month summary" title="Back to the month summary">${I.left}</button><strong class="grow ellip">${esc(catName(c.id))}</strong><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div><div class="icat">${catSheet(c.id, true)}</div>`; }
   const m = A.month, md = monthData(m), st = planStats(m), mn = MONTHS[+m.slice(5, 7) - 1];
   const prevLeft = md.rtaBase - md.income + md.assigned + md.prevCashOver;
@@ -1459,7 +1481,7 @@ function viewRegister() {
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
   const ago = d => { const n = daysBetween(d, todayISO()); return n < 1 ? 'today' : n < 31 ? n + ' day' + (n > 1 ? 's' : '') + ' ago' : n < 365 ? Math.round(n / 30) + ' month' + (Math.round(n / 30) > 1 ? 's' : '') + ' ago' : Math.round(n / 365) + ' year' + (Math.round(n / 365) > 1 ? 's' : '') + ' ago'; };
   const sub2 = all ? 'Budget accounts' : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
-  let h = topBar(all ? 'All Accounts' : esc(a.name), sub2,
+  let h = topBar(all ? 'All Accounts' : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
     all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
@@ -1505,7 +1527,11 @@ function viewRegister() {
       const rv = regView(), showBal = rv.bal && !all;
       h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}${rv.flags ? '<th></th>' : ''}${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
       if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
-      for (const t of list.slice(0, lim)) h += A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
+      const cols = (A.ui.select ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
+      const rowOf = t => A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
+      const pend = list.filter(t => t.pend), rest = list.filter(t => !t.pend);
+      if (pend.length) { h += `<tr class="pend-h"><td colspan="${cols}"><button class="cellbtn" data-a="pendToggle">${A.ui.pendCol ? I.right : I.down} Pending Transactions <span class="muted">(${pend.length})</span></button></td></tr>`; if (!A.ui.pendCol) for (const t of pend) h += rowOf(t); }
+      for (const t of rest.slice(0, lim)) h += rowOf(t);
       h += `</tbody></table></div>`;
     } else {
       let day = '';
@@ -1530,7 +1556,7 @@ function txTr(t, all, runBal) {
     ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
-    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button></td>
+    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button>${t.img ? ` <button class="cellbtn" data-a="imgView" data-id="${t.id}" title="View image" aria-label="View image">📎</button>` : ''}${t.matched ? ` <span class="muted" title="Matched with an imported bank transaction">⇄</span>` : ''}</td>
     <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${t.cat && L.cat[t.cat] && L.group[L.cat[t.cat].gid] && !(t.splits && t.splits.length) ? `<span class="muted">${esc(L.group[L.cat[t.cat].gid].name)}: </span>` : ''}${esc(cl || '—')}</button>`}</td>
     <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
     <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>
@@ -1829,7 +1855,7 @@ let D = null;
 function txSheet(id, preset = {}) {
   if (id) {
     const t = A.tx.find(x => x.id === id); if (!t) return;
-    D = { id: t.id, acct: t.acct, date: t.date, payee: L.payee[t.payee]?.name || '', cat: t.cat || '', memo: t.memo || '', amount: Math.abs(t.amount), kind: t.transferAcct ? 'transfer' : t.amount > 0 ? 'in' : 'out', cleared: t.cleared, flag: t.flag, transferAcct: t.transferAcct || '', approved: t.approved !== false, splits: t.splits ? t.splits.map(s => ({ ...s, amount: Math.abs(s.amount), sign: Math.sign(s.amount) || -1 })) : null, freq: 'never' };
+    D = { img: t.img || null, id: t.id, acct: t.acct, date: t.date, payee: L.payee[t.payee]?.name || '', cat: t.cat || '', memo: t.memo || '', amount: Math.abs(t.amount), kind: t.transferAcct ? 'transfer' : t.amount > 0 ? 'in' : 'out', cleared: t.cleared, flag: t.flag, transferAcct: t.transferAcct || '', approved: t.approved !== false, splits: t.splits ? t.splits.map(s => ({ ...s, amount: Math.abs(s.amount), sign: Math.sign(s.amount) || -1 })) : null, freq: 'never' };
     if (t.transferAcct && t.amount > 0) { // show transfer from the outgoing side
       const pair = A.tx.find(x => x.id === t.transferId);
       if (pair) { D.id = pair.id; D.acct = pair.acct; D.transferAcct = pair.transferAcct; D.cat = pair.cat || t.cat || ''; D.pairCat = t.cat || ''; }
@@ -1870,6 +1896,7 @@ function txBody() {
     <div class="grid2"><div class="field"><label for="txDate">Date</label><input id="txDate" class="in" type="date" value="${D.date}" data-d="date"></div>
       <div class="field"><label for="txFreq">Repeat</label><select id="txFreq" class="in" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <div class="field"><label for="txMemo">Memo</label><input id="txMemo" class="in" value="${esc(D.memo)}" data-d="memo" placeholder="Optional"></div>
+    <div class="field"><span class="lbl2">Image</span>${D.img ? `<div class="row" style="gap:8px; align-items:center"><img src="${D.img}" alt="Receipt" style="max-height:90px; border-radius:8px; border:1px solid var(--line)"><button class="btn sm" data-a="imgRemove">Remove</button></div>` : `<label class="btn sm" style="width:max-content">📎 Add Image<input type="file" accept="image/*" data-c="imgPick" hidden></label>`}</div>
     <div class="field"><span class="lbl2">Flag</span><div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div></div>
     <label class="switch"><span><strong>Cleared</strong><div class="small muted">Shows on your bank statement</div></span><input type="checkbox" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''}></label>
     ${D.id ? `<button class="btn danger block" data-a="txDelete">${I.trash} Delete Transaction</button>` : ''}`;
@@ -2187,14 +2214,15 @@ const COLORS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'];
 function periodRange() {
   const cm = curMonth(), p = A.ui.period;
   const map = { m: [cm, cm], lm: [addMonths(cm, -1), addMonths(cm, -1)], '3m': [addMonths(cm, -2), cm], '6m': [addMonths(cm, -5), cm], ytd: [cm.slice(0, 4) + '-01', cm], '12m': [addMonths(cm, -11), cm], all: [calc().minM, cm] };
-  return map[p] || map['3m'];
+  const r = map[p] || map['3m']; const off = A.ui.reflOff || 0; if (!off || p === 'all') return r;
+  const len = monthDiff(r[0], r[1]) + 1; return [addMonths(r[0], off * len), addMonths(r[1], off * len)];
 }
 function spendingLines(from, to) {
   const out = [];
   for (const t of A.tx) {
     const a = L.acct[t.acct]; if (!onBudget(a)) continue; const m = monthOf(t.date); if (m < from || m > to) continue;
     if (t.transferAcct && onBudget(L.acct[t.transferAcct])) continue;
-    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat]) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount }); }
+    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat] || (A.ui.reflEx && A.ui.reflEx.has(ln.cat))) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount }); }
   }
   return out;
 }
@@ -2241,6 +2269,9 @@ function viewReflect() {
   h += `<div class="wrap"><div class="chips">${tabs.map(([k, l]) => `<button class="chip ${A.ui.reflect === k ? 'on' : ''}" data-a="reflectTab" data-k="${k}">${l}</button>`).join('')}</div>
     <div class="chips" style="padding-top:2px">${per.map(([k, l]) => `<button class="chip ${A.ui.period === k ? 'on' : ''}" data-a="period" data-k="${k}">${l}</button>`).join('')}</div>`;
   const [from, to] = periodRange(); const months = monthsBetween(from, to);
+  { const lab = from === to ? monthLabel(from) : `${MSHORT[+from.slice(5, 7) - 1]} ${from.slice(0, 4)} – ${MSHORT[+to.slice(5, 7) - 1]} ${to.slice(0, 4)}`; const ex = A.ui.reflEx ? A.ui.reflEx.size : 0;
+    h += `<div class="rnav"><button class="ibtn" data-a="reflNav" data-d="-1" aria-label="Previous date range" ${A.ui.period === 'all' ? 'disabled' : ''}>${I.left}</button><strong>${lab}</strong><button class="ibtn" data-a="reflNav" data-d="1" aria-label="Next date range" ${A.ui.period === 'all' || to >= curMonth() ? 'disabled' : ''}>${I.right}</button>
+      <span style="flex:1"></span><button class="tbtn" data-a="reflCats">${ex ? A.plan.cats.filter(c => !c.hidden).length - ex + ' Categories' : 'All Categories'} ▾</button><button class="tbtn" data-a="reflExport">${I.download} Export</button></div>`; }
   const R = A.ui.reflect;
   if (R === 'spending') {
     const lines = spendingLines(from, to); const by = {};
@@ -3448,7 +3479,7 @@ const ACT = {
   },
   moves: () => movesSheet(),
   autoApply: el => {
-    const o = autoOptions(A.month, A.plan.cats.filter(c => !c.hidden)).find(x => x.k === el.dataset.k); if (!o) return;
+    const o = autoOptions(A.month, el.dataset.sel ? A.plan.cats.filter(c => A.ui.selCats?.has(c.id)) : A.plan.cats.filter(c => !c.hidden)).find(x => x.k === el.dataset.k); if (!o) return;
     mutate(o.l, () => { for (const [cid, v] of o.changes) setAssigned(A.month, cid, v); }); closeSheet();
   },
   tMode: el => { const c = L.cat[el.dataset.c]; mutate('Target updated', () => { c.target.mode = el.dataset.v; }, { silent: true }); catSheet(c.id); },
@@ -3588,7 +3619,7 @@ const ACT = {
   ruleAdd: () => { const c = $('#ruleC').value.trim(), p = $('#ruleP').value.trim(); if (!c || !p) return toast('Fill in both fields'); mutate('Rule added', () => A.plan.rules.push({ contains: c, payee: p }), { silent: true }); payeesSheet(); },
   ruleDel: el => { mutate('Rule deleted', () => A.plan.rules.splice(+el.dataset.i, 1), { silent: true }); payeesSheet(); },
   // reflect
-  reflectTab: el => { A.ui.reflect = el.dataset.k; render(); }, period: el => { A.ui.period = el.dataset.k; render(); }, groupBy: el => { A.ui.groupBy = el.dataset.k; render(); },
+  reflectTab: el => { A.ui.reflect = el.dataset.k; render(); }, period: el => { A.ui.period = el.dataset.k; A.ui.reflOff = 0; render(); }, groupBy: el => { A.ui.groupBy = el.dataset.k; render(); },
   // settings
   switchPlan: el => { if (el.dataset.id !== A.plan.id) { localSaveAll(); switchPlan(el.dataset.id); } },
   newPlan: () => openSheet('New Plan', `<div class="field"><label for="npName">Plan name</label><input id="npName" class="in" value="New Plan"></div>`, `<button class="btn pri block" data-a="newPlanDo">Create Plan</button>`, { focus: '#npName' }),
@@ -3737,7 +3768,7 @@ window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.pendCol) A.ui.pendCol = true; if (u.balStyle) A.ui.balStyle = u.balStyle; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;
@@ -3814,8 +3845,11 @@ document.addEventListener('contextmenu', e => {
     mi('Ⓒ', 'Mark as Cleared', 'ctxClear', 'data-v="c"', 'C', !uncl) +
     mi('Ⓒ', 'Mark as Uncleared', 'ctxClear', 'data-v="u"', 'C', !cl) +
     msep +
-    mi(I.file, 'Duplicate', 'ctxDup', '', '', false) +
-    mi(I.repeat, 'Make Repeating', 'ctxRepeat', '', '', n !== 1) +
+    mi(I.file, 'Duplicate', 'ctxDup', '', 'shift D', false) +
+    mi(I.repeat, 'Make Repeating', 'ctxRepeat', '', 'shift T', n !== 1) +
+    mi('⇄', 'Match', 'ctxMatch', '', 'M', n !== 2) +
+    mi('⇆', 'Unmatch', 'ctxUnmatch', '', 'shift U', !(n === 1 && ts[0].matched)) +
+    mi('⑂', 'Split', 'ctxSplit', '', 'S', n !== 1) +
     msep +
     mi(I.flag, 'Flag', 'bulk', 'data-k="flag"') +
     mi(I.note, 'Memo…', 'ctxMemo') +
@@ -4063,6 +4097,8 @@ Object.assign(ACT, {
     const opt = (v, l) => `<button class="${t === v ? 'on' : ''}" data-a="dispTheme" data-v="${v}">${l}</button>`;
     openSheet('Display Options', `<div class="field"><span class="lbl2">Theme</span><div class="seg">${opt('light', 'Default')}${opt('dark', 'Dark')}${opt('', 'Match System')}</div></div>
       <div class="field"><span class="lbl2">Progress Bars</span><div class="seg"><button class="${A.ui.noBars ? '' : 'on'}" data-a="dispBars" data-v="0">On</button><button class="${A.ui.noBars ? 'on' : ''}" data-a="dispBars" data-v="1">Off</button></div></div>
+      <div class="field"><span class="lbl2">Balance Style</span><div class="seg"><button class="${A.ui.balStyle === 'paren' ? '' : 'on'}" data-a="dispBal" data-v="">−10,00€</button><button class="${A.ui.balStyle === 'paren' ? 'on' : ''}" data-a="dispBal" data-v="paren">(10,00€)</button></div></div>
+      <label class="pm-chk"><input type="checkbox" data-c="dispNoColor" ${document.body.classList.contains('nocolor') ? 'checked' : ''}> Differentiate Without Color</label>
       <div class="field"><span class="lbl2">Amounts</span><div class="seg"><button class="${document.body.classList.contains('hideamt') ? '' : 'on'}" data-a="dispAmt" data-v="0">Show</button><button class="${document.body.classList.contains('hideamt') ? 'on' : ''}" data-a="dispAmt" data-v="1">Hide</button></div></div>`);
   },
   dispTheme: el => { try { localStorage.setItem('budget.theme', el.dataset.v); } catch (e) { } applyTheme(); ACT.displayOpts(); },
@@ -4132,6 +4168,106 @@ Object.assign(ACT, {
   viewDel: el => { const id = el.dataset.id; mutate('View deleted', () => { A.plan.views = (A.plan.views || []).filter(v => v.id !== id); }); if (A.ui.filter === 'v:' + id) A.ui.filter = 'all'; ACT.viewsManage(); },
 });
 document.addEventListener('change', e => { const g = e.target.dataset?.vwg; if (g) $$(`[data-vwc][data-g="${g}"]`).forEach(i => { i.checked = e.target.checked; }); });
+
+/* ================= YNAB parity, round 3 ================= */
+Object.assign(ACT, {
+  pendToggle: () => { A.ui.pendCol = !A.ui.pendCol; savePref('pendCol', A.ui.pendCol); render._keepScroll = true; render(); },
+  acctStar: el => { const a = L.acct[el.dataset.id]; if (!a) return; mutate(a.star ? 'Unstarred' : 'Starred', () => { a.star = !a.star; }, { silent: true }); },
+  imgView: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t?.img) return; openSheet(payeeName(t) || 'Image', `<img src="${t.img}" alt="Receipt" style="width:100%; border-radius:12px">`, `<button class="btn block" data-a="txEditSheet" data-id="${t.id}">Edit Transaction</button>`); },
+  txEditSheet: el => { closeSheet(); txSheet(el.dataset.id); },
+  imgRemove: () => { D.img = null; refreshSheetBody(txBody()); },
+  // months: jump directly (click on “Oct 2026”)
+  monthPick: (el, e) => {
+    const r = el.getBoundingClientRect(); const y = +(A.ui.mpYear || A.month.slice(0, 4)); A.ui.mpYear = y;
+    popMenu(r.left, r.bottom + 6, `<div class="mp"><div class="mp-h"><button class="ibtn" data-a="mpYear" data-d="-1" data-keep="1" aria-label="Previous year">${I.left}</button><strong>${y}</strong><button class="ibtn" data-a="mpYear" data-d="1" data-keep="1" aria-label="Next year">${I.right}</button></div>
+      <div class="mp-g">${MSHORT.map((n, i) => { const m = y + '-' + String(i + 1).padStart(2, '0'); return `<button class="mp-m ${m === A.month ? 'on' : ''} ${m === curMonth() ? 'today' : ''}" data-a="mpGo" data-m="${m}">${n}</button>`; }).join('')}</div></div>`, 'pm-month');
+  },
+  mpYear: el => { A.ui.mpYear = (+A.ui.mpYear) + (+el.dataset.d); const t = $('.mpick'); closePop(); setTimeout(() => ACT.monthPick(t), 0); },
+  mpGo: el => { A.month = el.dataset.m; A.ui.mpYear = null; render(); },
+  catChkNone: () => { A.ui.selCats = new Set(); render._keepScroll = true; render(); },
+  // manual Match / Unmatch of an imported bank line with a transaction you entered
+  ctxMatch: () => {
+    const ts = ctxTargets(); if (ts.length !== 2) return; const imp = ts.find(t => isBankImp(t)), man = ts.find(t => t !== imp);
+    if (!imp || !man || isBankImp(man) || imp.amount !== man.amount || imp.acct !== man.acct) { toast('Select one imported and one entered transaction with the same account and amount'); return; }
+    mutate('Transactions matched', () => { man.matched = { importId: imp.importId, rawPayee: imp.rawPayee || '', date: imp.date, payee: imp.payee, memo: imp.memo || '', pend: !!imp.pend }; man.importId = imp.importId; man.rawPayee = imp.rawPayee; if (imp.pend) man.pend = true; if (man.cleared === 'u' && !imp.pend) man.cleared = 'c'; man.approved = true; A.tx = A.tx.filter(t => t !== imp); });
+    A.ui.selected.clear();
+  },
+  ctxUnmatch: () => {
+    const t = ctxTargets()[0]; if (!t?.matched) return; const m = t.matched;
+    mutate('Transactions unmatched', () => { A.tx.push({ id: uid(), acct: t.acct, date: m.date, payee: m.payee, cat: null, memo: m.memo, amount: t.amount, cleared: m.pend ? 'u' : 'c', flag: null, approved: false, importId: m.importId, rawPayee: m.rawPayee, ...(m.pend ? { pend: true } : {}) }); t.importId = null; t.rawPayee = null; delete t.pend; delete t.matched; });
+    A.ui.selected.clear();
+  },
+  ctxSplit: () => { const t = ctxTargets()[0]; if (!t) return; closePop(); txSheet(t.id); setTimeout(() => { if (D && !D.splits && ACT.spOn) ACT.spOn(); }, 50); },
+});
+// image picker: shrink the photo so the budget file stays light
+document.addEventListener('change', e => {
+  const el = e.target; if (el.dataset?.c !== 'imgPick' || !el.files?.[0]) return;
+  const f = el.files[0], img = new Image(); img.onload = () => { const s = Math.min(1, 900 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); D.img = c.toDataURL('image/jpeg', 0.6); URL.revokeObjectURL(img.src); refreshSheetBody(txBody()); }; img.src = URL.createObjectURL(f);
+});
+// category checkboxes (multi-select, like YNAB)
+document.addEventListener('change', e => {
+  const el = e.target; const S = A.ui.selCats || (A.ui.selCats = new Set());
+  if (el.dataset?.c === 'catChk') { el.checked ? S.add(el.dataset.id) : S.delete(el.dataset.id); A.ui.selCat = null; render._keepScroll = true; render(); }
+  else if (el.dataset?.c === 'grpChk') { const ids = A.plan.cats.filter(c => c.gid === el.dataset.g && (!c.hidden || A.ui.showHidden)).map(c => c.id); ids.forEach(id => el.checked ? S.add(id) : S.delete(id)); A.ui.selCat = null; render._keepScroll = true; render(); }
+});
+document.addEventListener('click', e => { if (e.target.matches?.('.cchk')) e.stopPropagation(); }, true);
+// drag & drop categories between rows and groups
+{
+  let dragC = null;
+  document.addEventListener('dragstart', e => { const el = e.target.closest?.('[data-cdrag]'); if (!el) return; dragC = el.dataset.cdrag; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragC); } catch (x) { } el.classList.add('dragging'); });
+  document.addEventListener('dragend', () => { dragC = null; $$('.dragging,.drop-before,.drop-into').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-into')); });
+  document.addEventListener('dragover', e => { if (!dragC) return; const row = e.target.closest?.('[data-cdrag]'), gh = e.target.closest?.('.ghead'); if (!row && !gh) return; e.preventDefault(); $$('.drop-before,.drop-into').forEach(x => x.classList.remove('drop-before', 'drop-into')); (row || gh).classList.add(row ? 'drop-before' : 'drop-into'); });
+  document.addEventListener('drop', e => {
+    if (!dragC) return; const row = e.target.closest?.('[data-cdrag]'), gh = e.target.closest?.('.ghead'); if (!row && !gh) return; e.preventDefault();
+    const c = L.cat[dragC]; if (!c) return; const before = row ? row.dataset.cdrag : null; const gid = row ? L.cat[before]?.gid : gh.querySelector('[data-gdrop]')?.dataset.gdrop;
+    if (!gid || before === dragC || L.group[gid]?.sys) return;
+    mutate('Category moved', () => { const cs = A.plan.cats.filter(x => x.id !== dragC); c.gid = gid; let i = before ? cs.findIndex(x => x.id === before) : -1; if (i < 0) { i = cs.length; for (let k = cs.length - 1; k >= 0; k--) if (cs[k].gid === gid) { i = k + 1; break; } } cs.splice(i, 0, c); A.plan.cats = cs; });
+  });
+}
+// account shortcuts on selected transactions (like YNAB): A, C, shift+L, shift+D, K, S, M, shift+U, shift+F then 0-6, shift+T, delete
+{
+  let flagWait = 0;
+  document.addEventListener('keydown', e => {
+    if (e.target.matches?.('input, textarea, select') || $('#scrim') || $('.pmenu') || !A.plan || A.view === 'plan' || A.view === 'reflect' || A.view === 'settings') return;
+    const ts = ctxTargets(); const run = a => { e.preventDefault(); const b = document.createElement('button'); b.dataset.a = a[0]; Object.assign(b.dataset, a[1] || {}); ACT[a[0]](b, e); };
+    if (flagWait && Date.now() - flagWait < 2000 && /^[0-6]$/.test(e.key)) { flagWait = 0; if (ts.length) { e.preventDefault(); const f = e.key === '0' ? null : FLAGS[+e.key - 1][0]; mutate('Flags updated', () => ts.forEach(t => t.flag = f)); } return; }
+    if (e.shiftKey && e.key === 'L') { const un = regList().filter(t => t.approved === false); if (un.length) { e.preventDefault(); mutate(un.length + ' approved', () => un.forEach(t => t.approved = true)); } return; }
+    if (!ts.length) return;
+    if (e.shiftKey && e.key === 'F') { e.preventDefault(); flagWait = Date.now(); toast('Flag: press 1-6 (0 = none)'); }
+    else if (e.shiftKey && e.key === 'D') run(['ctxDup']);
+    else if (e.shiftKey && e.key === 'T' && ts.length === 1) run(['ctxRepeat']);
+    else if (e.shiftKey && e.key === 'U') run(['ctxUnmatch']);
+    else if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'a') run(['bulk', { k: 'approve' }]); else if (k === 'c') run(['ctxClear', { v: ts.some(t => t.cleared === 'u') ? 'c' : 'u' }]);
+      else if (k === 'k') run(['bulk', { k: 'cat' }]); else if (k === 's' && ts.length === 1) run(['ctxSplit']); else if (k === 'm') run(['ctxMatch']);
+      else if (k === 'delete' || k === 'backspace') run(['bulk', { k: 'del' }]);
+    }
+  });
+}
+
+/* Reflect: date range arrows, category filter, export */
+Object.assign(ACT, {
+  reflNav: el => { A.ui.reflOff = Math.min(0, (A.ui.reflOff || 0) + (+el.dataset.d)); render(); },
+  reflCats: el => {
+    const ex = A.ui.reflEx || new Set(), r = el.getBoundingClientRect();
+    popMenu(Math.max(8, r.right - 300), r.bottom + 6, `<div class="pm-form" style="width:300px; max-height:60vh; overflow:auto"><div class="row" style="gap:6px; margin-bottom:6px"><button class="btn sm" data-a="reflCatsAll" data-v="1" data-keep="1">Select All</button><button class="btn sm" data-a="reflCatsAll" data-v="0" data-keep="1">Select None</button></div>
+      ${A.plan.groups.map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden && !c.cc); if (!cs.length) return ''; return `<div class="pm-h" style="padding-left:0">${esc(g.name)}</div>` + cs.map(c => `<label class="pm-chk"><input type="checkbox" data-c="reflCat" data-id="${c.id}" ${ex.has(c.id) ? '' : 'checked'}> ${esc(catName(c.id))}</label>`).join(''); }).join('')}</div>`, 'pm-rcats');
+  },
+  reflCatsAll: el => { A.ui.reflEx = el.dataset.v === '1' ? new Set() : new Set(A.plan.cats.map(c => c.id)); $$('[data-c=reflCat]').forEach(i => { i.checked = el.dataset.v === '1'; }); render._keepScroll = true; render(); },
+  reflExport: () => {
+    const [from, to] = periodRange(); const lines = spendingLines(from, to); const by = {};
+    for (const l of lines) { const k = l.cat + '|' + l.m; by[k] = (by[k] || 0) - l.amount; }
+    const months = monthsBetween(from, to); let csv = 'Category Group;Category;' + months.join(';') + ';Total\n';
+    for (const c of A.plan.cats) { const vals = months.map(m => by[c.id + '|' + m] || 0); const tot = vals.reduce((a, b) => a + b, 0); if (!tot) continue; csv += `"${(L.group[c.gid]?.name || '').replace(/"/g, '""')}";"${catName(c.id).replace(/"/g, '""')}";` + vals.map(v => fmtIn(v)).join(';') + ';' + fmtIn(tot) + '\n'; }
+    saveFile(`reflect-${from}_${to}.csv`, '﻿' + csv, 'text/csv');
+  },
+});
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c !== 'reflCat') return; const ex = A.ui.reflEx || (A.ui.reflEx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); });
+
+Object.assign(ACT, { dispBal: el => { A.ui.balStyle = el.dataset.v || ''; savePref('balStyle', A.ui.balStyle); render._keepScroll = true; render(); ACT.displayOpts(); } });
+document.addEventListener('change', e => { if (e.target.dataset?.c !== 'dispNoColor') return; document.body.classList.toggle('nocolor', e.target.checked); try { localStorage.setItem('budget.nocolor', e.target.checked ? '1' : ''); } catch (x) { } });
+try { if (localStorage.getItem('budget.nocolor')) document.body.classList.add('nocolor'); } catch (e) { }
 </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})</script>
 </body></html>

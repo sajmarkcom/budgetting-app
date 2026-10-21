@@ -172,14 +172,15 @@ const COLORS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8'];
 function periodRange() {
   const cm = curMonth(), p = A.ui.period;
   const map = { m: [cm, cm], lm: [addMonths(cm, -1), addMonths(cm, -1)], '3m': [addMonths(cm, -2), cm], '6m': [addMonths(cm, -5), cm], ytd: [cm.slice(0, 4) + '-01', cm], '12m': [addMonths(cm, -11), cm], all: [calc().minM, cm] };
-  return map[p] || map['3m'];
+  const r = map[p] || map['3m']; const off = A.ui.reflOff || 0; if (!off || p === 'all') return r;
+  const len = monthDiff(r[0], r[1]) + 1; return [addMonths(r[0], off * len), addMonths(r[1], off * len)];
 }
 function spendingLines(from, to) {
   const out = [];
   for (const t of A.tx) {
     const a = L.acct[t.acct]; if (!onBudget(a)) continue; const m = monthOf(t.date); if (m < from || m > to) continue;
     if (t.transferAcct && onBudget(L.acct[t.transferAcct])) continue;
-    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat]) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount }); }
+    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat] || (A.ui.reflEx && A.ui.reflEx.has(ln.cat))) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount }); }
   }
   return out;
 }
@@ -226,6 +227,9 @@ function viewReflect() {
   h += `<div class="wrap"><div class="chips">${tabs.map(([k, l]) => `<button class="chip ${A.ui.reflect === k ? 'on' : ''}" data-a="reflectTab" data-k="${k}">${l}</button>`).join('')}</div>
     <div class="chips" style="padding-top:2px">${per.map(([k, l]) => `<button class="chip ${A.ui.period === k ? 'on' : ''}" data-a="period" data-k="${k}">${l}</button>`).join('')}</div>`;
   const [from, to] = periodRange(); const months = monthsBetween(from, to);
+  { const lab = from === to ? monthLabel(from) : `${MSHORT[+from.slice(5, 7) - 1]} ${from.slice(0, 4)} – ${MSHORT[+to.slice(5, 7) - 1]} ${to.slice(0, 4)}`; const ex = A.ui.reflEx ? A.ui.reflEx.size : 0;
+    h += `<div class="rnav"><button class="ibtn" data-a="reflNav" data-d="-1" aria-label="Previous date range" ${A.ui.period === 'all' ? 'disabled' : ''}>${I.left}</button><strong>${lab}</strong><button class="ibtn" data-a="reflNav" data-d="1" aria-label="Next date range" ${A.ui.period === 'all' || to >= curMonth() ? 'disabled' : ''}>${I.right}</button>
+      <span style="flex:1"></span><button class="tbtn" data-a="reflCats">${ex ? A.plan.cats.filter(c => !c.hidden).length - ex + ' Categories' : 'All Categories'} ▾</button><button class="tbtn" data-a="reflExport">${I.download} Export</button></div>`; }
   const R = A.ui.reflect;
   if (R === 'spending') {
     const lines = spendingLines(from, to); const by = {};

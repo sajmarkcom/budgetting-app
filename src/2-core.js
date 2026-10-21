@@ -39,7 +39,8 @@ function fmt(c, opts = {}) {
   const key = cur + (opts.short ? 's' : '');
   if (_nfKey !== key) { _nf = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: opts.short ? 0 : 2, maximumFractionDigits: opts.short ? 0 : 2 }); _nfKey = key; }
   const v = (c || 0) / 100;
-  return _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
+  const s = _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
+  return A.ui?.balStyle === 'paren' && v < 0 ? '(' + s.replace('−', '') + ')' : s;
 }
 const fmtS = c => fmt(c, { short: true });
 const fmtIn = c => (c / 100).toFixed(2).replace('.', ',');
@@ -549,6 +550,7 @@ function saveTx(d) {
   const t = isNew ? { id: uid() } : A.tx.find(x => x.id === d.id);
   if (!t) return;
   const old = { ...t };
+  if ('img' in d) t.img = d.img || null;
   t.acct = d.acct; t.date = d.date; t.memo = d.memo || ''; t.amount = d.amount; t.cleared = d.cleared || 'u'; t.flag = d.flag || null; t.approved = d.approved !== false;
   const a = L.acct[t.acct];
   if (d.transferAcct) {

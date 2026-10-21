@@ -93,11 +93,11 @@ function sidebar() {
   let h = `<div class="side-head"><button class="side-plan" data-a="planMenu" aria-haspopup="menu"><span class="logo" aria-hidden="true">${I.plan}</span><span class="grow"><strong class="ellip" style="display:block">${esc(p.name)}</strong><span class="small muted syncState">${syncLabel()}</span></span></button></div>
     <nav class="side-nav">${sideNav('plan', 'Plan', I.plan)}${sideNav('reflect', 'Reflect', I.reflect)}${sideNav('tx', 'All Accounts', I.bank)}${sideNav('settings', 'Settings', I.gear)}</nav>`;
   for (const [key, label, fn] of SECTIONS) {
-    const list = p.accounts.filter(a => !a.closed && fn(a)); if (!list.length) continue;
+    const list = p.accounts.filter(a => !a.closed && fn(a)).sort((x, y) => (y.star ? 1 : 0) - (x.star ? 1 : 0)); if (!list.length) continue;
     const col = !!A.ui.collapsed['s_' + key];
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
-    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+    if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${a.star ? '<span class="star-s">★</span> ' : ''}${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
       const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); const ov = a.overdraft || 0, cls = after >= 0 ? '' : after < -ov ? 'amt-bad' : 'amt-warn';
         h += `<div class="side-after" title="Balance once the deferred card is debited${ov ? ' · authorized overdraft ' + fmt(ov) : ''}"><span class="grow ellip">after card${after < 0 && ov ? ' · ' + (after < -ov ? 'over limit' : fmt(ov + after) + ' left') : ''}</span><span class="num ${cls}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
@@ -169,7 +169,7 @@ function viewPlan() {
   if (desk) {
     h = `<div class="dhead wrap"><div class="row">
         <button class="ibtn round" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>
-        <div><h1 class="dmonth">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}</h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
+        <div><h1 class="dmonth"><button class="mpick" data-a="monthPick" aria-label="Choose a month">${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)} <span class="caret">▾</span></button></h1><input class="mnote" value="${esc(p.notes?.[m] || '')}" placeholder="Enter a note…" data-mnote="${m}" aria-label="Month note"></div>
         <button class="ibtn round" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}</div>
       <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
         ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
@@ -225,7 +225,7 @@ function viewPlan() {
     let ga = 0, gact = 0, gav = 0; for (const c of cats) { const x = catM(m, c.id); ga += x.assigned; gact += x.activity; gav += x.available; }
     h += `<section class="group" aria-label="${esc(g.name)}">
       <div class="ghead ${col ? 'collapsed' : ''}">
-        <button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}">${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>${!g.sys && !A.ui.edit ? `<button class="gadd" data-a="catNew" data-g="${g.id}" aria-label="Add a category to ${esc(g.name)}">${I.plus}</button>` : ''}<span style="flex:1"></span>
+        ${DESK() ? `<input type="checkbox" class="cchk" data-c="grpChk" data-g="${g.id}" ${cats.length && cats.every(c => (A.ui.selCats || new Set()).has(c.id)) ? 'checked' : ''} aria-label="Select all in ${esc(g.name)}">` : ''}<button class="gname" data-a="collapse" data-g="${g.id}" aria-expanded="${!col}" ${DESK() ? `data-gdrop="${g.id}"` : ''}>${I.down}<span style="text-align:left; line-height:1.2">${esc(g.name)}${g.hidden ? ' (hidden)' : ''}</span></button>${!g.sys && !A.ui.edit ? `<button class="gadd" data-a="catNew" data-g="${g.id}" aria-label="Add a category to ${esc(g.name)}">${I.plus}</button>` : ''}<span style="flex:1"></span>
         ${A.ui.edit && !g.sys ? `<div class="editrow">
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="-1" aria-label="Move group up">${I.up}</button>
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="1" aria-label="Move group down">${I.down}</button>
@@ -251,7 +251,8 @@ function catRow(c, m) {
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
   const note = targetText(c, m, s);
   const pillIcon = s.cls === 'good' && ti ? '✓ ' : s.cls === 'warn' ? '! ' : '';
-  return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id ? 'sel' : ''}" data-a="catSel" data-c="${c.id}">
+  const ck = (A.ui.selCats || new Set()).has(c.id);
+  return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id || ck ? 'sel' : ''}" data-a="catSel" data-c="${c.id}" ${DESK() && !c.cc ? `draggable="true" data-cdrag="${c.id}"` : ''}>${DESK() ? `<input type="checkbox" class="cchk" data-c="catChk" data-id="${c.id}" ${ck ? 'checked' : ''} aria-label="Select ${esc(c.name)}">` : ''}
     <div class="cname">
       <span class="ctop"><button class="t" data-a="catSheet" data-c="${c.id}">${c.emoji ? esc(c.emoji) + ' ' : ''}${esc(c.name)}${c.hidden ? ' (hidden)' : ''}</button>${note ? `<span class="note">${esc(note)}</span>` : ''}</span>
       ${ti && ti.total > 0 && !A.ui.noBars ? `<span class="bar ${barCls}"><i style="width:${Math.round(ti.pct * 100)}%"></i></span>` : ''}
@@ -266,6 +267,13 @@ function catRow(c, m) {
   </div>`;
 }
 function inspector() {
+  if (A.ui.selCats && A.ui.selCats.size) {
+    const m = A.month, cs = A.plan.cats.filter(c => A.ui.selCats.has(c.id)); let as = 0, ac = 0, av = 0; for (const c of cs) { const x = catM(m, c.id); as += x.assigned; ac += x.activity; av += x.available; }
+    const opts = autoOptions(m, cs);
+    return `<div class="itop cat-top"><strong class="grow">${cs.length} categor${cs.length > 1 ? 'ies' : 'y'} selected</strong><button class="btn sm" data-a="catChkNone">Clear</button></div>
+      <div class="ipanel"><div class="ibody" style="padding-top:12px"><div class="irow"><span>Assigned</span><b class="num">${fmt(as)}</b></div><div class="irow"><span>Activity</span><b class="num">${fmt(ac)}</b></div><div class="irow big"><span>Available</span><b class="num">${fmt(av)}</b></div></div></div>
+      <div class="ipanel"><div class="ih" style="cursor:default"><span>${I.wand} Auto-Assign</span></div><div class="ibody">${opts.map(o => `<button class="aa" data-a="autoApply" data-k="${o.k}" data-sel="1" ${o.changes.length ? '' : 'disabled'}><span>${o.l}</span><b class="num">${fmt(Math.abs(o.delta))}</b></button>`).join('')}</div></div>`;
+  }
   if (A.ui.selCat && L.cat[A.ui.selCat]) { const c = L.cat[A.ui.selCat]; return `<div class="itop cat-top"><button class="ibtn" data-a="catDesel" aria-label="Back to the month summary" title="Back to the month summary">${I.left}</button><strong class="grow ellip">${esc(catName(c.id))}</strong><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div><div class="icat">${catSheet(c.id, true)}</div>`; }
   const m = A.month, md = monthData(m), st = planStats(m), mn = MONTHS[+m.slice(5, 7) - 1];
   const prevLeft = md.rtaBase - md.income + md.assigned + md.prevCashOver;
@@ -436,7 +444,7 @@ function viewRegister() {
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
   const ago = d => { const n = daysBetween(d, todayISO()); return n < 1 ? 'today' : n < 31 ? n + ' day' + (n > 1 ? 's' : '') + ' ago' : n < 365 ? Math.round(n / 30) + ' month' + (Math.round(n / 30) > 1 ? 's' : '') + ' ago' : Math.round(n / 365) + ' year' + (Math.round(n / 365) > 1 ? 's' : '') + ' ago'; };
   const sub2 = all ? 'Budget accounts' : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
-  let h = topBar(all ? 'All Accounts' : esc(a.name), sub2,
+  let h = topBar(all ? 'All Accounts' : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
     all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
@@ -482,7 +490,11 @@ function viewRegister() {
       const rv = regView(), showBal = rv.bal && !all;
       h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}${rv.flags ? '<th></th>' : ''}${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
       if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
-      for (const t of list.slice(0, lim)) h += A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
+      const cols = (A.ui.select ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
+      const rowOf = t => A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
+      const pend = list.filter(t => t.pend), rest = list.filter(t => !t.pend);
+      if (pend.length) { h += `<tr class="pend-h"><td colspan="${cols}"><button class="cellbtn" data-a="pendToggle">${A.ui.pendCol ? I.right : I.down} Pending Transactions <span class="muted">(${pend.length})</span></button></td></tr>`; if (!A.ui.pendCol) for (const t of pend) h += rowOf(t); }
+      for (const t of rest.slice(0, lim)) h += rowOf(t);
       h += `</tbody></table></div>`;
     } else {
       let day = '';
@@ -507,7 +519,7 @@ function txTr(t, all, runBal) {
     ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
-    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button></td>
+    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button>${t.img ? ` <button class="cellbtn" data-a="imgView" data-id="${t.id}" title="View image" aria-label="View image">📎</button>` : ''}${t.matched ? ` <span class="muted" title="Matched with an imported bank transaction">⇄</span>` : ''}</td>
     <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${t.cat && L.cat[t.cat] && L.group[L.cat[t.cat].gid] && !(t.splits && t.splits.length) ? `<span class="muted">${esc(L.group[L.cat[t.cat].gid].name)}: </span>` : ''}${esc(cl || '—')}</button>`}</td>
     <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
     <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>

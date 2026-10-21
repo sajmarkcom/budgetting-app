@@ -185,7 +185,7 @@ let D = null;
 function txSheet(id, preset = {}) {
   if (id) {
     const t = A.tx.find(x => x.id === id); if (!t) return;
-    D = { id: t.id, acct: t.acct, date: t.date, payee: L.payee[t.payee]?.name || '', cat: t.cat || '', memo: t.memo || '', amount: Math.abs(t.amount), kind: t.transferAcct ? 'transfer' : t.amount > 0 ? 'in' : 'out', cleared: t.cleared, flag: t.flag, transferAcct: t.transferAcct || '', approved: t.approved !== false, splits: t.splits ? t.splits.map(s => ({ ...s, amount: Math.abs(s.amount), sign: Math.sign(s.amount) || -1 })) : null, freq: 'never' };
+    D = { img: t.img || null, id: t.id, acct: t.acct, date: t.date, payee: L.payee[t.payee]?.name || '', cat: t.cat || '', memo: t.memo || '', amount: Math.abs(t.amount), kind: t.transferAcct ? 'transfer' : t.amount > 0 ? 'in' : 'out', cleared: t.cleared, flag: t.flag, transferAcct: t.transferAcct || '', approved: t.approved !== false, splits: t.splits ? t.splits.map(s => ({ ...s, amount: Math.abs(s.amount), sign: Math.sign(s.amount) || -1 })) : null, freq: 'never' };
     if (t.transferAcct && t.amount > 0) { // show transfer from the outgoing side
       const pair = A.tx.find(x => x.id === t.transferId);
       if (pair) { D.id = pair.id; D.acct = pair.acct; D.transferAcct = pair.transferAcct; D.cat = pair.cat || t.cat || ''; D.pairCat = t.cat || ''; }
@@ -226,6 +226,7 @@ function txBody() {
     <div class="grid2"><div class="field"><label for="txDate">Date</label><input id="txDate" class="in" type="date" value="${D.date}" data-d="date"></div>
       <div class="field"><label for="txFreq">Repeat</label><select id="txFreq" class="in" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <div class="field"><label for="txMemo">Memo</label><input id="txMemo" class="in" value="${esc(D.memo)}" data-d="memo" placeholder="Optional"></div>
+    <div class="field"><span class="lbl2">Image</span>${D.img ? `<div class="row" style="gap:8px; align-items:center"><img src="${D.img}" alt="Receipt" style="max-height:90px; border-radius:8px; border:1px solid var(--line)"><button class="btn sm" data-a="imgRemove">Remove</button></div>` : `<label class="btn sm" style="width:max-content">📎 Add Image<input type="file" accept="image/*" data-c="imgPick" hidden></label>`}</div>
     <div class="field"><span class="lbl2">Flag</span><div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div></div>
     <label class="switch"><span><strong>Cleared</strong><div class="small muted">Shows on your bank statement</div></span><input type="checkbox" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''}></label>
     ${D.id ? `<button class="btn danger block" data-a="txDelete">${I.trash} Delete Transaction</button>` : ''}`;

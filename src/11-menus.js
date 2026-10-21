@@ -40,8 +40,11 @@ document.addEventListener('contextmenu', e => {
     mi('Ⓒ', 'Mark as Cleared', 'ctxClear', 'data-v="c"', 'C', !uncl) +
     mi('Ⓒ', 'Mark as Uncleared', 'ctxClear', 'data-v="u"', 'C', !cl) +
     msep +
-    mi(I.file, 'Duplicate', 'ctxDup', '', '', false) +
-    mi(I.repeat, 'Make Repeating', 'ctxRepeat', '', '', n !== 1) +
+    mi(I.file, 'Duplicate', 'ctxDup', '', 'shift D', false) +
+    mi(I.repeat, 'Make Repeating', 'ctxRepeat', '', 'shift T', n !== 1) +
+    mi('⇄', 'Match', 'ctxMatch', '', 'M', n !== 2) +
+    mi('⇆', 'Unmatch', 'ctxUnmatch', '', 'shift U', !(n === 1 && ts[0].matched)) +
+    mi('⑂', 'Split', 'ctxSplit', '', 'S', n !== 1) +
     msep +
     mi(I.flag, 'Flag', 'bulk', 'data-k="flag"') +
     mi(I.note, 'Memo…', 'ctxMemo') +
@@ -289,6 +292,8 @@ Object.assign(ACT, {
     const opt = (v, l) => `<button class="${t === v ? 'on' : ''}" data-a="dispTheme" data-v="${v}">${l}</button>`;
     openSheet('Display Options', `<div class="field"><span class="lbl2">Theme</span><div class="seg">${opt('light', 'Default')}${opt('dark', 'Dark')}${opt('', 'Match System')}</div></div>
       <div class="field"><span class="lbl2">Progress Bars</span><div class="seg"><button class="${A.ui.noBars ? '' : 'on'}" data-a="dispBars" data-v="0">On</button><button class="${A.ui.noBars ? 'on' : ''}" data-a="dispBars" data-v="1">Off</button></div></div>
+      <div class="field"><span class="lbl2">Balance Style</span><div class="seg"><button class="${A.ui.balStyle === 'paren' ? '' : 'on'}" data-a="dispBal" data-v="">−10,00€</button><button class="${A.ui.balStyle === 'paren' ? 'on' : ''}" data-a="dispBal" data-v="paren">(10,00€)</button></div></div>
+      <label class="pm-chk"><input type="checkbox" data-c="dispNoColor" ${document.body.classList.contains('nocolor') ? 'checked' : ''}> Differentiate Without Color</label>
       <div class="field"><span class="lbl2">Amounts</span><div class="seg"><button class="${document.body.classList.contains('hideamt') ? '' : 'on'}" data-a="dispAmt" data-v="0">Show</button><button class="${document.body.classList.contains('hideamt') ? 'on' : ''}" data-a="dispAmt" data-v="1">Hide</button></div></div>`);
   },
   dispTheme: el => { try { localStorage.setItem('budget.theme', el.dataset.v); } catch (e) { } applyTheme(); ACT.displayOpts(); },
@@ -358,3 +363,103 @@ Object.assign(ACT, {
   viewDel: el => { const id = el.dataset.id; mutate('View deleted', () => { A.plan.views = (A.plan.views || []).filter(v => v.id !== id); }); if (A.ui.filter === 'v:' + id) A.ui.filter = 'all'; ACT.viewsManage(); },
 });
 document.addEventListener('change', e => { const g = e.target.dataset?.vwg; if (g) $$(`[data-vwc][data-g="${g}"]`).forEach(i => { i.checked = e.target.checked; }); });
+
+/* ================= YNAB parity, round 3 ================= */
+Object.assign(ACT, {
+  pendToggle: () => { A.ui.pendCol = !A.ui.pendCol; savePref('pendCol', A.ui.pendCol); render._keepScroll = true; render(); },
+  acctStar: el => { const a = L.acct[el.dataset.id]; if (!a) return; mutate(a.star ? 'Unstarred' : 'Starred', () => { a.star = !a.star; }, { silent: true }); },
+  imgView: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t?.img) return; openSheet(payeeName(t) || 'Image', `<img src="${t.img}" alt="Receipt" style="width:100%; border-radius:12px">`, `<button class="btn block" data-a="txEditSheet" data-id="${t.id}">Edit Transaction</button>`); },
+  txEditSheet: el => { closeSheet(); txSheet(el.dataset.id); },
+  imgRemove: () => { D.img = null; refreshSheetBody(txBody()); },
+  // months: jump directly (click on “Oct 2026”)
+  monthPick: (el, e) => {
+    const r = el.getBoundingClientRect(); const y = +(A.ui.mpYear || A.month.slice(0, 4)); A.ui.mpYear = y;
+    popMenu(r.left, r.bottom + 6, `<div class="mp"><div class="mp-h"><button class="ibtn" data-a="mpYear" data-d="-1" data-keep="1" aria-label="Previous year">${I.left}</button><strong>${y}</strong><button class="ibtn" data-a="mpYear" data-d="1" data-keep="1" aria-label="Next year">${I.right}</button></div>
+      <div class="mp-g">${MSHORT.map((n, i) => { const m = y + '-' + String(i + 1).padStart(2, '0'); return `<button class="mp-m ${m === A.month ? 'on' : ''} ${m === curMonth() ? 'today' : ''}" data-a="mpGo" data-m="${m}">${n}</button>`; }).join('')}</div></div>`, 'pm-month');
+  },
+  mpYear: el => { A.ui.mpYear = (+A.ui.mpYear) + (+el.dataset.d); const t = $('.mpick'); closePop(); setTimeout(() => ACT.monthPick(t), 0); },
+  mpGo: el => { A.month = el.dataset.m; A.ui.mpYear = null; render(); },
+  catChkNone: () => { A.ui.selCats = new Set(); render._keepScroll = true; render(); },
+  // manual Match / Unmatch of an imported bank line with a transaction you entered
+  ctxMatch: () => {
+    const ts = ctxTargets(); if (ts.length !== 2) return; const imp = ts.find(t => isBankImp(t)), man = ts.find(t => t !== imp);
+    if (!imp || !man || isBankImp(man) || imp.amount !== man.amount || imp.acct !== man.acct) { toast('Select one imported and one entered transaction with the same account and amount'); return; }
+    mutate('Transactions matched', () => { man.matched = { importId: imp.importId, rawPayee: imp.rawPayee || '', date: imp.date, payee: imp.payee, memo: imp.memo || '', pend: !!imp.pend }; man.importId = imp.importId; man.rawPayee = imp.rawPayee; if (imp.pend) man.pend = true; if (man.cleared === 'u' && !imp.pend) man.cleared = 'c'; man.approved = true; A.tx = A.tx.filter(t => t !== imp); });
+    A.ui.selected.clear();
+  },
+  ctxUnmatch: () => {
+    const t = ctxTargets()[0]; if (!t?.matched) return; const m = t.matched;
+    mutate('Transactions unmatched', () => { A.tx.push({ id: uid(), acct: t.acct, date: m.date, payee: m.payee, cat: null, memo: m.memo, amount: t.amount, cleared: m.pend ? 'u' : 'c', flag: null, approved: false, importId: m.importId, rawPayee: m.rawPayee, ...(m.pend ? { pend: true } : {}) }); t.importId = null; t.rawPayee = null; delete t.pend; delete t.matched; });
+    A.ui.selected.clear();
+  },
+  ctxSplit: () => { const t = ctxTargets()[0]; if (!t) return; closePop(); txSheet(t.id); setTimeout(() => { if (D && !D.splits && ACT.spOn) ACT.spOn(); }, 50); },
+});
+// image picker: shrink the photo so the budget file stays light
+document.addEventListener('change', e => {
+  const el = e.target; if (el.dataset?.c !== 'imgPick' || !el.files?.[0]) return;
+  const f = el.files[0], img = new Image(); img.onload = () => { const s = Math.min(1, 900 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); D.img = c.toDataURL('image/jpeg', 0.6); URL.revokeObjectURL(img.src); refreshSheetBody(txBody()); }; img.src = URL.createObjectURL(f);
+});
+// category checkboxes (multi-select, like YNAB)
+document.addEventListener('change', e => {
+  const el = e.target; const S = A.ui.selCats || (A.ui.selCats = new Set());
+  if (el.dataset?.c === 'catChk') { el.checked ? S.add(el.dataset.id) : S.delete(el.dataset.id); A.ui.selCat = null; render._keepScroll = true; render(); }
+  else if (el.dataset?.c === 'grpChk') { const ids = A.plan.cats.filter(c => c.gid === el.dataset.g && (!c.hidden || A.ui.showHidden)).map(c => c.id); ids.forEach(id => el.checked ? S.add(id) : S.delete(id)); A.ui.selCat = null; render._keepScroll = true; render(); }
+});
+document.addEventListener('click', e => { if (e.target.matches?.('.cchk')) e.stopPropagation(); }, true);
+// drag & drop categories between rows and groups
+{
+  let dragC = null;
+  document.addEventListener('dragstart', e => { const el = e.target.closest?.('[data-cdrag]'); if (!el) return; dragC = el.dataset.cdrag; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragC); } catch (x) { } el.classList.add('dragging'); });
+  document.addEventListener('dragend', () => { dragC = null; $$('.dragging,.drop-before,.drop-into').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-into')); });
+  document.addEventListener('dragover', e => { if (!dragC) return; const row = e.target.closest?.('[data-cdrag]'), gh = e.target.closest?.('.ghead'); if (!row && !gh) return; e.preventDefault(); $$('.drop-before,.drop-into').forEach(x => x.classList.remove('drop-before', 'drop-into')); (row || gh).classList.add(row ? 'drop-before' : 'drop-into'); });
+  document.addEventListener('drop', e => {
+    if (!dragC) return; const row = e.target.closest?.('[data-cdrag]'), gh = e.target.closest?.('.ghead'); if (!row && !gh) return; e.preventDefault();
+    const c = L.cat[dragC]; if (!c) return; const before = row ? row.dataset.cdrag : null; const gid = row ? L.cat[before]?.gid : gh.querySelector('[data-gdrop]')?.dataset.gdrop;
+    if (!gid || before === dragC || L.group[gid]?.sys) return;
+    mutate('Category moved', () => { const cs = A.plan.cats.filter(x => x.id !== dragC); c.gid = gid; let i = before ? cs.findIndex(x => x.id === before) : -1; if (i < 0) { i = cs.length; for (let k = cs.length - 1; k >= 0; k--) if (cs[k].gid === gid) { i = k + 1; break; } } cs.splice(i, 0, c); A.plan.cats = cs; });
+  });
+}
+// account shortcuts on selected transactions (like YNAB): A, C, shift+L, shift+D, K, S, M, shift+U, shift+F then 0-6, shift+T, delete
+{
+  let flagWait = 0;
+  document.addEventListener('keydown', e => {
+    if (e.target.matches?.('input, textarea, select') || $('#scrim') || $('.pmenu') || !A.plan || A.view === 'plan' || A.view === 'reflect' || A.view === 'settings') return;
+    const ts = ctxTargets(); const run = a => { e.preventDefault(); const b = document.createElement('button'); b.dataset.a = a[0]; Object.assign(b.dataset, a[1] || {}); ACT[a[0]](b, e); };
+    if (flagWait && Date.now() - flagWait < 2000 && /^[0-6]$/.test(e.key)) { flagWait = 0; if (ts.length) { e.preventDefault(); const f = e.key === '0' ? null : FLAGS[+e.key - 1][0]; mutate('Flags updated', () => ts.forEach(t => t.flag = f)); } return; }
+    if (e.shiftKey && e.key === 'L') { const un = regList().filter(t => t.approved === false); if (un.length) { e.preventDefault(); mutate(un.length + ' approved', () => un.forEach(t => t.approved = true)); } return; }
+    if (!ts.length) return;
+    if (e.shiftKey && e.key === 'F') { e.preventDefault(); flagWait = Date.now(); toast('Flag: press 1-6 (0 = none)'); }
+    else if (e.shiftKey && e.key === 'D') run(['ctxDup']);
+    else if (e.shiftKey && e.key === 'T' && ts.length === 1) run(['ctxRepeat']);
+    else if (e.shiftKey && e.key === 'U') run(['ctxUnmatch']);
+    else if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'a') run(['bulk', { k: 'approve' }]); else if (k === 'c') run(['ctxClear', { v: ts.some(t => t.cleared === 'u') ? 'c' : 'u' }]);
+      else if (k === 'k') run(['bulk', { k: 'cat' }]); else if (k === 's' && ts.length === 1) run(['ctxSplit']); else if (k === 'm') run(['ctxMatch']);
+      else if (k === 'delete' || k === 'backspace') run(['bulk', { k: 'del' }]);
+    }
+  });
+}
+
+/* Reflect: date range arrows, category filter, export */
+Object.assign(ACT, {
+  reflNav: el => { A.ui.reflOff = Math.min(0, (A.ui.reflOff || 0) + (+el.dataset.d)); render(); },
+  reflCats: el => {
+    const ex = A.ui.reflEx || new Set(), r = el.getBoundingClientRect();
+    popMenu(Math.max(8, r.right - 300), r.bottom + 6, `<div class="pm-form" style="width:300px; max-height:60vh; overflow:auto"><div class="row" style="gap:6px; margin-bottom:6px"><button class="btn sm" data-a="reflCatsAll" data-v="1" data-keep="1">Select All</button><button class="btn sm" data-a="reflCatsAll" data-v="0" data-keep="1">Select None</button></div>
+      ${A.plan.groups.map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden && !c.cc); if (!cs.length) return ''; return `<div class="pm-h" style="padding-left:0">${esc(g.name)}</div>` + cs.map(c => `<label class="pm-chk"><input type="checkbox" data-c="reflCat" data-id="${c.id}" ${ex.has(c.id) ? '' : 'checked'}> ${esc(catName(c.id))}</label>`).join(''); }).join('')}</div>`, 'pm-rcats');
+  },
+  reflCatsAll: el => { A.ui.reflEx = el.dataset.v === '1' ? new Set() : new Set(A.plan.cats.map(c => c.id)); $$('[data-c=reflCat]').forEach(i => { i.checked = el.dataset.v === '1'; }); render._keepScroll = true; render(); },
+  reflExport: () => {
+    const [from, to] = periodRange(); const lines = spendingLines(from, to); const by = {};
+    for (const l of lines) { const k = l.cat + '|' + l.m; by[k] = (by[k] || 0) - l.amount; }
+    const months = monthsBetween(from, to); let csv = 'Category Group;Category;' + months.join(';') + ';Total\n';
+    for (const c of A.plan.cats) { const vals = months.map(m => by[c.id + '|' + m] || 0); const tot = vals.reduce((a, b) => a + b, 0); if (!tot) continue; csv += `"${(L.group[c.gid]?.name || '').replace(/"/g, '""')}";"${catName(c.id).replace(/"/g, '""')}";` + vals.map(v => fmtIn(v)).join(';') + ';' + fmtIn(tot) + '\n'; }
+    saveFile(`reflect-${from}_${to}.csv`, '﻿' + csv, 'text/csv');
+  },
+});
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c !== 'reflCat') return; const ex = A.ui.reflEx || (A.ui.reflEx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); });
+
+Object.assign(ACT, { dispBal: el => { A.ui.balStyle = el.dataset.v || ''; savePref('balStyle', A.ui.balStyle); render._keepScroll = true; render(); ACT.displayOpts(); } });
+document.addEventListener('change', e => { if (e.target.dataset?.c !== 'dispNoColor') return; document.body.classList.toggle('nocolor', e.target.checked); try { localStorage.setItem('budget.nocolor', e.target.checked ? '1' : ''); } catch (x) { } });
+try { if (localStorage.getItem('budget.nocolor')) document.body.classList.add('nocolor'); } catch (e) { }

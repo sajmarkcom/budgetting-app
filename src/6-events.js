@@ -40,7 +40,7 @@ const ACT = {
   },
   moves: () => movesSheet(),
   autoApply: el => {
-    const o = autoOptions(A.month, A.plan.cats.filter(c => !c.hidden)).find(x => x.k === el.dataset.k); if (!o) return;
+    const o = autoOptions(A.month, el.dataset.sel ? A.plan.cats.filter(c => A.ui.selCats?.has(c.id)) : A.plan.cats.filter(c => !c.hidden)).find(x => x.k === el.dataset.k); if (!o) return;
     mutate(o.l, () => { for (const [cid, v] of o.changes) setAssigned(A.month, cid, v); }); closeSheet();
   },
   tMode: el => { const c = L.cat[el.dataset.c]; mutate('Target updated', () => { c.target.mode = el.dataset.v; }, { silent: true }); catSheet(c.id); },
@@ -180,7 +180,7 @@ const ACT = {
   ruleAdd: () => { const c = $('#ruleC').value.trim(), p = $('#ruleP').value.trim(); if (!c || !p) return toast('Fill in both fields'); mutate('Rule added', () => A.plan.rules.push({ contains: c, payee: p }), { silent: true }); payeesSheet(); },
   ruleDel: el => { mutate('Rule deleted', () => A.plan.rules.splice(+el.dataset.i, 1), { silent: true }); payeesSheet(); },
   // reflect
-  reflectTab: el => { A.ui.reflect = el.dataset.k; render(); }, period: el => { A.ui.period = el.dataset.k; render(); }, groupBy: el => { A.ui.groupBy = el.dataset.k; render(); },
+  reflectTab: el => { A.ui.reflect = el.dataset.k; render(); }, period: el => { A.ui.period = el.dataset.k; A.ui.reflOff = 0; render(); }, groupBy: el => { A.ui.groupBy = el.dataset.k; render(); },
   // settings
   switchPlan: el => { if (el.dataset.id !== A.plan.id) { localSaveAll(); switchPlan(el.dataset.id); } },
   newPlan: () => openSheet('New Plan', `<div class="field"><label for="npName">Plan name</label><input id="npName" class="in" value="New Plan"></div>`, `<button class="btn pri block" data-a="newPlanDo">Create Plan</button>`, { focus: '#npName' }),
@@ -329,7 +329,7 @@ window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.pendCol) A.ui.pendCol = true; if (u.balStyle) A.ui.balStyle = u.balStyle; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;
