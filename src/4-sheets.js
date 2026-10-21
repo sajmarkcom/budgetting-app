@@ -30,8 +30,9 @@ function acctOptions(sel, filter = () => true) {
 }
 
 /* ---------- category sheet ---------- */
-function catSheet(cid) {
+function catSheet(cid, asHtml) {
   const c = L.cat[cid]; if (!c) return;
+  if (!asHtml && DESK() && A.view === 'plan' && A.ui.selCat === cid && !A.ui.inspHide) { closeSheet && $('#scrim') && closeSheet(); render._keepScroll = true; render(); return; }
   const m = A.month, x = catM(m, cid), ti = targetInfo(c, m, x);
   const t = c.target || {};
   const recent = A.tx.filter(tx => monthOf(tx.date) === m && txLines(tx).some(l => l.cat === cid)).sort((a, b) => a.date < b.date ? 1 : -1);
@@ -69,6 +70,7 @@ function catSheet(cid) {
     <div class="sec-t"><span>${monthLabel(m)} Activity</span><span class="num">${recent.length}</span></div>
     ${recent.length ? `<div class="card">${recent.slice(0, 30).map(t => txRow(t, true)).join('')}</div>` : `<div class="muted small">No transactions this month.</div>`}
     ${!c.cc ? `<div class="row" style="margin-top:6px"><button class="btn grow" data-a="cHide" data-c="${cid}">${c.hidden ? I.eye + ' Unhide' : I.eyeoff + ' Hide'}</button><button class="btn danger grow" data-a="catDelete" data-c="${cid}">${I.trash} Delete</button></div>` : ''}`;
+  if (asHtml) return body;
   openSheet(c.name, body);
 }
 function ccInfo(c) {
@@ -224,7 +226,7 @@ function txBody() {
     <div class="grid2"><div class="field"><label for="txDate">Date</label><input id="txDate" class="in" type="date" value="${D.date}" data-d="date"></div>
       <div class="field"><label for="txFreq">Repeat</label><select id="txFreq" class="in" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <div class="field"><label for="txMemo">Memo</label><input id="txMemo" class="in" value="${esc(D.memo)}" data-d="memo" placeholder="Optional"></div>
-    <div class="field"><span class="lbl2">Flag</span><div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${FLAGS.map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div></div>
+    <div class="field"><span class="lbl2">Flag</span><div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div></div>
     <label class="switch"><span><strong>Cleared</strong><div class="small muted">Shows on your bank statement</div></span><input type="checkbox" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''}></label>
     ${D.id ? `<button class="btn danger block" data-a="txDelete">${I.trash} Delete Transaction</button>` : ''}`;
 }

@@ -13,6 +13,8 @@ const ACT = {
   toggleHidden: () => { A.ui.showHidden = !A.ui.showHidden; render(); },
   collapse: el => { const g = el.dataset.g; A.ui.collapsed[g] = !A.ui.collapsed[g]; savePref('collapsed', A.ui.collapsed); render._keepScroll = true; render(); },
   collapseAll: () => { const gs = A.plan.groups; const allCol = gs.every(g => A.ui.collapsed[g.id]); A.ui.collapsed = {}; if (!allCol) for (const g of gs) A.ui.collapsed[g.id] = true; savePref('collapsed', A.ui.collapsed); render._keepScroll = true; render(); },
+  catSel: (el, e) => { if (e && e.target.closest && e.target.closest('input,textarea,select')) return; if (!DESK()) return catSheet(el.dataset.c); A.ui.selCat = A.ui.selCat === el.dataset.c ? null : el.dataset.c; if (A.ui.inspHide) { A.ui.inspHide = false; savePref('inspHide', false); } render._keepScroll = true; render(); },
+  catDesel: () => { A.ui.selCat = null; render._keepScroll = true; render(); },
   inspToggle: () => { A.ui.inspHide = !A.ui.inspHide; savePref('inspHide', A.ui.inspHide); render._keepScroll = true; render(); },
   inspFold: el => { const k = el.dataset.k; A.ui.inspFold = { ...(A.ui.inspFold || {}), [k]: !(A.ui.inspFold || {})[k] }; savePref('inspFold', A.ui.inspFold); render._keepScroll = true; render(); },
   rtaSheet: (el, e) => { if (e.target.closest('.cta')) return; rtaSheet(); },
@@ -112,7 +114,7 @@ const ACT = {
     else if (k === 'clear') mutate(`${ids.length} cleared`, () => ts.forEach(t => { if (t.cleared === 'u') t.cleared = 'c'; }));
     else if (k === 'del') { mutate(`${ids.length} deleted`, () => deleteTx(ids)); A.ui.selected.clear(); }
     else if (k === 'cat') openSheet('Categorize ' + ids.length + ' transactions', `<div class="field"><label for="bkCat">Category</label><select id="bkCat" class="in">${catOptions('')}</select></div><label class="switch"><span>Approve at the same time</span><input type="checkbox" id="bkAp" checked></label>`, `<button class="btn pri block" data-a="bulkCatDo">Apply</button>`);
-    else if (k === 'flag') openSheet('Flag', `<div class="flags"><button style="background:var(--surface-2)" data-a="bulkFlagDo" data-v="" aria-label="None"></button>${FLAGS.map(([f, l]) => `<button style="background:var(--flag-${f})" data-a="bulkFlagDo" data-v="${f}" aria-label="${l}"></button>`).join('')}</div>`);
+    else if (k === 'flag') openSheet('Flag', `<div class="flags"><button style="background:var(--surface-2)" data-a="bulkFlagDo" data-v="" aria-label="None"></button>${flagList().map(([f, l]) => `<button style="background:var(--flag-${f})" data-a="bulkFlagDo" data-v="${f}" aria-label="${l}"></button>`).join('')}</div>`);
     else if (k === 'date') openSheet('Change Date', `<input type="date" id="bkDate" class="in" value="${todayISO()}">`, `<button class="btn pri block" data-a="bulkDateDo">Apply</button>`);
   },
   bulkCatDo: () => { const c = $('#bkCat').value || null, ap = $('#bkAp').checked; const ts = A.tx.filter(t => A.ui.selected.has(t.id) && !t.transferAcct); mutate(`${ts.length} categorized`, () => ts.forEach(t => { t.cat = c; t.splits = null; if (ap) t.approved = true; const y = L.payee[t.payee]; if (y && c) y.lastCat = c; })); closeSheet(); },
@@ -324,7 +326,7 @@ window.addEventListener('focus', () => { if (A.plan) bankWatchPending(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && A.plan) bankWatchPending(); if (document.visibilityState === 'hidden' && A.plan) { localSaveAll(); clearTimeout(_persistTimer); persistNow(); } });
 /* ---------- boot ---------- */
 (async function boot() {
-  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; } catch (e) { }
+  try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); if (u.collapsed) A.ui.collapsed = u.collapsed; if (u.compact) A.ui.compact = true; if (u.inspHide) A.ui.inspHide = true; if (u.inspFold) A.ui.inspFold = u.inspFold; if (u.rv) A.ui.rv = u.rv; if (u.noBars) A.ui.noBars = true; if (u.sideHide) A.ui.sideHide = true; } catch (e) { }
   gdReadHash(); gdLoadToken();
   await storageBoot();
   const all = ALL;

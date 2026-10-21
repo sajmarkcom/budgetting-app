@@ -86,11 +86,11 @@ Object.assign(ACT, {
     popMenu(r.left, r.bottom + 6,
       mi(I.plus, 'New Plan', 'newPlan') + mi(I.plan, 'View All Plans', 'pmGo', 'data-v="plans"') + msep +
       `<div class="pm-h">Current Plan</div>` +
-      mi(I.gear, 'Plan Settings', 'pmGo', 'data-v="settings"') + mi(I.accts, 'Manage Payees', 'payees') +
+      mi(I.gear, 'Plan Settings', 'pmGo', 'data-v="settings"') + mi(I.accts, 'Manage Payees', 'payees') + mi(I.flag, 'Edit Flags', 'flagsEdit') + mi(I.eye, 'Display Options', 'displayOpts') +
       mi(I.bank, 'Manage Bank Connections', 'pmGo', 'data-v="bank"') + mi(I.download, 'Export Plan', 'exportJson') +
       mi('🌱', 'Make a Fresh Start', 'freshStart') + msep +
       mi(document.body.classList.contains('hideamt') ? '👁' : '◌', document.body.classList.contains('hideamt') ? 'Show Amounts' : 'Hide Amounts', 'pmHide') +
-      mi(I.sync, 'Sync Now', 'pmSync'), 'pm-plan');
+      mi(I.sync, 'Sync Now', 'pmSync') + mi('⌨', 'Keyboard Shortcuts', 'shortcutsHelp'), 'pm-plan');
   },
   pmGo: el => {
     A.view = 'settings'; A.acct = null; render();
@@ -114,7 +114,7 @@ try { if (localStorage.getItem('budget.hideamt')) document.body.classList.add('h
   };
   Object.assign(ACT, {
     closePop: () => closePop(),
-    pmCatMore: el => openCat(el),
+    pmCatMore: el => { closePop(); if (DESK()) { A.ui.selCat = el.dataset.c; A.ui.inspHide = false; render._keepScroll = true; render(); } else openCat(el); },
     pmCatOk: el => {
       const c = L.cat[el.dataset.c]; const raw = ($('#pmCatName')?.value || '').trim(); if (!c || !raw) return;
       const m = raw.match(/^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)\s*(.*)$/u);
@@ -266,4 +266,53 @@ Object.assign(ACT, {
   },
   apCopy: async el => { const c = proxyCfg(); const v = el.dataset.v === 'url' ? c.url : c.key; try { await navigator.clipboard.writeText(v); toast(el.dataset.v === 'url' ? 'URL copied' : 'Key copied'); } catch (e) { toast('Copy failed'); } },
   apTest: () => { closeSheet(); applePayPull().then(() => toast('Checked')); },
+});
+
+
+/* ---------- YNAB menus: register View options, Display Options, Edit Flags, Keyboard Shortcuts ---------- */
+function applyTheme() { let t = ''; try { t = localStorage.getItem('budget.theme') || ''; } catch (e) { } if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+applyTheme();
+Object.assign(ACT, {
+  regViewMenu: el => {
+    const rv = regView(), r = el.getBoundingClientRect();
+    const rc = (k, l) => `<button class="chip ${rv.range === k ? 'on' : ''}" data-a="rvSet" data-k="range" data-v="${k}">${l}</button>`;
+    const ck = (k, l) => `<label class="pm-chk"><input type="checkbox" data-c="rvChk" data-k="${k}" ${rv[k] ? 'checked' : ''}> ${l}</label>`;
+    popMenu(Math.max(8, r.right - 360), r.bottom + 6, `<div class="pm-form" style="width:340px"><div class="pm-h" style="padding-left:0">View Options</div>
+      <div class="chips" style="flex-wrap:wrap; margin:4px 0 10px">${rc('tm', 'This Month')}${rc('lm', 'Last Month')}${rc('3m', 'Latest 3 Months')}${rc('ty', 'This Year')}${rc('ly', 'Last Year')}${rc('all', 'All Dates')}</div>
+      ${ck('rec', 'Show Reconciled Transactions')}${ck('bal', 'Show Running Balance')}${ck('flags', 'Show Flags')}</div>`, 'pm-view');
+  },
+  rvSet: el => { A.ui.rv = { ...regView(), [el.dataset.k]: el.dataset.v }; savePref('rv', A.ui.rv); closePop(); render._keepScroll = true; render(); },
+  displayOpts: () => {
+    let t = ''; try { t = localStorage.getItem('budget.theme') || ''; } catch (e) { }
+    const opt = (v, l) => `<button class="${t === v ? 'on' : ''}" data-a="dispTheme" data-v="${v}">${l}</button>`;
+    openSheet('Display Options', `<div class="field"><span class="lbl2">Theme</span><div class="seg">${opt('light', 'Default')}${opt('dark', 'Dark')}${opt('', 'Match System')}</div></div>
+      <div class="field"><span class="lbl2">Progress Bars</span><div class="seg"><button class="${A.ui.noBars ? '' : 'on'}" data-a="dispBars" data-v="0">On</button><button class="${A.ui.noBars ? 'on' : ''}" data-a="dispBars" data-v="1">Off</button></div></div>
+      <div class="field"><span class="lbl2">Amounts</span><div class="seg"><button class="${document.body.classList.contains('hideamt') ? '' : 'on'}" data-a="dispAmt" data-v="0">Show</button><button class="${document.body.classList.contains('hideamt') ? 'on' : ''}" data-a="dispAmt" data-v="1">Hide</button></div></div>`);
+  },
+  dispTheme: el => { try { localStorage.setItem('budget.theme', el.dataset.v); } catch (e) { } applyTheme(); ACT.displayOpts(); },
+  dispBars: el => { A.ui.noBars = el.dataset.v === '1'; savePref('noBars', A.ui.noBars); render._keepScroll = true; render(); ACT.displayOpts(); },
+  dispAmt: el => { document.body.classList.toggle('hideamt', el.dataset.v === '1'); try { localStorage.setItem('budget.hideamt', el.dataset.v === '1' ? '1' : ''); } catch (e) { } ACT.displayOpts(); },
+  flagsEdit: () => {
+    openSheet('Edit Flags', `<p class="small muted" style="margin:0">Name your flags to give them a meaning (e.g. “To reimburse”).</p>` + FLAGS.map(([f, l]) => `<div class="field" style="display:flex; align-items:center; gap:10px"><span class="flag" style="background:var(--flag-${f}); width:14px; height:14px; flex:none"></span><input class="in" data-flagname="${f}" value="${esc((A.plan.flagNames || {})[f] || '')}" placeholder="${l}"></div>`).join(''),
+      `<button class="btn pri block" data-a="flagsSave">Save</button>`);
+  },
+  flagsSave: () => { const n = {}; $$('[data-flagname]').forEach(i => { if (i.value.trim()) n[i.dataset.flagname] = i.value.trim(); }); mutate('Flags renamed', () => { A.plan.flagNames = n; }); closeSheet(); },
+  shortcutsHelp: () => {
+    const k = (keys, l) => `<div class="li"><span class="grow">${l}</span><span>${keys.map(x => `<kbd>${x}</kbd>`).join(' ')}</span></div>`;
+    openSheet('Keyboard Shortcuts', `<div class="sec-t"><span>Universal</span></div><div class="card">${k(['?'], 'Open Keyboard Shortcuts Help')}${k(['shift', '.'], 'Expand/Collapse Sidebar')}${k(['⌘', 'Z'], 'Undo')}${k(['⌘', 'shift', 'Z'], 'Redo')}${k(['+', '-', 'x', '/'], 'Math operations in amounts')}${k(['esc'], 'Close / deselect')}</div>
+      <div class="sec-t"><span>Plan Actions</span></div><div class="card">${k(['←', '→'], 'Previous / next month')}${k(['shift', 'Z'], 'Snooze target (selected category)')}${k(['⌘', '↑/↓'], 'Collapse/expand groups')}</div>
+      <div class="sec-t"><span>Account Actions</span></div><div class="card">${k(['N'], 'Add new transaction')}${k(['A'], 'Approve (selected)')}${k(['C'], 'Toggle cleared (selected)')}${k(['delete'], 'Delete (selected)')}${k(['shift', 'E'], 'Reconcile')}${k(['⌘', 'shift', 'F'], 'Focus on the search bar')}</div>`);
+  },
+  sideToggle: () => { A.ui.sideHide = !A.ui.sideHide; savePref('sideHide', A.ui.sideHide); render._keepScroll = true; render(); },
+});
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'rvChk') { A.ui.rv = { ...regView(), [el.dataset.k]: el.checked }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); } });
+document.addEventListener('keydown', e => {
+  if (e.target.matches?.('input, textarea, select') || $('#scrim') || !A.plan) return;
+  if (e.key === '?') { e.preventDefault(); ACT.shortcutsHelp(); }
+  else if (e.shiftKey && (e.key === '>' || e.key === '.')) { e.preventDefault(); ACT.sideToggle(); }
+  else if (e.key === 'Escape' && A.ui.selCat) { A.ui.selCat = null; render._keepScroll = true; render(); }
+  else if (e.shiftKey && (e.key === 'Z') && !e.metaKey && !e.ctrlKey && A.view === 'plan' && A.ui.selCat && L.cat[A.ui.selCat]?.target) { e.preventDefault(); ACT.tSnooze({ dataset: { c: A.ui.selCat } }); }
+  else if (e.shiftKey && e.key === 'E' && A.acct && A.acct !== 'all' && (A.view === 'tx' || A.view === 'accounts')) { e.preventDefault(); ACT.reconcile?.({ dataset: { id: A.acct } }); }
+  else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') { const s = $('#regSearch'); if (s) { e.preventDefault(); s.focus(); } }
+  else if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && A.view === 'plan') { e.preventDefault(); ACT.collapseAll(); }
 });

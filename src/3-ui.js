@@ -61,7 +61,7 @@ function render() {
   else if (A.view === 'settings') html = viewSettings();
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
   const insp = A.view === 'plan' && DESK() && !A.ui.inspHide ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
-  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''}">${DESK() ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}<div class="main">${html}</div>${insp}</div>`;
+  app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''} ${A.ui.sideHide && DESK() ? 'noside' : ''}">${DESK() && !A.ui.sideHide ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}${DESK() && A.ui.sideHide ? `<button class="side-open" data-a="sideToggle" title="Show sidebar (shift .)" aria-label="Show sidebar">${I.right}</button>` : ''}<div class="main">${html}</div>${insp}</div>`;
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
     ${navBtn('plan', 'Plan', I.plan)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('tx', 'Transactions', I.list)}${navBtn('reflect', 'Reflect', I.reflect)}${navBtn('settings', 'Settings', I.gear)}
@@ -109,7 +109,7 @@ function sidebar() {
     if (!col) for (const a of closed) h += `<button class="side-acct muted ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}"><span class="grow ellip">${esc(a.name)}</span><span class="num">${fmt(b[a.id].working)}</span></button>`;
     h += `</div>`;
   }
-  h += `<div class="side-foot"><span class="small muted" style="padding:0 6px">Drag accounts to reorder them.</span><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
+  h += `<div class="side-foot"><span class="row" style="justify-content:space-between; align-items:center"><span class="small muted" style="padding:0 6px">Drag accounts to reorder them.</span><button class="ibtn" data-a="sideToggle" title="Collapse sidebar (shift .)" aria-label="Collapse sidebar">${I.left}</button></span><button class="btn sm block" data-a="acctNew">${I.plus} Add Account</button><button class="btn sm block" data-a="importSheet">${I.upload} File Import</button></div>`;
   return h;
 }
 
@@ -249,11 +249,11 @@ function catRow(c, m) {
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
   const note = targetText(c, m, s);
   const pillIcon = s.cls === 'good' && ti ? '✓ ' : s.cls === 'warn' ? '! ' : '';
-  return `<div class="cat ${c.hidden ? 'muted' : ''}">
-    <button class="cname" data-a="catSheet" data-c="${c.id}">
-      <span class="ctop"><span class="t">${c.emoji ? esc(c.emoji) + ' ' : ''}${esc(c.name)}${c.hidden ? ' (hidden)' : ''}</span>${note ? `<span class="note">${esc(note)}</span>` : ''}</span>
-      ${ti && ti.total > 0 ? `<span class="bar ${barCls}"><i style="width:${Math.round(ti.pct * 100)}%"></i></span>` : ''}
-    </button>
+  return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id ? 'sel' : ''}" data-a="catSel" data-c="${c.id}">
+    <div class="cname">
+      <span class="ctop"><button class="t" data-a="catSheet" data-c="${c.id}">${c.emoji ? esc(c.emoji) + ' ' : ''}${esc(c.name)}${c.hidden ? ' (hidden)' : ''}</button>${note ? `<span class="note">${esc(note)}</span>` : ''}</span>
+      ${ti && ti.total > 0 && !A.ui.noBars ? `<span class="bar ${barCls}"><i style="width:${Math.round(ti.pct * 100)}%"></i></span>` : ''}
+    </div>
     ${A.ui.edit && !c.cc ? `<div class="editrow">
       <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="-1" aria-label="Move up">${I.up}</button>
       <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="1" aria-label="Move down">${I.down}</button>
@@ -264,6 +264,7 @@ function catRow(c, m) {
   </div>`;
 }
 function inspector() {
+  if (A.ui.selCat && L.cat[A.ui.selCat]) { const c = L.cat[A.ui.selCat]; return `<div class="itop cat-top"><button class="ibtn" data-a="catDesel" aria-label="Back to the month summary" title="Back to the month summary">${I.left}</button><strong class="grow ellip">${esc(catName(c.id))}</strong><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div><div class="icat">${catSheet(c.id, true)}</div>`; }
   const m = A.month, md = monthData(m), st = planStats(m), mn = MONTHS[+m.slice(5, 7) - 1];
   const prevLeft = md.rtaBase - md.income + md.assigned + md.prevCashOver;
   const income = A.plan.expectedIncome || 0;
@@ -318,6 +319,11 @@ function viewAccounts() {
 }
 
 /* ---------- REGISTER ---------- */
+const regView = () => ({ range: 'all', rec: true, bal: false, flags: true, ...(A.ui.rv || {}) });
+function regRange(k) {
+  const cm = curMonth(), end = m => addMonths(m, 1) + '-00', y = cm.slice(0, 4);
+  return { tm: [cm + '-01', end(cm)], lm: [addMonths(cm, -1) + '-01', end(addMonths(cm, -1))], '3m': [addMonths(cm, -2) + '-01', end(cm)], ty: [y + '-01-01', y + '-12-31'], ly: [(+y - 1) + '-01-01', (+y - 1) + '-12-31'] }[k] || ['0000', '9999'];
+}
 function regList() {
   const id = A.acct; const f = A.ui.regFilter; const q = A.ui.search.trim().toLowerCase();
   let list = id === 'all' ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id);
@@ -326,6 +332,9 @@ function regList() {
   else if (f === 'cleared') list = list.filter(t => t.cleared !== 'u');
   else if (f === 'flagged') list = list.filter(t => t.flag);
   else if (f === 'uncat') list = list.filter(t => onBudget(L.acct[t.acct]) && !t.transferAcct && !(t.splits && t.splits.length) && !t.cat);
+  const rv = regView();
+  if (rv.range !== 'all') { const [from, to] = regRange(rv.range); list = list.filter(t => t.date >= from && t.date <= to); }
+  if (!rv.rec) list = list.filter(t => t.cleared !== 'r');
   if (A.ui.catFilter) { const { cid, m } = A.ui.catFilter; list = list.filter(t => monthOf(t.date) === m && txLines(t).some(l => l.cat === cid)); }
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
   return list.sort((a, b) => a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1);
@@ -439,6 +448,7 @@ function viewRegister() {
     <button class="tbtn" data-a="importSheet" data-id="${all ? '' : id}">${I.upload} File Import</button>
     ${!all && isDebt(a) && ACCT[a.type]?.grp !== 'loan' ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
     ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
+    ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year' })[regView().range] : ''}</button>` : ''}
     <button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>
   </div>`;
   h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
@@ -462,8 +472,9 @@ function viewRegister() {
     if (!all) { let r = 0; const asc = A.tx.filter(t => t.acct === id).sort((x, y) => x.date === y.date ? (x.id < y.id ? -1 : 1) : x.date < y.date ? -1 : 1); for (const t of asc) { r += t.amount; run[t.id] = r; } }
     const lim = A.ui.regLimit || 150;
     if (desk) {
-      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}<th></th>${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th><th></th></tr></thead><tbody>`;
-      for (const t of list.slice(0, lim)) h += txTr(t, all, null);
+      const rv = regView(), showBal = rv.bal && !all;
+      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${A.ui.select ? '<th></th>' : ''}${rv.flags ? '<th></th>' : ''}${all ? '<th>Account</th>' : ''}<th>Date</th><th>Payee</th><th>Category</th><th>Memo</th><th class="r">Outflow</th><th class="r">Inflow</th>${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
+      for (const t of list.slice(0, lim)) h += txTr(t, all, showBal ? run[t.id] : null);
       h += `</tbody></table></div>`;
     } else {
       let day = '';
@@ -485,11 +496,11 @@ function txTr(t, all, runBal) {
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
   return `<tr data-tid="${t.id}" class="${t.approved === false ? 'unapproved' : ''}">
     ${A.ui.select ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
-    <td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>
+    ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
     <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button></td>
-    <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${esc(cl || '—')}</button>`}</td>
+    <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${t.cat && L.cat[t.cat] && L.group[L.cat[t.cat].gid] && !(t.splits && t.splits.length) ? `<span class="muted">${esc(L.group[L.cat[t.cat].gid].name)}: </span>` : ''}${esc(cl || '—')}</button>`}</td>
     <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
     <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>
     <td class="r num amt-pos">${t.amount > 0 ? fmt(t.amount) : ''}</td>

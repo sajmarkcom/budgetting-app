@@ -105,6 +105,8 @@ function nextDate(iso, f) {
 }
 
 const FLAGS = [['red', 'Red'], ['orange', 'Orange'], ['yellow', 'Yellow'], ['green', 'Green'], ['blue', 'Blue'], ['purple', 'Purple']];
+const flagList = () => FLAGS.map(([f, l]) => [f, (A.plan?.flagNames || {})[f] || l]);
+const flagName = f => (flagList().find(x => x[0] === f) || [])[1] || '';
 
 /* ---------- app state ---------- */
 const A = {

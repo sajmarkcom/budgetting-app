@@ -111,7 +111,7 @@ h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0}
   .rtable-wrap{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); overflow-x:auto; margin-top:8px}
   .rtable{width:100%; border-collapse:collapse; font-size:14px}
   .rtable th{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); text-align:left; padding:10px; position:sticky; top:0; background:var(--surface); border-bottom:1px solid var(--line)}
-  .rtable td{padding:7px 10px; border-top:1px solid var(--line); white-space:nowrap}
+  .rtable td{padding:4px 10px; border-top:1px solid var(--line); white-space:nowrap; height:34px} .rtable .btn.sm{min-height:0; height:26px; padding:0 12px; font-size:13px} .rtable .clr{width:22px; height:22px}
   .rtable .r{text-align:right} .rtable tr.unapproved td{background:color-mix(in srgb, var(--info-soft) 60%, transparent)}
   .rtable .todo{color:var(--warn); font-weight:800}
   .cellbtn{border:none; background:none; padding:0; font-weight:700; text-align:left; color:inherit}
@@ -179,7 +179,7 @@ button > svg, label > svg, a > svg, .li > svg{width:20px; height:20px; flex:none
 .ghead .gsum{font-size:12.5px; color:var(--muted); font-weight:700}
 .cat{display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid var(--line); min-height:56px}
 .cat .cname{flex:1; min-width:0; border:none; background:none; text-align:left; padding:0; display:flex; flex-direction:column; gap:5px}
-.cat .cname .t{font-weight:700; font-size:15px; line-height:1.25; overflow-wrap:anywhere}
+.cat .cname .t{border:none; background:none; padding:0; text-align:left; color:inherit; cursor:pointer; font-family:inherit; font-weight:700; font-size:15px; line-height:1.25; overflow-wrap:anywhere}
 .cat .cname .note{font-size:12px; color:var(--muted); font-weight:600}
 .ctop{display:flex; flex-direction:column; gap:3px; min-width:0}
 .act{font-weight:700; font-size:13.5px}
@@ -342,6 +342,11 @@ button.li:hover{background:var(--surface-2)}
 .loan-chart{position:relative} .lg-vl{stroke:var(--muted); stroke-width:1} .lg-dot{stroke:var(--surface); stroke-width:2} .lg-dot.p{fill:var(--accent)} .lg-dot.o{fill:var(--muted)}
 .lg-tip{position:absolute; pointer-events:none; background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.25); padding:10px 12px; min-width:250px; z-index:5; font-size:13px}
 .lt-h{font-weight:800; padding-bottom:6px; margin-bottom:6px; border-bottom:1px solid var(--line)} .lt-r{display:flex; justify-content:space-between; gap:14px; padding:2px 0} .lt-r span{color:var(--muted); font-weight:600}
+/* YNAB menus */
+.pm-chk{display:flex; align-items:center; gap:8px; padding:6px 2px; font-weight:600; font-size:14px; cursor:pointer}
+kbd{display:inline-block; min-width:22px; padding:2px 6px; border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; background:var(--surface-2); font:600 12px/1.4 inherit; text-align:center}
+@media (min-width:1024px){ .shell.noside{grid-template-columns:minmax(0,1fr)} .shell.noside.with-insp{grid-template-columns:minmax(0,1fr) 340px}
+  .side-open{position:fixed; left:0; bottom:16px; z-index:30; border:1px solid var(--line); border-left:none; background:var(--surface); border-radius:0 10px 10px 0; padding:8px 6px; cursor:pointer} .side-open svg{width:16px; height:16px} }
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -389,5 +394,9 @@ body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
   .ih > span:first-child{display:flex; align-items:center; gap:8px} .ih svg{width:16px; height:16px}
   .ich svg{transition:transform .15s} .ich.shut svg{transform:rotate(-90deg)}
   .ibody{padding:0 14px 12px}
+  .cat-top{display:flex; align-items:center; gap:8px; font-size:16px} .cat-top .grow{flex:1}
+  .icat{display:flex; flex-direction:column; gap:10px} .icat .kpis{gap:8px} .icat .kpi b{font-size:15px!important}
+  .cat.sel{background:var(--accent-soft)!important; box-shadow:inset 3px 0 0 var(--accent)}
+  .cat{cursor:default}
 }
 </style>
