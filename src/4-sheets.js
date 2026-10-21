@@ -339,6 +339,7 @@ function payeesSheet() {
   const cnt = {}; for (const t of A.tx) if (t.payee) cnt[t.payee] = (cnt[t.payee] || 0) + 1;
   const list = A.plan.payees.slice().sort((a, b) => a.name.localeCompare(b.name));
   const body = `<div class="small muted">Rename a payee to another payee's name to combine them. The default category is suggested when you add or import transactions.</div>
+    <input class="in" type="search" placeholder="Search payees…" aria-label="Search payees" oninput="const q=this.value.toLowerCase(); this.nextElementSibling.querySelectorAll('.li').forEach(r => { const i = r.querySelector('input'); r.style.display = !q || (i && i.value.toLowerCase().includes(q)) ? '' : 'none'; })">
     <div class="card">${list.map(y => `<div class="li" style="flex-wrap:wrap"><div class="grow" style="min-width:150px"><input class="in" value="${esc(y.name)}" data-py="name" data-id="${y.id}" aria-label="Payee name" style="height:40px"></div>
       <select class="in" style="height:40px; width:auto; max-width:46%" data-py="lastCat" data-id="${y.id}" aria-label="Default category">${catOptions(y.lastCat, { noneLabel: 'No default category' })}</select>
       <span class="small muted" style="width:56px; text-align:right">${cnt[y.id] || 0} txns</span>
