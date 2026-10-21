@@ -431,6 +431,7 @@ async function diffSheet(acctId, bankV) {
 function viewRegister() {
   const id = A.acct, all = id === 'all', a = all ? null : L.acct[id], desk = DESK();
   if (!all && !a) { A.acct = null; return viewAccounts(); }
+  if (['unapproved', 'uncat'].includes(A.ui.regFilter) && !A.ui.search && !regList().length) A.ui.regFilter = 'all'; // all approved / categorized: back to All, like YNAB
   const b = balances();
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
   const ago = d => { const n = daysBetween(d, todayISO()); return n < 1 ? 'today' : n < 31 ? n + ' day' + (n > 1 ? 's' : '') + ' ago' : n < 365 ? Math.round(n / 30) + ' month' + (Math.round(n / 30) > 1 ? 's' : '') + ' ago' : Math.round(n / 365) + ' year' + (Math.round(n / 365) > 1 ? 's' : '') + ' ago'; };
