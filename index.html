@@ -3019,6 +3019,21 @@ function isSelfLabel(raw) {
   const w = new Set(norm(cleanPayee(raw) + ' ' + String(raw || '')).replace(/[^\p{L} ]/gu, ' ').split(/\s+/));
   return own.some(n => n.split(' ').every(t => w.has(t)));
 }
+/* the bank's monthly deferred-card debit on the current account = a transfer to the card account (pays it off) */
+function linkCardDebits() {
+  if (typeof deferredCards !== 'function') return 0;
+  const re = /(DEBIT MENSUEL|RELEVE CARTE|FACTURE CARTE|DEBIT DIFFERE)/i; let n = 0;
+  for (const [main, cards] of Object.entries(deferredCards())) {
+    if (cards.length !== 1) continue; const card = cards[0];
+    const first = A.tx.filter(t => t.acct === card && t.importId).map(t => t.date).sort()[0]; if (!first) continue;
+    for (const t of A.tx.filter(t => t.acct === main && !t.transferAcct && t.amount < 0 && t.date >= first && isBankImp(t) && re.test(t.rawPayee || L.payee[t.payee]?.name || ''))) {
+      const pair = { id: uid(), acct: card, date: t.date, payee: null, cat: null, memo: t.memo || '', amount: -t.amount, cleared: 'c', flag: null, approved: true, transferAcct: main, transferId: t.id };
+      t.transferAcct = card; t.transferId = pair.id; t.payee = null; t.cat = null; t.splits = null; t.approved = true; if (t.cleared === 'u') t.cleared = 'c';
+      A.tx.push(pair); n++;
+    }
+  }
+  return n;
+}
 /* money you moved between your own accounts: link both bank lines as one transfer */
 function pairSelfTransfers() {
   let n = 0;
@@ -3139,7 +3154,7 @@ async function bankSync(manual) {
     c.lastSync = Date.now();
   }
   { const today = todayISO(); const fut = A.tx.filter(t => isBankImp(t) && !t.approved && t.date > today).map(t => t.id); if (fut.length) A.tx = A.tx.filter(t => !fut.includes(t.id)); }
-  if (pairSelfTransfers()) tn = tn; bankBusy = false; scheduleSave(); render();
+  if (pairSelfTransfers()) tn = tn; const ld = linkCardDebits(); if (ld) toast(ld > 1 ? ld + ' card debits linked to your card account' : 'Card debit linked to your card account (transfer)'); bankBusy = false; scheduleSave(); render();
   if (manual || tn || errs.length) toast(errs.length ? errs[0] : `Bank import: ${tn} new, ${tm} matched`, !!tn);
 }
 function bankAutoSync() {
