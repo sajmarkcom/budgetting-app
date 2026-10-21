@@ -190,7 +190,7 @@ function viewPlan() {
   }
   h += `<div class="wrap">`;
   if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
-  if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></div>`;
+  if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><span class="bbtns"><button class="btn sm" data-a="approveCat" title="Approve every imported transaction that already has a category">Approve categorized</button><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></span></div>`;
   if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><span class="bbtns"><button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></span></div>`;
   if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
   const F = A.ui.filter;

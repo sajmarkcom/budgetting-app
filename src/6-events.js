@@ -80,6 +80,7 @@ const ACT = {
   aMove: el => { moveAccount(el.dataset.id, +el.dataset.d); },
   openAcct: el => { A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; window.scrollTo(0, 0); render(); },
   catActivity: el => { A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.catFilter = { cid: el.dataset.c, m: A.month }; window.scrollTo(0, 0); render(); },
+  approveCat: () => { const ts = A.tx.filter(t => t.approved === false && (t.cat || t.transferAcct || (t.splits && t.splits.length))); if (!ts.length) return toast('Nothing to approve: give them a category first'); mutate(ts.length + ' transactions approved', () => ts.forEach(t => { t.approved = true; })); },
   catActivityOff: () => { A.ui.catFilter = null; render(); },
   openAll: el => { A.ui.catFilter = null; A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = el.dataset.f; A.ui.search = ''; window.scrollTo(0, 0); render(); },
   backAccts: () => { A.acct = null; A.ui.select = false; A.ui.selected.clear(); render(); },
@@ -207,13 +208,21 @@ function applyAssign(inp) {
   if (raw === fmtIn(cur)) return;
   inp.dataset.done = '1';
   let v;
-  if (/^[+*/]/.test(raw) || (/^-/.test(raw) && raw.length > 1 && cur !== 0)) { v = evalExpr(fmtIn(cur).replace(',', '.') + raw.replace(',', '.')); }
+  if (!raw.startsWith(fmtIn(cur)) && (/^[+*/x×]/i.test(raw) || (/^-/.test(raw) && raw.length > 1 && cur !== 0))) { v = evalExpr(fmtIn(cur).replace(',', '.') + raw.replace(',', '.')); }
   else v = evalExpr(raw === '' ? '0' : raw);
   if (v == null) { delete inp.dataset.done; inp.value = fmtIn(cur); toast('Amount not recognized'); return; }
   render._keepScroll = true;
   mutate('Assigned: ' + catName(cid) + ' ' + fmt(v), () => setAssigned(A.month, cid, v), { silent: true });
 }
-document.addEventListener('focusin', e => { if (e.target.matches('.ass-in, .bigamt, [data-sp="amount"]')) setTimeout(() => e.target.select?.(), 0); });
+document.addEventListener('focusin', e => { if (e.target.matches('.ass-in, .bigamt, [data-sp="amount"]')) { const el = e.target, v0 = el.value; setTimeout(() => { if (el.value === v0) el.select?.(); }, 0); } });
+// calculator in amounts, like YNAB: typing + - * x / on a selected amount keeps it and appends the operator (e.g. +9,99)
+document.addEventListener('keydown', e => {
+  const el = e.target; if (!el.matches?.('.ass-in, .bigamt, [data-sp="amount"]')) return;
+  if (!['+', '-', '*', '/', 'x', 'X', '×'].includes(e.key)) return;
+  const all = el.selectionStart === 0 && el.selectionEnd === el.value.length && el.value.length > 0;
+  if (!all) return;
+  e.preventDefault(); el.value = el.value + (e.key === 'x' || e.key === 'X' || e.key === '×' ? '*' : e.key); el.setSelectionRange(el.value.length, el.value.length);
+});
 document.addEventListener('keydown', e => {
   if (e.target.matches?.('.ass-in') && e.key === 'Enter') { e.preventDefault(); const all = $$('.ass-in'); const i = all.indexOf(e.target); const nextId = all[i + 1]?.dataset.assign; applyAssign(e.target); if (nextId) setTimeout(() => $(`[data-assign="${nextId}"]`)?.focus(), 0); return; }
   if (e.key === 'Escape' && $('#scrim')) { closeSheet(); return; }

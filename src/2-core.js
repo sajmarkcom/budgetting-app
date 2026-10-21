@@ -46,7 +46,7 @@ const fmtIn = c => (c / 100).toFixed(2).replace('.', ',');
 
 /* amount expression parser: "12,50", "50+12.5", "3*20" */
 function evalExpr(raw) {
-  let s = String(raw ?? '').replace(/[\s€$£]/g, '').replace(/−/g, '-');
+  let s = String(raw ?? '').replace(/[\s€$£]/g, '').replace(/−/g, '-').replace(/[x×X]/g, '*').replace(/÷/g, '/');
   s = s.replace(/(\d)\.(\d{3})(?!\d)/g, '$1$2').replace(/,/g, '.');
   if (!s) return null;
   if (!/^[-+*/().\d]+$/.test(s)) return null;

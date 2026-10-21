@@ -174,7 +174,7 @@ function ebRow(t) {
 /* free auto-categorisation: tidy the bank's label, then reuse a payee you already have (and its last category) */
 function cleanPayee(raw) {
   // bank labels change at every payment (dates, references, card numbers): keep only the merchant / person
-  let x = ' ' + String(raw || '').replace(/\s+/g, ' ') + ' ';
+  let x = ' ' + String(raw || '').replace(/\s+/g, ' ').replace(/\bcomptabilis[ée]e?s?(\s+le)?\b/gi, ' ') + ' ';
   const m = x.match(/\s(?:DE|POUR)\s?:\s*(.+?)(?=\s(?:ID|MOTIF|REF|DATE|IBAN|BQ|CPT|LIB|LIBELLE|NUM)\s?:|\s\d{2}\s\d{2}\sBQ\s|\sBQ\s|$)/i);
   if (m) x = ' ' + m[1] + ' ';
   else {
