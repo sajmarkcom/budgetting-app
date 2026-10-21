@@ -189,10 +189,14 @@ function viewPlan() {
     </div></div>`;
   }
   h += `<div class="wrap">`;
-  if (st.overN) h += `<div class="banner bad">${I.info}<span>${st.overN} ${st.overN > 1 ? 'categories are' : 'category is'} overspent</span><button class="btn sm danger" data-a="filter" data-f="over">Review</button></div>`;
-  if (unapproved) h += `<div class="banner info">${I.info}<span>${unapproved} imported transaction${unapproved > 1 ? 's' : ''} to approve</span><span class="bbtns"><button class="btn sm" data-a="approveCat" title="Approve every imported transaction that already has a category">Approve categorized</button><button class="btn sm" data-a="openAll" data-f="unapproved">Review</button></span></div>`;
-  if (uncatN) h += `<div class="banner warn">${I.info}<span>${uncatN} transaction${uncatN > 1 ? 's' : ''} need${uncatN > 1 ? '' : 's'} a category</span><span class="bbtns"><button class="btn sm" data-a="autoCat">Auto</button><button class="btn sm" data-a="openAll" data-f="uncat">Categorize</button></span></div>`;
-  if (md.prevCashOver > 0) h += `<div class="banner warn">${I.info}<span>Overspending from ${monthLabel(addMonths(m, -1))}: ${fmt(md.prevCashOver)} taken from Ready to Assign</span></div>`;
+  { // compact alert chips (YNAB-style), one line instead of stacked banners
+    const chips = [];
+    if (st.overN) chips.push(`<span class="achip bad"><button data-a="filter" data-f="over">${st.overN} overspent</button></span>`);
+    if (unapproved) chips.push(`<span class="achip info"><button data-a="openAll" data-f="unapproved">${unapproved} to approve</button><button class="sub" data-a="approveCat" title="Approve every imported transaction that already has a category">✓ categorized</button></span>`);
+    if (uncatN) chips.push(`<span class="achip warn"><button data-a="openAll" data-f="uncat">${uncatN} need${uncatN > 1 ? '' : 's'} a category</button><button class="sub" data-a="autoCat" title="Use your past choices for the same merchants">Auto</button></span>`);
+    if (md.prevCashOver > 0) chips.push(`<span class="achip warn" title="Cash overspending from ${esc(monthLabel(addMonths(m, -1)))} is taken from Ready to Assign"><button data-a="rtaSheet">${esc(MSHORT[+addMonths(m, -1).slice(5, 7) - 1] || '')} overspending −${fmt(md.prevCashOver)}</button></span>`);
+    if (chips.length) h += `<div class="achips">${chips.join('')}</div>`;
+  }
   const F = A.ui.filter;
   h += `<div class="chips" role="toolbar" aria-label="Filters">
     ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${F === 'over' ? chip('over', 'Overspent') : ''}</div>

@@ -326,6 +326,13 @@ button.li:hover{background:var(--surface-2)}
 .empty{padding:28px 16px; text-align:center; color:var(--muted); display:flex; flex-direction:column; gap:10px; align-items:center}
 .kbd-hint{font-size:12px; color:var(--muted)}
 
+/* compact alert chips on the plan */
+.achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
+.achip button{border:none; background:transparent; color:inherit; font:inherit; padding:7px 12px; cursor:pointer}
+.achip button.sub{border-left:1px solid currentColor; opacity:.85; padding:7px 10px; font-weight:800}
+.achip button:hover{background:rgba(127,127,127,.15)}
+.achip.bad{background:var(--bad-soft); color:var(--bad)} .achip.warn{background:var(--warn-soft); color:var(--warn)} .achip.info{background:var(--info-soft); color:var(--info)}
 /* popup menus (right-click, plan menu, quick rename) */
 .pmenu{position:fixed; z-index:200; min-width:250px; max-width:360px; background:var(--surface); color:var(--fg); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.35); padding:6px; max-height:80vh; overflow:auto}
 .pm-i{display:flex; align-items:center; gap:12px; width:100%; border:none; background:transparent; color:inherit; padding:9px 10px; border-radius:9px; font:inherit; font-size:14.5px; font-weight:600; text-align:left; cursor:pointer}
