@@ -245,10 +245,12 @@ function calc(toMonth) {
     prevCashOver = M.cashOver;
     res.months[m] = M; prev = M;
   }
-  // RTA shown for a month also subtracts money assigned in later months
-  const ms = Object.keys(res.months);
+  // RTA shown for a month also subtracts money already assigned in months after it — but only future months:
+  // in a past month, later months were funded by income that came after it (otherwise every old month shows a huge negative)
+  const ms = Object.keys(res.months), cur = curMonth();
   for (const m of ms) {
-    let future = 0; for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > m) future += v;
+    const lim = m > cur ? m : cur;
+    let future = 0; for (const [fm, v] of Object.entries(assignedTotalBy)) if (fm > lim) future += v;
     res.months[m].future = future;
     res.months[m].rta = res.months[m].rtaBase - future;
   }
