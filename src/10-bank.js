@@ -200,6 +200,22 @@ function backfillLearnedCat() {
   for (const t of A.tx.slice().sort((a, b) => a.date < b.date ? -1 : 1)) if (t.rawPayee && t.cat && t.approved !== false && L.cat[t.cat] && t.cat !== 'rta' && !(t.splits && t.splits.length)) { const k = learnKey(t.rawPayee); if (k) m[k] = t.cat; }
   A.plan.learnedCat = m;
 }
+/* “CARTE X3768 14/10 APPLE…” → "14/10": the purchase date the bank prints in card labels */
+function cardOpDate(raw) { const m = String(raw || '').match(/CARTE\s+X\d+\s+(?:REMBT\s+|TRANSF\s+)?(\d{2}\/\d{2})/i); return m ? m[1] : null; }
+/* a card purchase that was imported as pending and again once booked (statement debited later than 10 days): keep the booked line */
+function mergeCardPendingDupes() {
+  let n = 0; const drop = new Set();
+  for (const b of A.tx) {
+    if (!isBankImp(b) || b.pend || !b.rawPayee) continue; const op = cardOpDate(b.rawPayee); if (!op) continue;
+    const p = A.tx.find(t => t !== b && !drop.has(t.id) && t.acct === b.acct && t.pend && t.amount === b.amount && cardOpDate(t.rawPayee) === op && Math.abs(daysBetween(t.date, b.date)) <= 50);
+    if (!p) continue;
+    // keep what you chose on the pending one (category, payee, memo, approval)
+    if (p.cat && !b.cat) b.cat = p.cat; if (p.payee && (!b.payee || b.auto)) b.payee = p.payee; if (p.memo && !b.memo) b.memo = p.memo; if (p.approved) b.approved = true; if (p.splits && !b.splits) b.splits = p.splits; if (p.flag && !b.flag) b.flag = p.flag; delete b.auto;
+    drop.add(p.id); n++;
+  }
+  if (n) A.tx = A.tx.filter(t => !drop.has(t.id));
+  return n;
+}
 function learnKey(raw) { return norm(cleanPayee(raw)).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim(); }
 /* payee you gave this bank label before (learned from YNAB) */
 function learnedPayee(raw) {
@@ -349,7 +365,9 @@ function importRows(acct, rows, from) {
     seen[key0] = (seen[key0] || 0) + 1; const key = r.fitid ? key0 : key0 + '|' + seen[key0];
     if (ids.has(key)) { if (r.pending) pendSeen.add(key); continue; }
     if (!r.pending) { // a card payment that was pending is now booked: update it instead of adding a duplicate
-      const pt = existing.find(t => t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
+      // deferred cards are booked only when the monthly statement is debited (up to ~6 weeks later): match on the card's own purchase date too
+      const op = cardOpDate(r.payee);
+      const pt = existing.find(t => t.pend && !used.has(t.id) && t.amount === r.amount && (Math.abs(daysBetween(t.date, r.date)) <= 10 || (op && op === cardOpDate(t.rawPayee) && Math.abs(daysBetween(t.date, r.date)) <= 50)));
       if (pt) { used.add(pt.id); pt.importId = key; pt.pend = false; pt.date = r.date; if (pt.cleared === 'u') pt.cleared = 'c'; ids.add(key); nm++; continue; }
     }
     let match = existing.find(t => !isBankImp(t) && !t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
@@ -396,7 +414,7 @@ async function bankSync(manual) {
     c.lastSync = Date.now();
   }
   { const today = todayISO(); const fut = A.tx.filter(t => isBankImp(t) && !t.approved && t.date > today).map(t => t.id); if (fut.length) A.tx = A.tx.filter(t => !fut.includes(t.id)); }
-  if (pairSelfTransfers()) tn = tn; const ld = linkCardDebits(); if (ld) toast(ld > 1 ? ld + ' card debits linked to your card account' : 'Card debit linked to your card account (transfer)'); bankBusy = false; scheduleSave(); render();
+  if (pairSelfTransfers()) tn = tn; try { mergeCardPendingDupes(); } catch (e) { } const ld = linkCardDebits(); if (ld) toast(ld > 1 ? ld + ' card debits linked to your card account' : 'Card debit linked to your card account (transfer)'); bankBusy = false; scheduleSave(); render();
   if (manual || tn || errs.length) toast(errs.length ? errs[0] : `Bank import: ${tn} new, ${tm} matched`, !!tn);
 }
 function bankAutoSync() {

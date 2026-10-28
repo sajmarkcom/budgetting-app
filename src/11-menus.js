@@ -136,6 +136,7 @@ function dropFutureBankLines() {
 }
 setTimeout(dropFutureBankLines, 1500);
 setTimeout(() => { try { if (A.plan && !A.plan.learnedCat) { backfillLearnedCat(); scheduleSave(); } } catch (e) { } }, 2500);
+setTimeout(() => { try { if (A.plan) { let n = 0; mutate('Card lines updated', () => { n = mergeCardPendingDupes(); }, { silent: true }); if (n) toast(n + ' card purchase' + (n > 1 ? 's' : '') + ' now booked by the bank (duplicate pending line merged)'); } } catch (e) { } }, 3000);
 
 /* ---------- click on a category in the register: quick picker, best guesses first ---------- */
 function suggestCats(t) {
