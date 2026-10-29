@@ -157,6 +157,16 @@ button > svg, label > svg, a > svg, .li > svg{width:20px; height:20px; flex:none
 .stats::-webkit-scrollbar{display:none}
 .stat{flex:none; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); padding:8px 12px; min-width:0; text-align:left}
 .stat b{display:block; font-size:15px}
+.asgbar{display:flex; align-items:center; gap:10px; width:100%; margin-top:10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); padding:10px 14px; text-align:left; color:inherit; font:inherit}
+.asgbar .lbl{display:block; font-size:11.5px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.05em}
+.asgbar b{display:block; font-size:22px; font-weight:800}
+.asgbar .ck{font-size:12.5px; font-weight:700; padding:4px 10px; border-radius:999px; white-space:nowrap}
+.asgbar .ck.ok{background:var(--surface-2); color:var(--muted)} .asgbar .ck.bad{background:var(--bad-soft); color:var(--bad)}
+.li.sub{min-height:0; padding-top:6px; padding-bottom:8px} .side-acct.sub{cursor:default; padding-top:0}
+.calcbar{position:fixed; left:0; right:0; bottom:0; z-index:9999; display:flex; gap:6px; padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px)); background:var(--surface-2); border-top:1px solid var(--line)}
+.calcbar[hidden]{display:none}
+.calcbar button{flex:1; height:42px; border:0; border-radius:10px; background:var(--surface); color:var(--fg); font:inherit; font-size:21px; font-weight:700; box-shadow:0 1px 0 var(--line); touch-action:manipulation}
+.calcbar button.eq{background:var(--accent); color:var(--accent-ink)}
 .stat span{font-size:11.5px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.05em}
 .chips{display:flex; gap:6px; overflow-x:auto; padding-block:10px 4px; scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
@@ -695,6 +705,16 @@ function calc(toMonth) {
   _calc = res; _calcV = A.calcV; _calcTo = want;
   return res;
 }
+/* Cash in budget accounts (cards excluded) must equal Ready to Assign + money assigned in later months
+   + everything available in categories + spending on credit not covered yet. A gap means a calculation bug. */
+function budgetCheck(m) {
+  const end = addMonths(m, 1) + '-00';
+  let cash = 0, cards = 0;
+  for (const t of A.tx) { const a = L.acct[t.acct]; if (!onBudget(a) || t.date > end) continue; if (isCredit(a)) cards += t.amount; else cash += t.amount; }
+  const md = monthData(m);
+  const expected = md.rtaBase + md.available + md.creditOver;
+  return { cash, cards, rta: md.rta, future: md.rtaBase - md.rta, available: md.available, creditOver: md.creditOver, expected, gap: cash - expected };
+}
 function monthData(m) { const c = calc(m); return c.months[m] || (m < c.minM ? emptyMonth() : c.months[m]); }
 function emptyMonth() { return { cats: {}, income: 0, uncat: 0, assigned: 0, activity: 0, available: 0, cashOver: 0, creditOver: 0, rta: 0, future: 0, prevCashOver: 0 }; }
 function catM(m, id) { return monthData(m).cats[id] || { carry: 0, assigned: 0, activity: 0, available: 0, cashOver: 0, creditOver: 0 }; }
@@ -1138,6 +1158,7 @@ function sidebar() {
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
     if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${a.star ? '<span class="star-s">★</span> ' : ''}${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+      for (const cd of linkedCards(a)) { const v = b[a.id].working + b[cd.id].working; h += `<div class="side-acct sub" title="${esc(a.name)} after the ${esc(cd.name)} statement"><span class="grow ellip small muted">${esc(a.name)} − ${esc(cd.name)}</span><span class="num small ${v < 0 ? 'amt-bad' : ''}">${fmt(v)}</span></div>`; }
       const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); const ov = a.overdraft || 0, cls = after >= 0 ? '' : after < -ov ? 'amt-bad' : 'amt-warn';
         h += `<div class="side-after" title="Balance once the deferred card is debited${ov ? ' · authorized overdraft ' + fmt(ov) : ''}"><span class="grow ellip">after card${after < 0 && ov ? ' · ' + (after < -ov ? 'over limit' : fmt(ov + after) + ' left') : ''}</span><span class="num ${cls}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
@@ -1193,7 +1214,7 @@ function targetText(c, m, s) {
 /* ---------- PLAN ---------- */
 function planStats(m) {
   let under = 0, cost = 0, overN = 0, overfunded = 0;
-  for (const c of A.plan.cats) { if (c.hidden) continue; const s = catStatus(c, m); if (s.ti) { under += s.ti.under; cost += s.ti.need; } if (s.x.available < 0) overN++; }
+  for (const c of A.plan.cats) { if (c.hidden) { if (catM(m, c.id).available < 0) overN++; continue; } const s = catStatus(c, m); if (s.ti) { under += s.ti.under; cost += s.ti.need; } if (s.x.available < 0) overN++; }
   return { under, cost, overN };
 }
 function viewPlan() {
@@ -1226,7 +1247,8 @@ function viewPlan() {
       <button class="stat" data-a="statInfo" data-k="aom"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></button>
       <button class="stat" data-a="statInfo" data-k="cost"><span>Cost to Be Me</span><b class="num">${fmt(st.cost)}</b></button>
       <button class="stat" data-a="filter" data-f="under"><span>Underfunded</span><b class="num">${fmt(st.under)}</b></button>
-    </div></div>`;
+    </div>
+    <button class="asgbar" data-a="rtaSheet"><span class="grow"><span class="lbl">Assigned in ${esc(monthLabel(m))}</span><b class="num">${fmt(md.assigned)}</b></span>${(() => { const ck = budgetCheck(m); return `<span class="ck ${ck.gap ? 'bad' : 'ok'}">${ck.gap ? 'Gap ' + fmt(ck.gap) : '✓ matches accounts'}</span>`; })()}</button></div>`;
   }
   h += `<div class="wrap">`;
   { // compact alert chips (YNAB-style), one line instead of stacked banners
@@ -1256,7 +1278,7 @@ function viewPlan() {
   let shown = 0;
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
-    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden));
+    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden || catM(m, c.id).available < 0));
     const VW = F.startsWith('v:') ? (A.plan.views || []).find(v => 'v:' + v.id === F) : null;
     if (VW) cats = cats.filter(c => VW.cats.includes(c.id));
     else if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
@@ -1327,6 +1349,7 @@ function inspector() {
   return `<div class="itop"><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div>` + sec('sum', `${cap(mn)}'s Summary`, `
       <div class="irow"><span>Left Over from Last Month</span><b class="num">${fmt(prevLeft)}</b></div>
       <div class="irow"><span>Assigned in ${cap(mn)}</span><b class="num">${fmt(md.assigned)}</b></div>
+      ${(() => { const ck = budgetCheck(m); return `<div class="irow"><span>Cash in budget accounts</span><b class="num">${fmt(ck.cash)}</b></div><div class="irow"><span>Check</span><b class="num" style="color:${ck.gap ? 'var(--bad)' : 'var(--good, inherit)'}">${ck.gap ? 'Gap ' + fmt(ck.gap) : '✓ matches'}</b></div>`; })()}
       <div class="irow"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div>
       <div class="irow big"><span>Available</span><b class="num">${fmt(md.available)}</b></div>
       <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div>`) + sec('cost', 'Cost to Be Me', `
@@ -1338,6 +1361,8 @@ function inspector() {
 }
 
 /* ---------- ACCOUNTS (mobile list) ---------- */
+/* deferred-debit card of a checking account: a credit account whose name starts with the checking account's name ("SG" → "SG Card") */
+const linkedCards = a => isCredit(a) || !onBudget(a) ? [] : A.plan.accounts.filter(c => !c.closed && isCredit(c) && c.name.toLowerCase().startsWith(a.name.toLowerCase() + ' '));
 function viewAccounts() {
   const p = A.plan, b = balances();
   let net = 0; for (const a of p.accounts) if (!a.closed) net += b[a.id].working;
@@ -1355,6 +1380,7 @@ function viewAccounts() {
       h += `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span>
         <span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${ACCT[a.type].label}${unap ? ` · <b style="color:var(--info)">${unap} to approve</b>` : ''}${a.lastRec ? ' · reconciled ' + fmtDate(a.lastRec) : ''}</span></span>
         <strong class="num ${x.working < 0 ? 'amt-bad' : ''}">${fmt(x.working)}</strong></button>`;
+      for (const cd of linkedCards(a)) { const v = x.working + b[cd.id].working; h += `<button class="li sub" data-a="openAcct" data-id="${a.id}"><span class="ic" style="background:none"></span><span class="grow small muted">${esc(a.name)} − ${esc(cd.name)}</span><strong class="num ${v < 0 ? 'amt-bad' : ''}">${fmt(v)}</strong></button>`; }
     }
     h += `</div>`;
   }
@@ -1740,9 +1766,9 @@ function catSheet(cid, asHtml) {
     ${x.available < 0 ? `<div class="banner bad">${I.info}<span>${x.creditOver && !x.cashOver ? 'Overspent on credit: this becomes debt you will need to pay.' : 'Overspent: cover it with money from another category.'}</span></div>
       <button class="btn pri block" data-a="coverSheet" data-c="${cid}">Cover Overspending (${fmt(-x.available)})</button>` : ''}
     <div class="row"><button class="btn grow" data-a="moveSheet" data-c="${cid}">${I.swap} Move Money</button></div>
+    ${c.cc ? ccInfo(c) : targetEditor(c)}
     <div class="sec-t" style="padding-top:4px"><span>Auto-Assign</span></div>
     <div class="card">${quick.map(([l, v]) => `<button class="li" data-a="setAssign" data-c="${cid}" data-v="${v}"><span class="grow">${l}</span><strong class="num">${fmt(v)}</strong></button>`).join('')}</div>
-    ${c.cc ? ccInfo(c) : targetEditor(c)}
     <div class="sec-t"><span>Details</span></div>
     <div class="grid2" style="grid-template-columns:76px minmax(0,1fr)">
       <div class="field"><label for="cEmoji">Icon</label><input id="cEmoji" class="in" maxlength="4" value="${esc(c.emoji || '')}" placeholder="Emoji" data-cf="emoji" data-c="${cid}"></div>
@@ -1754,7 +1780,9 @@ function catSheet(cid, asHtml) {
     ${recent.length ? `<div class="card">${recent.slice(0, 30).map(t => txRow(t, true)).join('')}</div>` : `<div class="muted small">No transactions this month.</div>`}
     ${!c.cc ? `<div class="row" style="margin-top:6px"><button class="btn grow" data-a="cHide" data-c="${cid}">${c.hidden ? I.eye + ' Unhide' : I.eyeoff + ' Hide'}</button><button class="btn danger grow" data-a="catDelete" data-c="${cid}">${I.trash} Delete</button></div>` : ''}`;
   if (asHtml) return body;
-  openSheet(c.name, body);
+  const open = $('#scrim .sheet');
+  if (open && open.dataset.cat === cid) { const b = $('#scrim .sheet-b'), st = b.scrollTop; b.innerHTML = body; b.scrollTop = st; return; }
+  const s = openSheet(c.name, body); const sh = s && $('.sheet', s); if (sh) sh.dataset.cat = cid;
 }
 function ccInfo(c) {
   const bal = balances()[c.cc]?.working || 0, x = catM(A.month, c.id);
@@ -1803,7 +1831,16 @@ function rtaSheet() {
     <div class="li"><span class="grow">Assigned in Future</span><strong class="num">${fmt(-md.future)}</strong></div>
     <div class="li"><strong class="grow">Ready to Assign</strong><strong class="num">${fmt(md.rta)}</strong></div></div>
     ${md.uncat ? `<div class="banner warn">${I.info}<span>${fmt(md.uncat)} of uncategorized transactions is counted here.</span></div>` : ''}
-    <div class="grid2"><div class="kpi"><span>Total Available</span><b class="num">${fmt(md.available)}</b></div><div class="kpi"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div></div>
+    <div class="grid2"><div class="kpi"><span>Assigned in ${esc(monthLabel(m))}</span><b class="num" style="font-size:20px">${fmt(md.assigned)}</b></div><div class="kpi"><span>Total Available</span><b class="num">${fmt(md.available)}</b></div></div>
+    ${(() => { const ck = budgetCheck(m); return `<div class="sec-t"><span>Check against your accounts</span></div><div class="card">
+      <div class="li"><span class="grow">Cash in budget accounts${m === curMonth() ? '' : ' (end of month)'}</span><strong class="num">${fmt(ck.cash)}</strong></div>
+      <div class="li"><span class="grow muted">Ready to Assign</span><span class="num">${fmt(ck.rta)}</span></div>
+      ${ck.future ? `<div class="li"><span class="grow muted">Assigned in later months</span><span class="num">${fmt(ck.future)}</span></div>` : ''}
+      <div class="li"><span class="grow muted">Available in categories</span><span class="num">${fmt(ck.available)}</span></div>
+      ${ck.creditOver ? `<div class="li"><span class="grow muted">Spent on credit, not covered yet</span><span class="num">${fmt(ck.creditOver)}</span></div>` : ''}
+      <div class="li"><strong class="grow">${ck.gap ? 'Gap' : 'Matches your accounts'}</strong><strong class="num" style="color:${ck.gap ? 'var(--bad)' : 'inherit'}">${ck.gap ? fmt(ck.gap) : '✓'}</strong></div></div>
+      <div class="small muted">Credit cards are left out: their balance is covered by the credit card payment categories.</div>`; })()}
+    <div class="grid2"><div class="kpi"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div><div class="kpi"><span>Income</span><b class="num">${fmt(md.income)}</b></div></div>
     <div class="field"><label for="mNote">Month note</label><textarea id="mNote" class="in" data-mnote="${m}" placeholder="Enter a note…">${esc(A.plan.notes?.[m] || '')}</textarea></div>
     <button class="btn pri block" data-a="assignSheet">${I.wand} Auto-Assign</button>`;
   openSheet('Ready to Assign — ' + monthLabel(m), body);
@@ -4310,6 +4347,42 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
   document.addEventListener('pointermove', e => { if (!g) return; const w = Math.max(60, Math.round(g.w + e.clientX - g.x)); g.th.style.width = w + 'px'; g.nw = w; });
   document.addEventListener('pointerup', () => { if (!g) return; if (g.nw) { A.ui.colW = { ...(A.ui.colW || {}), [g.k]: g.nw }; savePref('colW', A.ui.colW); } g = null; document.body.classList.remove('colresize'); });
 }
+
+/* ---------- calculator bar above the phone keyboard (like YNAB's keypad: + − × ÷ =) ---------- */
+(function calcBar() {
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  const SEL = 'input[inputmode="decimal"]';
+  const bar = document.createElement('div'); bar.className = 'calcbar'; bar.hidden = true; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Calculator');
+  const ops = [['+', '+', 'Plus'], ['−', '-', 'Minus'], ['×', '*', 'Times'], ['÷', '/', 'Divided by'], ['=', '=', 'Equals']];
+  bar.innerHTML = ops.map(([l, v, a]) => `<button type="button" data-op="${v}" class="${v === '=' ? 'eq' : ''}" aria-label="${a}">${l}</button>`).join('');
+  document.body.appendChild(bar);
+  let cur = null;
+  const place = () => { const vv = window.visualViewport; const off = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0; bar.style.bottom = off + 'px'; };
+  document.addEventListener('focusin', e => { if (e.target.matches?.(SEL)) { cur = e.target; bar.hidden = false; place(); } });
+  document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement?.matches?.(SEL)) { bar.hidden = true; cur = null; } }, 80));
+  window.visualViewport?.addEventListener('resize', place); window.visualViewport?.addEventListener('scroll', place);
+  const fire = el => el.dispatchEvent(new Event('input', { bubbles: true }));
+  // the press is handled on touchstart and its default cancelled, so the field keeps the focus and the keyboard stays open
+  bar.addEventListener('touchstart', e => { e.preventDefault(); act(e.target.closest('[data-op]')); }, { passive: false });
+  bar.addEventListener('mousedown', e => { e.preventDefault(); act(e.target.closest('[data-op]')); });
+  function act(b) {
+    if (!b || !cur || !document.body.contains(cur)) return;
+    const op = b.dataset.op, el = cur;
+    if (op === '=') {
+      let raw = el.value.trim();
+      // assigned field: "+20" means 20 more than what is already assigned (same rule as when leaving the field)
+      if (el.dataset.assign && /^[+*/×x−-]/.test(raw)) { const now = getAssigned(A.month, el.dataset.assign); raw = fmtIn(now) + raw; }
+      const v = evalExpr(raw); if (v == null) { toast('Amount not recognized'); return; }
+      el.value = fmtIn(v); fire(el); return;
+    }
+    const v = el.value, s = el.selectionStart ?? v.length, en = el.selectionEnd ?? v.length;
+    const all = s === 0 && en === v.length && v.length > 0; // whole value selected on focus: keep it and add the operator after it
+    const a = all ? v.length : s, z = all ? v.length : en;
+    el.value = v.slice(0, a) + op + v.slice(z); const p = a + 1;
+    try { el.setSelectionRange(p, p); } catch (x) { }
+    fire(el);
+  }
+})();
 </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})</script>
 </body></html>

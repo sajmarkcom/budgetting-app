@@ -263,6 +263,16 @@ function calc(toMonth) {
   _calc = res; _calcV = A.calcV; _calcTo = want;
   return res;
 }
+/* Cash in budget accounts (cards excluded) must equal Ready to Assign + money assigned in later months
+   + everything available in categories + spending on credit not covered yet. A gap means a calculation bug. */
+function budgetCheck(m) {
+  const end = addMonths(m, 1) + '-00';
+  let cash = 0, cards = 0;
+  for (const t of A.tx) { const a = L.acct[t.acct]; if (!onBudget(a) || t.date > end) continue; if (isCredit(a)) cards += t.amount; else cash += t.amount; }
+  const md = monthData(m);
+  const expected = md.rtaBase + md.available + md.creditOver;
+  return { cash, cards, rta: md.rta, future: md.rtaBase - md.rta, available: md.available, creditOver: md.creditOver, expected, gap: cash - expected };
+}
 function monthData(m) { const c = calc(m); return c.months[m] || (m < c.minM ? emptyMonth() : c.months[m]); }
 function emptyMonth() { return { cats: {}, income: 0, uncat: 0, assigned: 0, activity: 0, available: 0, cashOver: 0, creditOver: 0, rta: 0, future: 0, prevCashOver: 0 }; }
 function catM(m, id) { return monthData(m).cats[id] || { carry: 0, assigned: 0, activity: 0, available: 0, cashOver: 0, creditOver: 0 }; }

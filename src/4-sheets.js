@@ -57,9 +57,9 @@ function catSheet(cid, asHtml) {
     ${x.available < 0 ? `<div class="banner bad">${I.info}<span>${x.creditOver && !x.cashOver ? 'Overspent on credit: this becomes debt you will need to pay.' : 'Overspent: cover it with money from another category.'}</span></div>
       <button class="btn pri block" data-a="coverSheet" data-c="${cid}">Cover Overspending (${fmt(-x.available)})</button>` : ''}
     <div class="row"><button class="btn grow" data-a="moveSheet" data-c="${cid}">${I.swap} Move Money</button></div>
+    ${c.cc ? ccInfo(c) : targetEditor(c)}
     <div class="sec-t" style="padding-top:4px"><span>Auto-Assign</span></div>
     <div class="card">${quick.map(([l, v]) => `<button class="li" data-a="setAssign" data-c="${cid}" data-v="${v}"><span class="grow">${l}</span><strong class="num">${fmt(v)}</strong></button>`).join('')}</div>
-    ${c.cc ? ccInfo(c) : targetEditor(c)}
     <div class="sec-t"><span>Details</span></div>
     <div class="grid2" style="grid-template-columns:76px minmax(0,1fr)">
       <div class="field"><label for="cEmoji">Icon</label><input id="cEmoji" class="in" maxlength="4" value="${esc(c.emoji || '')}" placeholder="Emoji" data-cf="emoji" data-c="${cid}"></div>
@@ -71,7 +71,9 @@ function catSheet(cid, asHtml) {
     ${recent.length ? `<div class="card">${recent.slice(0, 30).map(t => txRow(t, true)).join('')}</div>` : `<div class="muted small">No transactions this month.</div>`}
     ${!c.cc ? `<div class="row" style="margin-top:6px"><button class="btn grow" data-a="cHide" data-c="${cid}">${c.hidden ? I.eye + ' Unhide' : I.eyeoff + ' Hide'}</button><button class="btn danger grow" data-a="catDelete" data-c="${cid}">${I.trash} Delete</button></div>` : ''}`;
   if (asHtml) return body;
-  openSheet(c.name, body);
+  const open = $('#scrim .sheet');
+  if (open && open.dataset.cat === cid) { const b = $('#scrim .sheet-b'), st = b.scrollTop; b.innerHTML = body; b.scrollTop = st; return; }
+  const s = openSheet(c.name, body); const sh = s && $('.sheet', s); if (sh) sh.dataset.cat = cid;
 }
 function ccInfo(c) {
   const bal = balances()[c.cc]?.working || 0, x = catM(A.month, c.id);
@@ -120,7 +122,16 @@ function rtaSheet() {
     <div class="li"><span class="grow">Assigned in Future</span><strong class="num">${fmt(-md.future)}</strong></div>
     <div class="li"><strong class="grow">Ready to Assign</strong><strong class="num">${fmt(md.rta)}</strong></div></div>
     ${md.uncat ? `<div class="banner warn">${I.info}<span>${fmt(md.uncat)} of uncategorized transactions is counted here.</span></div>` : ''}
-    <div class="grid2"><div class="kpi"><span>Total Available</span><b class="num">${fmt(md.available)}</b></div><div class="kpi"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div></div>
+    <div class="grid2"><div class="kpi"><span>Assigned in ${esc(monthLabel(m))}</span><b class="num" style="font-size:20px">${fmt(md.assigned)}</b></div><div class="kpi"><span>Total Available</span><b class="num">${fmt(md.available)}</b></div></div>
+    ${(() => { const ck = budgetCheck(m); return `<div class="sec-t"><span>Check against your accounts</span></div><div class="card">
+      <div class="li"><span class="grow">Cash in budget accounts${m === curMonth() ? '' : ' (end of month)'}</span><strong class="num">${fmt(ck.cash)}</strong></div>
+      <div class="li"><span class="grow muted">Ready to Assign</span><span class="num">${fmt(ck.rta)}</span></div>
+      ${ck.future ? `<div class="li"><span class="grow muted">Assigned in later months</span><span class="num">${fmt(ck.future)}</span></div>` : ''}
+      <div class="li"><span class="grow muted">Available in categories</span><span class="num">${fmt(ck.available)}</span></div>
+      ${ck.creditOver ? `<div class="li"><span class="grow muted">Spent on credit, not covered yet</span><span class="num">${fmt(ck.creditOver)}</span></div>` : ''}
+      <div class="li"><strong class="grow">${ck.gap ? 'Gap' : 'Matches your accounts'}</strong><strong class="num" style="color:${ck.gap ? 'var(--bad)' : 'inherit'}">${ck.gap ? fmt(ck.gap) : '✓'}</strong></div></div>
+      <div class="small muted">Credit cards are left out: their balance is covered by the credit card payment categories.</div>`; })()}
+    <div class="grid2"><div class="kpi"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div><div class="kpi"><span>Income</span><b class="num">${fmt(md.income)}</b></div></div>
     <div class="field"><label for="mNote">Month note</label><textarea id="mNote" class="in" data-mnote="${m}" placeholder="Enter a note…">${esc(A.plan.notes?.[m] || '')}</textarea></div>
     <button class="btn pri block" data-a="assignSheet">${I.wand} Auto-Assign</button>`;
   openSheet('Ready to Assign — ' + monthLabel(m), body);

@@ -98,6 +98,7 @@ function sidebar() {
     const tot = list.reduce((s, a) => s + b[a.id].working, 0);
     h += `<div class="side-sec"><button class="side-sec-h" data-a="collapse" data-g="s_${key}" aria-expanded="${!col}"><span class="chev ${col ? 'shut' : ''}">${I.down}</span><span class="grow">${label}</span><span class="num">${fmt(tot)}</span></button>`;
     if (!col) for (const a of list) { h += `<button class="side-acct ${A.acct === a.id ? 'on' : ''}" data-a="openAcctNav" data-id="${a.id}" draggable="true" data-drag="${a.id}" title="Drag to reorder"><span class="grow ellip">${a.star ? '<span class="star-s">★</span> ' : ''}${esc(a.name)}</span>${linked.has(a.id) ? `<span class="linked" title="Connected to your bank" aria-label="Connected to your bank">${I.link}</span>` : ''}<span class="num ${b[a.id].working < 0 ? 'amt-bad' : ''}">${fmt(b[a.id].working)}</span></button>`;
+      for (const cd of linkedCards(a)) { const v = b[a.id].working + b[cd.id].working; h += `<div class="side-acct sub" title="${esc(a.name)} after the ${esc(cd.name)} statement"><span class="grow ellip small muted">${esc(a.name)} − ${esc(cd.name)}</span><span class="num small ${v < 0 ? 'amt-bad' : ''}">${fmt(v)}</span></div>`; }
       const dc = deferredCards()[a.id]; if (dc) { const after = b[a.id].working + dc.reduce((x, id) => x + (b[id]?.working || 0), 0); const ov = a.overdraft || 0, cls = after >= 0 ? '' : after < -ov ? 'amt-bad' : 'amt-warn';
         h += `<div class="side-after" title="Balance once the deferred card is debited${ov ? ' · authorized overdraft ' + fmt(ov) : ''}"><span class="grow ellip">after card${after < 0 && ov ? ' · ' + (after < -ov ? 'over limit' : fmt(ov + after) + ' left') : ''}</span><span class="num ${cls}">${fmt(after)}</span></div>`; } }
     h += `</div>`;
@@ -153,7 +154,7 @@ function targetText(c, m, s) {
 /* ---------- PLAN ---------- */
 function planStats(m) {
   let under = 0, cost = 0, overN = 0, overfunded = 0;
-  for (const c of A.plan.cats) { if (c.hidden) continue; const s = catStatus(c, m); if (s.ti) { under += s.ti.under; cost += s.ti.need; } if (s.x.available < 0) overN++; }
+  for (const c of A.plan.cats) { if (c.hidden) { if (catM(m, c.id).available < 0) overN++; continue; } const s = catStatus(c, m); if (s.ti) { under += s.ti.under; cost += s.ti.need; } if (s.x.available < 0) overN++; }
   return { under, cost, overN };
 }
 function viewPlan() {
@@ -186,7 +187,8 @@ function viewPlan() {
       <button class="stat" data-a="statInfo" data-k="aom"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></button>
       <button class="stat" data-a="statInfo" data-k="cost"><span>Cost to Be Me</span><b class="num">${fmt(st.cost)}</b></button>
       <button class="stat" data-a="filter" data-f="under"><span>Underfunded</span><b class="num">${fmt(st.under)}</b></button>
-    </div></div>`;
+    </div>
+    <button class="asgbar" data-a="rtaSheet"><span class="grow"><span class="lbl">Assigned in ${esc(monthLabel(m))}</span><b class="num">${fmt(md.assigned)}</b></span>${(() => { const ck = budgetCheck(m); return `<span class="ck ${ck.gap ? 'bad' : 'ok'}">${ck.gap ? 'Gap ' + fmt(ck.gap) : '✓ matches accounts'}</span>`; })()}</button></div>`;
   }
   h += `<div class="wrap">`;
   { // compact alert chips (YNAB-style), one line instead of stacked banners
@@ -216,7 +218,7 @@ function viewPlan() {
   let shown = 0;
   for (const g of groups) {
     if (g.hidden && !A.ui.edit) continue;
-    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden));
+    let cats = p.cats.filter(c => c.gid === g.id && (!c.hidden || A.ui.showHidden || catM(m, c.id).available < 0));
     const VW = F.startsWith('v:') ? (A.plan.views || []).find(v => 'v:' + v.id === F) : null;
     if (VW) cats = cats.filter(c => VW.cats.includes(c.id));
     else if (F !== 'all') cats = cats.filter(c => { const s = catStatus(c, m); return F === 'under' ? s.ti && s.ti.under > 0 : F === 'over' ? s.x.available < 0 : F === 'avail' ? s.x.available > 0 : F === 'snoozed' ? s.ti && s.ti.snoozed : F === 'overf' ? s.ti && !s.ti.snoozed && s.x.available > s.ti.total && s.ti.total > 0 : true; });
@@ -287,6 +289,7 @@ function inspector() {
   return `<div class="itop"><button class="ibtn" data-a="inspToggle" aria-label="Hide this panel" title="Hide this panel">${I.right}</button></div>` + sec('sum', `${cap(mn)}'s Summary`, `
       <div class="irow"><span>Left Over from Last Month</span><b class="num">${fmt(prevLeft)}</b></div>
       <div class="irow"><span>Assigned in ${cap(mn)}</span><b class="num">${fmt(md.assigned)}</b></div>
+      ${(() => { const ck = budgetCheck(m); return `<div class="irow"><span>Cash in budget accounts</span><b class="num">${fmt(ck.cash)}</b></div><div class="irow"><span>Check</span><b class="num" style="color:${ck.gap ? 'var(--bad)' : 'var(--good, inherit)'}">${ck.gap ? 'Gap ' + fmt(ck.gap) : '✓ matches'}</b></div>`; })()}
       <div class="irow"><span>Activity</span><b class="num">${fmt(md.activity)}</b></div>
       <div class="irow big"><span>Available</span><b class="num">${fmt(md.available)}</b></div>
       <div class="irow"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></div>`) + sec('cost', 'Cost to Be Me', `
@@ -298,6 +301,8 @@ function inspector() {
 }
 
 /* ---------- ACCOUNTS (mobile list) ---------- */
+/* deferred-debit card of a checking account: a credit account whose name starts with the checking account's name ("SG" → "SG Card") */
+const linkedCards = a => isCredit(a) || !onBudget(a) ? [] : A.plan.accounts.filter(c => !c.closed && isCredit(c) && c.name.toLowerCase().startsWith(a.name.toLowerCase() + ' '));
 function viewAccounts() {
   const p = A.plan, b = balances();
   let net = 0; for (const a of p.accounts) if (!a.closed) net += b[a.id].working;
@@ -315,6 +320,7 @@ function viewAccounts() {
       h += `<button class="li" data-a="openAcct" data-id="${a.id}"><span class="ic">${acctIcon(a)}</span>
         <span class="grow"><strong class="ellip" style="display:block">${esc(a.name)}</strong><span class="small muted">${ACCT[a.type].label}${unap ? ` · <b style="color:var(--info)">${unap} to approve</b>` : ''}${a.lastRec ? ' · reconciled ' + fmtDate(a.lastRec) : ''}</span></span>
         <strong class="num ${x.working < 0 ? 'amt-bad' : ''}">${fmt(x.working)}</strong></button>`;
+      for (const cd of linkedCards(a)) { const v = x.working + b[cd.id].working; h += `<button class="li sub" data-a="openAcct" data-id="${a.id}"><span class="ic" style="background:none"></span><span class="grow small muted">${esc(a.name)} − ${esc(cd.name)}</span><strong class="num ${v < 0 ? 'amt-bad' : ''}">${fmt(v)}</strong></button>`; }
     }
     h += `</div>`;
   }

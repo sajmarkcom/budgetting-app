@@ -154,6 +154,16 @@ button > svg, label > svg, a > svg, .li > svg{width:20px; height:20px; flex:none
 .stats::-webkit-scrollbar{display:none}
 .stat{flex:none; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); padding:8px 12px; min-width:0; text-align:left}
 .stat b{display:block; font-size:15px}
+.asgbar{display:flex; align-items:center; gap:10px; width:100%; margin-top:10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-m); padding:10px 14px; text-align:left; color:inherit; font:inherit}
+.asgbar .lbl{display:block; font-size:11.5px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.05em}
+.asgbar b{display:block; font-size:22px; font-weight:800}
+.asgbar .ck{font-size:12.5px; font-weight:700; padding:4px 10px; border-radius:999px; white-space:nowrap}
+.asgbar .ck.ok{background:var(--surface-2); color:var(--muted)} .asgbar .ck.bad{background:var(--bad-soft); color:var(--bad)}
+.li.sub{min-height:0; padding-top:6px; padding-bottom:8px} .side-acct.sub{cursor:default; padding-top:0}
+.calcbar{position:fixed; left:0; right:0; bottom:0; z-index:9999; display:flex; gap:6px; padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px)); background:var(--surface-2); border-top:1px solid var(--line)}
+.calcbar[hidden]{display:none}
+.calcbar button{flex:1; height:42px; border:0; border-radius:10px; background:var(--surface); color:var(--fg); font:inherit; font-size:21px; font-weight:700; box-shadow:0 1px 0 var(--line); touch-action:manipulation}
+.calcbar button.eq{background:var(--accent); color:var(--accent-ink)}
 .stat span{font-size:11.5px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.05em}
 .chips{display:flex; gap:6px; overflow-x:auto; padding-block:10px 4px; scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}

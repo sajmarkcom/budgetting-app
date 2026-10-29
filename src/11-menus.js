@@ -473,3 +473,39 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
   document.addEventListener('pointermove', e => { if (!g) return; const w = Math.max(60, Math.round(g.w + e.clientX - g.x)); g.th.style.width = w + 'px'; g.nw = w; });
   document.addEventListener('pointerup', () => { if (!g) return; if (g.nw) { A.ui.colW = { ...(A.ui.colW || {}), [g.k]: g.nw }; savePref('colW', A.ui.colW); } g = null; document.body.classList.remove('colresize'); });
 }
+
+/* ---------- calculator bar above the phone keyboard (like YNAB's keypad: + − × ÷ =) ---------- */
+(function calcBar() {
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  const SEL = 'input[inputmode="decimal"]';
+  const bar = document.createElement('div'); bar.className = 'calcbar'; bar.hidden = true; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Calculator');
+  const ops = [['+', '+', 'Plus'], ['−', '-', 'Minus'], ['×', '*', 'Times'], ['÷', '/', 'Divided by'], ['=', '=', 'Equals']];
+  bar.innerHTML = ops.map(([l, v, a]) => `<button type="button" data-op="${v}" class="${v === '=' ? 'eq' : ''}" aria-label="${a}">${l}</button>`).join('');
+  document.body.appendChild(bar);
+  let cur = null;
+  const place = () => { const vv = window.visualViewport; const off = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0; bar.style.bottom = off + 'px'; };
+  document.addEventListener('focusin', e => { if (e.target.matches?.(SEL)) { cur = e.target; bar.hidden = false; place(); } });
+  document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement?.matches?.(SEL)) { bar.hidden = true; cur = null; } }, 80));
+  window.visualViewport?.addEventListener('resize', place); window.visualViewport?.addEventListener('scroll', place);
+  const fire = el => el.dispatchEvent(new Event('input', { bubbles: true }));
+  // the press is handled on touchstart and its default cancelled, so the field keeps the focus and the keyboard stays open
+  bar.addEventListener('touchstart', e => { e.preventDefault(); act(e.target.closest('[data-op]')); }, { passive: false });
+  bar.addEventListener('mousedown', e => { e.preventDefault(); act(e.target.closest('[data-op]')); });
+  function act(b) {
+    if (!b || !cur || !document.body.contains(cur)) return;
+    const op = b.dataset.op, el = cur;
+    if (op === '=') {
+      let raw = el.value.trim();
+      // assigned field: "+20" means 20 more than what is already assigned (same rule as when leaving the field)
+      if (el.dataset.assign && /^[+*/×x−-]/.test(raw)) { const now = getAssigned(A.month, el.dataset.assign); raw = fmtIn(now) + raw; }
+      const v = evalExpr(raw); if (v == null) { toast('Amount not recognized'); return; }
+      el.value = fmtIn(v); fire(el); return;
+    }
+    const v = el.value, s = el.selectionStart ?? v.length, en = el.selectionEnd ?? v.length;
+    const all = s === 0 && en === v.length && v.length > 0; // whole value selected on focus: keep it and add the operator after it
+    const a = all ? v.length : s, z = all ? v.length : en;
+    el.value = v.slice(0, a) + op + v.slice(z); const p = a + 1;
+    try { el.setSelectionRange(p, p); } catch (x) { }
+    fire(el);
+  }
+})();
