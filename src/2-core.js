@@ -117,7 +117,7 @@ const A = {
   plan: null,    // current plan core
   tx: [],        // current plan transactions
   view: 'home', month: curMonth(), acct: null, // acct: id | 'all'
-  ui: { filter: 'all', edit: false, collapsed: {}, showHidden: false, regFilter: 'all', search: '', select: false, selected: new Set(), reflect: 'spending', period: '3m', groupBy: 'group' },
+  ui: { filter: 'all', edit: false, collapsed: {}, showHidden: false, regFilter: 'all', search: '', select: false, selected: new Set(), reflect: 'spending', period: 'm', groupBy: 'cat' },
   undo: [], redo: [],
   sync: 'local', // local | syncing | synced | error
   calcV: 0,

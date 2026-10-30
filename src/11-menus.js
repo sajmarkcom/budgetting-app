@@ -693,3 +693,5 @@ Object.assign(ACT, {
   },
   rvToggleRec: () => { A.ui.rv = { ...regView(), rec: !regView().rec }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); },
 });
+
+document.addEventListener('change', e => { if (e.target.dataset?.c !== 'reflPeriod') return; A.ui.period = e.target.value; A.ui.reflOff = 0; render(); });

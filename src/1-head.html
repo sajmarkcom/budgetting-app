@@ -705,4 +705,11 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 @media (min-width:1024px){ :root[data-theme="dark"] .clr.c::before{background:#77BA21;border-color:#77BA21}:root[data-theme="dark"] .clr.c{color:#0C0D22}:root[data-theme="dark"] .clr.u::before{border-color:#9B9CAA}:root[data-theme="dark"] .clr.u{color:#9B9CAA} }
 @media (min-width:1024px) and (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .rtable .cellbtn,:root:not([data-theme="light"]) .rtable strong{font-weight:500}:root:not([data-theme="light"]) .rtable .chk,:root:not([data-theme="light"]) .colhead .cchk,:root:not([data-theme="light"]) .cat .cchk,:root:not([data-theme="light"]) .ghead .cchk,:root:not([data-theme="light"]) .rtable input[type=checkbox]{width:14px;height:14px;border-radius:3px}:root:not([data-theme="light"]) .rtable .amt-pos{color:#fff}:root:not([data-theme="light"]) .balbar .num{font-size:16px} }
 @media (min-width:1024px){ :root[data-theme="dark"] .rtable .cellbtn,:root[data-theme="dark"] .rtable strong{font-weight:500}:root[data-theme="dark"] .rtable .chk,:root[data-theme="dark"] .colhead .cchk,:root[data-theme="dark"] .cat .cchk,:root[data-theme="dark"] .ghead .cchk,:root[data-theme="dark"] .rtable input[type=checkbox]{width:14px;height:14px;border-radius:3px}:root[data-theme="dark"] .rtable .amt-pos{color:#fff}:root[data-theme="dark"] .balbar .num{font-size:16px} }
+@media (min-width:1024px){
+  .rtabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--surface)}.rtabs button{border:0;background:none;color:var(--muted);font:inherit;font-size:16px;font-weight:600;padding:14px 10px 12px;border-bottom:3px solid transparent}.rtabs button.on{color:var(--fg);border-bottom-color:#7583FF}
+  .rtitle{font-size:24px;font-weight:700;margin:18px 0 10px}
+  .rper{float:left;margin-right:8px}.rsel{height:30px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);font:inherit;font-size:13px;padding:0 8px}
+  .rnav{gap:8px}.rnav strong{font-size:14px}
+}
+@media (min-width:1024px){ .spbox{display:grid;grid-template-columns:minmax(260px,1fr) minmax(0,1.3fr);gap:24px;align-items:center} .spbox .legend{max-height:60vh;overflow:auto} }
 </style>

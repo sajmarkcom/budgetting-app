@@ -224,9 +224,16 @@ function viewReflect() {
   const tabs = [['spending', 'Spending Breakdown'], ['trends', 'Spending Trends'], ['networth', 'Net Worth'], ['ie', 'Income v Expense'], ['aom', 'Age of Money']];
   const per = [['m', 'This Month'], ['lm', 'Last Month'], ['3m', 'Last 3 Months'], ['6m', 'Last 6 Months'], ['ytd', 'Year to Date'], ['12m', 'Last 12 Months'], ['all', 'All Dates']];
   if (!DESK() && !A.ui.reflDetail) return reflectOverview();
-  let h = topBar('Reflect', esc(A.plan.name), !DESK() ? `<button class="ibtn" data-a="reflBack" aria-label="Back">${I.left}</button>` : '');
-  h += `<div class="wrap"><div class="chips">${tabs.map(([k, l]) => `<button class="chip ${A.ui.reflect === k ? 'on' : ''}" data-a="reflectTab" data-k="${k}">${l}</button>`).join('')}</div>
+  let h;
+  if (DESK()) { // YNAB web: underlined tabs, page title, date range control
+    h = `<div class="rtabs">${tabs.map(([k, l]) => `<button class="${A.ui.reflect === k ? 'on' : ''}" data-a="reflectTab" data-k="${k}">${l}</button>`).join('')}</div>
+      <div class="wrap"><h1 class="rtitle">${esc((tabs.find(t => t[0] === A.ui.reflect) || tabs[0])[1])}</h1>
+      <div class="rper"><select class="rsel" data-c="reflPeriod" aria-label="Date range">${per.map(([k, l]) => `<option value="${k}" ${A.ui.period === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+  } else {
+    h = topBar('Reflect', esc(A.plan.name), `<button class="ibtn" data-a="reflBack" aria-label="Back">${I.left}</button>`);
+    h += `<div class="wrap"><div class="chips">${tabs.map(([k, l]) => `<button class="chip ${A.ui.reflect === k ? 'on' : ''}" data-a="reflectTab" data-k="${k}">${l}</button>`).join('')}</div>
     <div class="chips" style="padding-top:2px">${per.map(([k, l]) => `<button class="chip ${A.ui.period === k ? 'on' : ''}" data-a="period" data-k="${k}">${l}</button>`).join('')}</div>`;
+  }
   const [from, to] = periodRange(); const months = monthsBetween(from, to);
   { const lab = from === to ? monthLabel(from) : `${MSHORT[+from.slice(5, 7) - 1]} ${from.slice(0, 4)} – ${MSHORT[+to.slice(5, 7) - 1]} ${to.slice(0, 4)}`; const ex = A.ui.reflEx ? A.ui.reflEx.size : 0;
     h += `<div class="rnav"><button class="ibtn" data-a="reflNav" data-d="-1" aria-label="Previous date range" ${A.ui.period === 'all' ? 'disabled' : ''}>${I.left}</button><strong>${lab}</strong><button class="ibtn" data-a="reflNav" data-d="1" aria-label="Next date range" ${A.ui.period === 'all' || to >= curMonth() ? 'disabled' : ''}>${I.right}</button>
@@ -247,7 +254,7 @@ function viewReflect() {
         const big = lines.filter(l => l.amount < 0).sort((a, b) => a.amount - b.amount)[0];
         return `<div class="kpis refl-kpis" style="margin-top:10px"><div class="kpi"><span>Total Spending</span><b class="num">${fmt(total)}</b></div><div class="kpi"><span>Average Monthly Spending</span><b class="num">${fmt(Math.round(total / months.length))}</b></div><div class="kpi"><span>Average Daily Spending</span><b class="num">${fmt(Math.round(total / days))}</b></div>
           <div class="kpi"><span>Most Frequent Category</span><b class="ellip" style="font-size:15px">${freq ? esc(catName(freq[0])) : '—'}</b><span class="small muted">${freq ? freq[1].size + ' transactions' : ''}</span></div><div class="kpi"><span>Largest Outflow</span><b class="ellip" style="font-size:15px">${big ? esc(L.payee[big.payee]?.name || '—') : '—'}</b><span class="small muted num">${big ? fmt(-big.amount) : ''}</span></div></div>`; })()}
-      <div class="chartbox" style="margin-top:10px"><div style="max-width:260px; margin:0 auto">${donut(items, total)}</div>
+      <div class="chartbox spbox" style="margin-top:10px"><div style="max-width:260px; margin:0 auto">${donut(items, total)}</div>
       <div class="legend">${full.map((x, i) => `<div class="li"><span class="dot" style="background:var(${COLORS[Math.min(i, 7) % 8]})"></span><span class="grow ellip">${esc(x.n)}</span><span class="small muted">${total ? (x.v / total < 0.01 ? '<1' : Math.round(x.v / total * 100)) : 0} %</span><strong class="num" style="width:96px; text-align:right">${fmt(x.v)}</strong></div>`).join('') || '<div class="muted small" style="padding:8px">No spending in this period.</div>'}</div></div>`;
   } else if (R === 'trends') {
     const lines = spendingLines(from, to); const gids = A.plan.groups.map(g => g.id);
