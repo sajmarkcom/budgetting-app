@@ -181,7 +181,9 @@ function assignSheet() {
 }
 
 /* ---------- move money / cover ---------- */
+let MV = null;
 function moveSheet(fromCid, toCid, amount, title) {
+  if (!DESK() && fromCid && fromCid !== 'rta' && !toCid && !title) { const av = catM(A.month, fromCid).available; MV = { cid: fromCid, dir: av >= 0 ? 'from' : 'to', other: null, amount: amount || Math.abs(av), pick: false, q: '' }; return moveYnab(); }
   const m = A.month;
   const opts = sel => `<option value="rta" ${sel === 'rta' ? 'selected' : ''}>Ready to Assign (${fmt(monthData(m).rta)})</option>` + A.plan.groups.map(g => {
     const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden); if (!cs.length) return '';
@@ -192,6 +194,33 @@ function moveSheet(fromCid, toCid, amount, title) {
     <div class="field"><label for="mvTo">To</label><select id="mvTo" class="in">${opts(toCid || 'rta')}</select></div>`;
   openSheet(title || 'Move Money', body, `<button class="btn pri block" data-a="moveDo">Move</button>`, { focus: '#mvAmt' });
 }
+// YNAB app "Move From / Move To": green header, amount pill, From/To switch, category picker
+function moveYnab() {
+  const m = A.month, c = L.cat[MV.cid], av = id => id === 'rta' ? monthData(m).rta : catM(m, id).available;
+  const pillCls = v => v > 0 ? 'good' : v < 0 ? 'bad' : 'zero';
+  const row = id => `<button class="li mvrow" data-a="mvPick" data-c="${id}"><span class="grow ellip">${id === 'rta' ? 'Ready to Assign' : esc(catName(id))}</span><span class="pill ${pillCls(av(id))}">${fmt(av(id))}</span></button>`;
+  let picker = '';
+  if (MV.pick) {
+    const q = (MV.q || '').toLowerCase(), ok = id => id !== MV.cid && (!q || (id === 'rta' ? 'ready to assign' : catName(id).toLowerCase()).includes(q));
+    const pins = (A.plan.pins || []).filter(id => L.cat[id] && !L.cat[id].hidden && ok(id));
+    picker = `<div class="mvpick"><h3>${MV.dir === 'from' ? 'Move to' : 'Move from'}</h3><input class="in mvq" data-c="mvQ" placeholder="Search Categories" value="${esc(MV.q || '')}" autocomplete="off">
+      ${pins.length ? `<div class="mvh">Pinned</div><div class="card">${pins.map(row).join('')}</div>` : ''}
+      ${ok('rta') ? `<div class="mvh">Inflow</div><div class="card">${row('rta')}</div>` : ''}
+      ${A.plan.groups.map(g => { const cs = A.plan.cats.filter(x => x.gid === g.id && !x.hidden && ok(x.id)); return cs.length ? `<div class="mvh">${esc(g.name)}</div><div class="card">${cs.map(x => row(x.id)).join('')}</div>` : ''; }).join('')}</div>`;
+  }
+  const other = MV.other;
+  const body = `<div class="mvhead ${av(MV.cid) < 0 ? 'neg' : ''}"><div class="mvcat">${esc(catName(MV.cid))}</div>
+      <input id="mvAmt" class="mvamt" inputmode="decimal" value="${MV.amount ? fmtIn(MV.amount) : ''}" placeholder="0,00" aria-label="Amount" data-c="mvAmt">
+      <button class="mvsw ${MV.dir}" data-a="mvSwap" aria-label="Switch direction"><i>${MV.dir === 'from' ? '↓' : '↑'}</i></button><div class="mvdir">${MV.dir === 'from' ? 'To' : 'From'}</div></div>
+    <button class="mvsel" data-a="mvOpenPick">${other ? `<span class="grow ellip">${other === 'rta' ? 'Ready to Assign' : esc(catName(other))}</span><span class="pill ${pillCls(av(other))}">${fmt(av(other))}</span>` : `${I.plus} Select Category`}</button>
+    <input type="hidden" id="mvFrom" value="${MV.dir === 'from' ? MV.cid : (other || '')}"><input type="hidden" id="mvTo" value="${MV.dir === 'from' ? (other || '') : MV.cid}">
+    ${picker}`;
+  const t = MV.dir === 'from' ? 'Move From' : 'Move To';
+  const open = $('#scrim .sheet'); if (open && open.dataset.mv) { $('#scrim .sheet-b').innerHTML = body; const h = $('#scrim .sheet-h h2'); if (h) h.textContent = t; const f = $('#scrim .sheet-f'); if (f) f.innerHTML = mvFoot(); }
+  else { const sc = openSheet(t, body, mvFoot()); const sh = sc && $('.sheet', sc); if (sh) { sh.dataset.mv = '1'; sh.classList.add('mvsheet'); } }
+  if (MV.pick) setTimeout(() => $('.mvq')?.focus({ preventScroll: true }), 30);
+}
+const mvFoot = () => `<button class="btn pri block" data-a="moveDo" ${MV && MV.other ? '' : 'disabled'}>Done</button>`;
 function coverSheet(cid) {
   const m = A.month, need = -catM(m, cid).available;
   const best = A.plan.cats.filter(c => c.id !== cid && !c.hidden && !c.cc && catM(m, c.id).available >= need) // never the card payment money: it is set aside to pay the card.sort((a, b) => catM(m, b.id).available - catM(m, a.id).available)[0];

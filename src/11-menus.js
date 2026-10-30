@@ -695,3 +695,48 @@ Object.assign(ACT, {
 });
 
 document.addEventListener('change', e => { if (e.target.dataset?.c !== 'reflPeriod') return; A.ui.period = e.target.value; A.ui.reflOff = 0; render(); });
+
+/* ---------- phone: YNAB keypad for Assigned (no iOS keyboard, so the page never jumps) ---------- */
+(() => {
+  const touch = () => !DESK() && matchMedia('(pointer:coarse)').matches;
+  let kp = null, inp = null, fresh = true;
+  const close = (save) => {
+    if (!kp) return; const el = inp; kp.remove(); kp = null; inp = null; document.body.classList.remove('kp-open');
+    if (el && document.body.contains(el)) { el.classList.remove('kp-on'); if (save) applyAssign(el); else { el.value = fmtIn(getAssigned(A.month, el.dataset.assign)); } }
+  };
+  const open = el => {
+    close(true); inp = el; fresh = true; el.classList.add('kp-on');
+    kp = document.createElement('div'); kp.className = 'ykp'; kp.setAttribute('role', 'dialog'); kp.setAttribute('aria-label', 'Keypad');
+    const k = (v, l, c = '') => `<button type="button" data-k="${v}" class="${c}">${l}</button>`;
+    kp.innerHTML = `<div class="ykp-top">${k('auto', I.wand + '<span>Auto-Assign</span>', 'tool')}${k('move', I.swap + '<span>Move Money</span>', 'tool')}${k('details', I.dots + '<span>Details</span>', 'tool')}</div>
+      <div class="ykp-g">${k('7', '7')}${k('8', '8')}${k('9', '9')}${k('-', '−', 'op')}${k('4', '4')}${k('5', '5')}${k('6', '6')}${k('+', '+', 'op')}${k('1', '1')}${k('2', '2')}${k('3', '3')}${k('=', '=', 'op')}${k(',', ',')}${k('0', '0')}${k('back', '⌫', 'muted')}${k('done', 'done', 'done')}</div>`;
+    document.body.appendChild(kp); document.body.classList.add('kp-open');
+    requestAnimationFrame(() => { const r = el.getBoundingClientRect(), top = window.innerHeight - kp.offsetHeight; if (r.bottom > top - 12 || r.top < 70) window.scrollBy({ top: r.top - (top / 2), behavior: 'smooth' }); });
+    kp.addEventListener('touchstart', e => { const b = e.target.closest('[data-k]'); if (!b) return; e.preventDefault(); press(b.dataset.k); }, { passive: false });
+    kp.addEventListener('mousedown', e => { const b = e.target.closest('[data-k]'); if (!b) return; e.preventDefault(); press(b.dataset.k); });
+  };
+  const press = key => {
+    if (!inp) return; const el = inp, cid = el.dataset.assign;
+    if (key === 'done') return close(true);
+    if (key === 'auto' || key === 'move' || key === 'details') { close(true); setTimeout(() => { if (key === 'move') moveSheet(cid); else { catSheet(cid); if (key === 'auto') setTimeout(() => { [...$$('#scrim .sec-t')].find(x => /Auto-Assign/.test(x.textContent))?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 150); } }, 30); return; }
+    let v = el.value;
+    if (key === 'clear') v = '';
+    else if (key === 'back') v = fresh ? '' : v.slice(0, -1);
+    else if (key === '=') { let raw = v.trim(); if (/^[+*/−-]/.test(raw)) raw = fmtIn(getAssigned(A.month, cid)) + raw; const n = evalExpr(raw); if (n != null) v = fmtIn(n); }
+    else if (/[+\-]/.test(key)) v = (fresh ? v : v) + (key === '-' ? '-' : '+');
+    else v = (fresh ? '' : v) + key;
+    fresh = false; el.value = v;
+  };
+  document.addEventListener('pointerdown', e => {
+    const el = e.target.closest?.('.ass-in'); if (el && touch()) { e.preventDefault(); el.setAttribute('inputmode', 'none'); el.readOnly = true; open(el); return; }
+    if (kp && !e.target.closest('.ykp')) close(true);
+  }, true);
+  window.addEventListener('blur', () => close(true));
+})();
+
+Object.assign(ACT, {
+  mvSwap: () => { MV.dir = MV.dir === 'from' ? 'to' : 'from'; MV.other = null; moveYnab(); },
+  mvOpenPick: () => { MV.pick = !MV.pick; moveYnab(); },
+  mvPick: el => { MV.other = el.dataset.c; MV.pick = false; MV.q = ''; moveYnab(); },
+});
+document.addEventListener('input', e => { const el = e.target; if (!MV) return; if (el.dataset?.c === 'mvAmt') { const v = evalExpr(el.value); MV.amount = v == null ? 0 : Math.abs(v); } else if (el.dataset?.c === 'mvQ') { MV.q = el.value; clearTimeout(el._t); el._t = setTimeout(() => { moveYnab(); const q = $('.mvq'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 120); } });
