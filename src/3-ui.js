@@ -192,7 +192,8 @@ function viewPlan() {
   } else { // YNAB mobile: Edit · filter · month ▾ · ⋯, then the Ready to Assign bar
     const F0 = A.ui.filter && A.ui.filter !== 'all';
     h = `<div class="top wrap"><div class="top-bar mplan"><button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${A.ui.edit ? 'Done' : 'Edit'}</button><button class="ibtn ${F0 ? 'on' : ''}" data-a="planFilterMenu" aria-label="Filter categories">${ico('<path d="M4 6h16M7 12h10M10 18h4"/>')}</button>
-      <div class="top-title"><button class="mpick" data-a="monthPick" aria-label="Choose a month"><h1>${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)} <span class="caret">▾</span></h1></button></div>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}<button class="ibtn" data-a="planMore" aria-label="More">${I.dots}</button></div></div>`;
+      <div class="top-title"><button class="mpick" data-a="monthPick" aria-label="Choose a month"><h1>${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)} <span class="caret">${ico('<path d="M6 9l6 6 6-6"/>')}</span></h1></button></div><button class="ibtn" data-a="planMore" aria-label="More">${I.dots}</button></div></div>`;
+    if (m !== curMonth()) h += `<div class="wrap"><button class="todaybar" data-a="monthToday">Today</button></div>`;
     h += `<div class="wrap"><button class="rtabar ${rtaCls}" data-a="${rta > 0 ? 'assignSheet' : rta < 0 ? 'fixOver' : 'rtaSheet'}"><b class="num">${fmt(rta)}</b><span class="grow"></span><span>${rta < 0 ? 'Assigned too much' : 'Ready to Assign'}</span>${I.right}</button>`;
     if (A.ui.edit) { const inc = A.plan.expectedIncome || 0, mx = Math.max(st.cost, inc, 1);
       h += `<div class="card ctbm"><div class="ctbm-h"><b class="num">${fmt(st.cost)}</b><span class="small muted">Cost to Be Me</span></div>

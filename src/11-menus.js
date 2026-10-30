@@ -653,10 +653,16 @@ Object.assign(ACT, {
   },
   planMore: el => {
     const r = el.getBoundingClientRect();
-    popMenu(r.right - 250, r.bottom + 6,
-      mi(I.plus, 'New Category Group', 'groupNew') + mi(I.undo, 'Undo', 'undo', '', '', !A.undo.length) + mi(I.redo || I.undo, 'Redo', 'redo', '', '', !A.redo.length) + mi(I.swap, 'Recent Moves', 'moves') +
-      msep + mi(I.wand, 'Auto-Assign', 'assignSheet') + mi(I.info, 'Ready to Assign Breakdown', 'rtaSheet') + mi(I.check, 'Approve categorized transactions', 'approveCat') + mi(I.wand, 'Auto-categorize', 'autoCat') +
-      msep + mi('', A.plan.groups.every(g => A.ui.collapsed[g.id]) ? 'Expand All' : 'Collapse All', 'collapseAll') + mi('', A.ui.compact ? 'Show Progress Bars' : 'Compact Rows', 'setCompact', `data-v="${A.ui.compact ? 0 : 1}"`) + mi(I.eye, 'Show Hidden Categories', 'toggleHidden') +
+    popMenu(r.right - 260, r.bottom + 6,
+      mi(I.undo, 'Undo Last Move/Assignment', 'undo', '', '', !A.undo.length) + mi(I.repeat, 'Plan Reset', 'resetPlanMonth') + mi(I.plan, 'Open Plan', 'switchPlan') +
+      msep + mi('', A.plan.groups.every(g => A.ui.collapsed[g.id]) ? 'Expand All' : 'Collapse All', 'collapseAll') + mi('▬', document.body.classList.contains('mbars') ? 'Hide Progress Bars' : 'Show Progress Bars', 'mBars') + mi(I.eye, document.body.classList.contains('hideamt') ? 'Show Amounts' : 'Hide Amounts', 'dispAmtQ') + mi(I.eye, A.ui.showHidden ? 'Hide Hidden Categories' : 'Show Hidden Categories', 'toggleHidden') +
+      msep + mi(I.plus, 'New Category Group', 'groupNew') + mi(I.swap, 'Recent Moves', 'moves') + mi(I.wand, 'Auto-Assign', 'assignSheet') + mi(I.check, 'Approve categorized transactions', 'approveCat') + mi(I.wand, 'Auto-categorize', 'autoCat') +
       msep + mi(I.gear, 'Settings', 'nav', 'data-v="settings"'));
   },
+  // YNAB "Plan Reset": every unspent euro of this month goes back to Ready to Assign (one undo step)
+  mBars: () => { const on = !document.body.classList.contains('mbars'); document.body.classList.toggle('mbars', on); try { localStorage.setItem('budget.mbars', on ? '1' : ''); } catch (e) { } },
+  dispAmtQ: () => { const on = !document.body.classList.contains('hideamt'); document.body.classList.toggle('hideamt', on); try { localStorage.setItem('budget.hideamt', on ? '1' : ''); } catch (e) { } },
+  resetPlanMonth: () => { const o = autoOptions(A.month, A.plan.cats.filter(c => !c.hidden)).find(x => x.k === 'resetAv'); if (!o || !o.changes.length) return toast('Nothing to reset: no money left in categories'); if (!confirm(`Plan Reset: ${fmt(-o.delta)} of unspent money goes back to Ready to Assign. You can undo it.`)) return; mutate('Plan reset', () => { for (const [cid, v] of o.changes) setAssigned(A.month, cid, v); }); },
 });
+
+try { if (localStorage.getItem('budget.mbars')) document.body.classList.add('mbars'); } catch (e) { }
