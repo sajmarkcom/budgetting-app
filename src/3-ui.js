@@ -245,7 +245,7 @@ function viewPlan() {
           <button class="ibtn" data-a="gMove" data-g="${g.id}" data-d="1" aria-label="Move group down">${I.down}</button>
           <button class="ibtn" data-a="catNew" data-g="${g.id}" aria-label="Add category">${I.plus}</button>
           <button class="ibtn" data-a="gEdit" data-g="${g.id}" aria-label="Edit group">${I.edit}</button></div>`
-        : `<span class="gsum num w-ass">${fmt(ga)}</span><span class="gsum num w-act hide-s">${fmt(gact)}</span><span class="gsum num w-av">${fmt(gav)}</span>`}
+        : `<span class="gsum num w-ass"><i class="glab">Assigned</i>${fmt(ga)}</span><span class="gsum num w-act hide-s">${fmt(gact)}</span><span class="gsum num w-av"><i class="glab">Available</i>${fmt(gav)}</span>`}
       </div>`;
     if (!col) for (const c of cats) { h += catRow(c, m); shown++; }
     h += `</section>`;
@@ -275,7 +275,7 @@ function catRow(c, m) {
       <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="-1" aria-label="Move up">${I.up}</button>
       <button class="ibtn" data-a="cMove" data-c="${c.id}" data-d="1" aria-label="Move down">${I.down}</button>
       <button class="ibtn" data-a="cHide" data-c="${c.id}" aria-label="${c.hidden ? 'Unhide' : 'Hide'}">${c.hidden ? I.eye : I.eyeoff}</button></div>` : `
-    <input class="ass-in w-ass" inputmode="decimal" enterkeyhint="done" aria-label="Assigned to ${esc(c.name)}" data-assign="${c.id}" value="${fmtIn(x.assigned)}">
+    <span class="ass-w w-ass"><input class="ass-in" inputmode="decimal" enterkeyhint="done" aria-label="Assigned to ${esc(c.name)}" data-assign="${c.id}" value="${fmtIn(x.assigned)}"><i class="ass-eur" aria-hidden="true">€</i></span>
     <button class="w-act hide-s num muted act actbtn" data-a="catActivity" data-c="${c.id}" title="See these transactions">${fmt(x.activity)}</button>
     <span class="w-av"><button class="pill ${s.cls}" data-a="pillTap" data-c="${c.id}">${pillIcon}${fmt(x.available)}</button></span>`}
   </div>`;
