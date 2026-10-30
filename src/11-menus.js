@@ -64,7 +64,7 @@ document.addEventListener('keydown', e => {
 });
 
 Object.assign(ACT, {
-  ctxClear: el => { const ts = ctxTargets(), v = el.dataset.v; mutate(v === 'c' ? 'Marked as cleared' : 'Marked as uncleared', () => ts.forEach(t => { if (t.cleared !== 'r') t.cleared = v; })); },
+  ctxClear: el => { const ts = ctxTargets(), v = el.dataset.v; mutate(v === 'c' ? 'Marked as cleared' : 'Marked as uncleared', () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared !== 'r') t.cleared = v; })); },
   ctxDup: () => {
     const ts = ctxTargets();
     mutate(ts.length > 1 ? ts.length + ' transactions duplicated' : 'Transaction duplicated', () => ts.forEach(t => {
@@ -136,7 +136,7 @@ function dropFutureBankLines() {
 }
 setTimeout(dropFutureBankLines, 1500);
 setTimeout(() => { try { if (A.plan && !A.plan.learnedCat) { backfillLearnedCat(); scheduleSave(); } } catch (e) { } }, 2500);
-setTimeout(() => { try { if (A.plan) { let n = 0; mutate('Card lines updated', () => { n = mergeCardPendingDupes(); }, { silent: true }); if (n) toast(n + ' card purchase' + (n > 1 ? 's' : '') + ' now booked by the bank (duplicate pending line merged)'); } } catch (e) { } }, 3000);
+setTimeout(() => { try { if (A.plan) { let n = 0; mutate('Card lines updated', () => { n = mergeCardPendingDupes(); alignLegs(); }, { silent: true }); if (n) toast(n + ' card purchase' + (n > 1 ? 's' : '') + ' now booked by the bank (duplicate pending line merged)'); } } catch (e) { } }, 3000);
 
 /* ---------- click on a category in the register: quick picker, best guesses first ---------- */
 function suggestCats(t) {

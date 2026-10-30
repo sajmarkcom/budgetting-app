@@ -94,7 +94,7 @@ const ACT = {
   regFilter: el => { A.ui.regFilter = el.dataset.f; render(); },
   more: () => { A.ui.regLimit = (A.ui.regLimit || 150) + 300; render._keepScroll = true; render(); },
   toggleSelect: () => { A.ui.select = !A.ui.select; A.ui.selected.clear(); render._keepScroll = true; render(); },
-  clr: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t || t.cleared === 'r') { if (t) toast('Reconciled transaction: edit it to unlock'); return; } render._keepScroll = true; mutate(t.cleared === 'u' ? 'Cleared' : 'Uncleared', () => { t.cleared = t.cleared === 'u' ? 'c' : 'u'; }, { silent: true }); },
+  clr: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t || t.cleared === 'r') { if (t) toast('Reconciled transaction: edit it to unlock'); return; } render._keepScroll = true; const v = t.cleared === 'u' ? 'c' : 'u'; mutate(v === 'c' ? 'Cleared' : 'Uncleared', () => { for (const l of txLegs(t)) if (l.cleared !== 'r') l.cleared = v; }, { silent: true }); },
   approve: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t) return; if (!t.cat && !t.splits && onBudget(L.acct[t.acct]) && !t.transferAcct) { txSheet(t.id); return; } render._keepScroll = true; mutate('Transaction approved', () => { t.approved = true; }, { silent: true }); },
   newTx: () => { closeSheet(); if (DESK() && A.view !== 'plan' && A.acct && $('.rtable')) { A.ui.inl = { id: 'new', acct: A.acct === 'all' ? null : A.acct }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.focus(), 30); return; } txSheet(null); },
   txEdit: (el, e) => { if (e && e.target && e.target.closest && e.target.closest('input,select,textarea,label,tr.inl')) return; if (DESK() && el.closest && el.closest('.rtable')) { const t = A.tx.find(x => x.id === el.dataset.id); if (t && !(t.splits && t.splits.length)) { A.ui.inl = { id: t.id }; render._keepScroll = true; render(); setTimeout(() => $('#inlPayee')?.select(), 30); return; } } txSheet(el.dataset.id); },
@@ -114,7 +114,7 @@ const ACT = {
     const k = el.dataset.k, ids = [...A.ui.selected]; const ts = A.tx.filter(t => A.ui.selected.has(t.id));
     if (k === 'none') { A.ui.selected.clear(); render(); return; }
     if (k === 'approve') mutate(`${ids.length} approved`, () => ts.forEach(t => t.approved = true));
-    else if (k === 'clear') mutate(`${ids.length} cleared`, () => ts.forEach(t => { if (t.cleared === 'u') t.cleared = 'c'; }));
+    else if (k === 'clear') mutate(`${ids.length} cleared`, () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared === 'u') t.cleared = 'c'; }));
     else if (k === 'del') { mutate(`${ids.length} deleted`, () => deleteTx(ids)); A.ui.selected.clear(); }
     else if (k === 'cat') openSheet('Categorize ' + ids.length + ' transactions', `<div class="field"><label for="bkCat">Category</label><select id="bkCat" class="in">${catOptions('')}</select></div><label class="switch"><span>Approve at the same time</span><input type="checkbox" id="bkAp" checked></label>`, `<button class="btn pri block" data-a="bulkCatDo">Apply</button>`);
     else if (k === 'flag') openSheet('Flag', `<div class="flags"><button style="background:var(--surface-2)" data-a="bulkFlagDo" data-v="" aria-label="None"></button>${flagList().map(([f, l]) => `<button style="background:var(--flag-${f})" data-a="bulkFlagDo" data-v="${f}" aria-label="${l}"></button>`).join('')}</div>`);

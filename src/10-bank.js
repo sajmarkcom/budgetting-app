@@ -353,6 +353,15 @@ function mergeBankDupes(acctId) {
   });
   return d.length;
 }
+// a split bank line: its legs add up to what the bank reports
+function legSum(t) { const l = txLegs(t); return l.reduce((a, x) => a + x.amount, 0); }
+// split legs share one bank line: same cleared / pending state as the main leg
+function alignLegs() {
+  let n = 0; const done = new Set();
+  for (const t of A.tx) { if (!t.grp || done.has(t.grp)) continue; done.add(t.grp); const l = txLegs(t); if (l.length < 2) continue; const lead = l[0];
+    for (const x of l.slice(1)) { if (x.cleared !== lead.cleared && x.cleared !== 'r') { x.cleared = lead.cleared; n++; } if (!!x.pend !== !!lead.pend) { if (lead.pend) x.pend = true; else delete x.pend; n++; } if (x.date !== lead.date) { x.date = lead.date; n++; } } }
+  return n;
+}
 function importRows(acct, rows, from) {
   const existing = A.tx.filter(t => t.acct === acct);
   const ids = new Set([...existing.map(t => t.importId).filter(Boolean), ...(A.plan.ignoredImp || [])]); const used = new Set(), pendSeen = new Set();
@@ -367,8 +376,8 @@ function importRows(acct, rows, from) {
     if (!r.pending) { // a card payment that was pending is now booked: update it instead of adding a duplicate
       // deferred cards are booked only when the monthly statement is debited (up to ~6 weeks later): match on the card's own purchase date too
       const op = cardOpDate(r.payee);
-      const pt = existing.find(t => t.pend && !used.has(t.id) && t.amount === r.amount && (Math.abs(daysBetween(t.date, r.date)) <= 10 || (op && op === cardOpDate(t.rawPayee) && Math.abs(daysBetween(t.date, r.date)) <= 50)));
-      if (pt) { used.add(pt.id); pt.importId = key; pt.pend = false; pt.date = r.date; if (pt.cleared === 'u') pt.cleared = 'c'; ids.add(key); nm++; continue; }
+      const pt = existing.find(t => t.pend && !used.has(t.id) && !/#\d+$/.test(t.importId || '') && legSum(t) === r.amount && (Math.abs(daysBetween(t.date, r.date)) <= 10 || (op && op === cardOpDate(t.rawPayee) && Math.abs(daysBetween(t.date, r.date)) <= 50)));
+      if (pt) { const legs = txLegs(pt); legs.forEach((l, i) => { used.add(l.id); l.importId = key + (i ? '#' + (i + 1) : ''); l.pend = false; l.date = r.date; if (l.cleared === 'u') l.cleared = 'c'; }); ids.add(key); nm++; continue; }
     }
     let match = existing.find(t => !isBankImp(t) && !t.pend && !used.has(t.id) && t.amount === r.amount && Math.abs(daysBetween(t.date, r.date)) <= 10);
     if (!match && !r.pending) { const pair = findPair(existing.filter(t => !isBankImp(t) && !used.has(t.id)), r); if (pair) { used.add(pair[1].id); pair[1].importId = key + '#2'; match = pair[0]; } }
@@ -382,7 +391,7 @@ function importRows(acct, rows, from) {
     ids.add(key); nn++;
   }
   // pending payments the bank no longer reports (cancelled) disappear, unless you already approved them
-  for (const t of existing) if (t.pend && !used.has(t.id) && !pendSeen.has(t.importId) && !t.approved && (!from || t.date >= from)) { const i = A.tx.indexOf(t); if (i >= 0) A.tx.splice(i, 1); }
+  for (const t of existing) if (t.pend && !used.has(t.id) && !pendSeen.has((t.importId || '').replace(/#\d+$/, '')) && !t.approved && (!from || t.date >= from)) { const i = A.tx.indexOf(t); if (i >= 0) A.tx.splice(i, 1); }
   return { nn, nm };
 }
 let bankBusy = false;
@@ -414,7 +423,7 @@ async function bankSync(manual) {
     c.lastSync = Date.now();
   }
   { const today = todayISO(); const fut = A.tx.filter(t => isBankImp(t) && !t.approved && t.date > today).map(t => t.id); if (fut.length) A.tx = A.tx.filter(t => !fut.includes(t.id)); }
-  if (pairSelfTransfers()) tn = tn; try { mergeCardPendingDupes(); } catch (e) { } const ld = linkCardDebits(); if (ld) toast(ld > 1 ? ld + ' card debits linked to your card account' : 'Card debit linked to your card account (transfer)'); bankBusy = false; scheduleSave(); render();
+  if (pairSelfTransfers()) tn = tn; try { mergeCardPendingDupes(); alignLegs(); } catch (e) { } const ld = linkCardDebits(); if (ld) toast(ld > 1 ? ld + ' card debits linked to your card account' : 'Card debit linked to your card account (transfer)'); bankBusy = false; scheduleSave(); render();
   if (manual || tn || errs.length) toast(errs.length ? errs[0] : `Bank import: ${tn} new, ${tm} matched`, !!tn);
 }
 function bankAutoSync() {
