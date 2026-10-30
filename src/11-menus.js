@@ -29,12 +29,40 @@ document.addEventListener('scroll', e => { if (!e.target.closest?.('.pmenu')) cl
 function ctxTargets() { return A.tx.filter(t => A.ui.selected.has(t.id)); }
 document.addEventListener('contextmenu', e => {
   const row = e.target.closest('[data-tid]'); if (!row) return;
-  e.preventDefault();
-  const id = row.dataset.tid; if (!A.ui.selected.has(id)) A.ui.selected = new Set([id]);
+  e.preventDefault(); ctxOpen(row, e.clientX, e.clientY, false);
+});
+// long-press on a transaction (phone), like YNAB's iOS app
+(() => {
+  let tm = null, x0 = 0, y0 = 0, fired = false;
+  const cancel = () => { clearTimeout(tm); tm = null; $$('.tx.lp').forEach(r => r.classList.remove('lp')); };
+  document.addEventListener('touchstart', e => {
+    const row = e.target.closest('[data-tid]'); if (!row || e.touches.length > 1) return;
+    fired = false; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; row.classList.add('lp');
+    tm = setTimeout(() => { tm = null; fired = true; row.classList.remove('lp'); try { navigator.vibrate?.(10); } catch (_) { } ctxOpen(row, x0, y0, true); }, 480);
+  }, { passive: true });
+  document.addEventListener('touchmove', e => { if (tm && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 8) cancel(); }, { passive: true });
+  document.addEventListener('touchend', e => { if (tm) cancel(); else if (fired) { e.preventDefault(); fired = false; } }, { passive: false });
+  document.addEventListener('touchcancel', cancel);
+  document.addEventListener('click', e => { if (fired) { e.preventDefault(); e.stopPropagation(); fired = false; } }, true);
+})();
+function ctxOpen(row, x, y, touch) {
+  const id = row.dataset.tid; if (!A.ui.selected.has(id) || touch && !selOn()) A.ui.selected = new Set([id]);
   const ts = ctxTargets(), n = ts.length; if (!n) return;
   const unappr = ts.some(t => t.approved === false), uncl = ts.some(t => t.cleared === 'u'), cl = ts.some(t => t.cleared === 'c');
   const s = n > 1 ? n + ' Transactions' : '1 Transaction';
-  popMenu(e.clientX, e.clientY,
+  if (touch) { // the short menu of YNAB's iOS app
+    popMenu(x, y,
+      (unappr ? mi(I.check, 'Approve', 'bulk', 'data-k="approve"') : '') +
+      mi(I.accts, 'Move', 'ctxMove', '', '', ts.flatMap(txLegs).some(t => t.transferAcct)) +
+      (uncl ? mi('Ⓒ', 'Clear', 'ctxClear', 'data-v="c"') : mi('Ⓒ', 'Unclear', 'ctxClear', 'data-v="u"', '', !cl)) +
+      mi(I.flag, 'Flag', 'bulk', 'data-k="flag"') +
+      mi('⇄', 'Match', 'ctxMatch', '', '', n !== 2) +
+      mi(I.file, 'Duplicate', 'ctxDup') +
+      mi('⑂', 'Split', 'ctxSplit', '', '', n !== 1) +
+      msep + mi(I.trash, 'Delete', 'bulk', 'data-k="del"', '', false, true), 'touch');
+    return;
+  }
+  popMenu(x, y,
     mi(I.check, 'Approve', 'bulk', 'data-k="approve"', 'A', !unappr) +
     msep +
     mi('Ⓒ', 'Mark as Cleared', 'ctxClear', 'data-v="c"', 'C', !uncl) +
@@ -55,7 +83,7 @@ document.addEventListener('contextmenu', e => {
     mi(I.download, 'Export ' + s, 'ctxExport') +
     msep +
     mi(I.trash, 'Delete', 'bulk', 'data-k="del"', 'delete', false, true));
-});
+}
 // keyboard shortcuts on the right-clicked / selected transactions, like YNAB
 document.addEventListener('keydown', e => {
   if (!$('.pmenu') || e.target.matches?.('input, textarea, select')) return;
@@ -66,10 +94,11 @@ document.addEventListener('keydown', e => {
 Object.assign(ACT, {
   ctxClear: el => { const ts = ctxTargets(), v = el.dataset.v; mutate(v === 'c' ? 'Marked as cleared' : 'Marked as uncleared', () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared !== 'r') t.cleared = v; })); },
   ctxDup: () => {
-    const ts = ctxTargets();
-    mutate(ts.length > 1 ? ts.length + ' transactions duplicated' : 'Transaction duplicated', () => ts.forEach(t => {
-      if (t.transferAcct) saveTx({ acct: t.acct, date: t.date, payee: '', cat: t.cat, memo: t.memo, amount: t.amount, cleared: 'u', approved: true, flag: t.flag, transferAcct: t.transferAcct });
-      else A.tx.push({ ...JSON.parse(JSON.stringify(t)), id: uid(), importId: undefined, rawPayee: undefined, pend: undefined, cleared: 'u', approved: true });
+    const ts = ctxTargets(), grps = {};
+    mutate(ts.length > 1 ? ts.length + ' transactions duplicated' : 'Transaction duplicated', () => [...new Set(ts.flatMap(txLegs))].forEach(t => {
+      const g = t.grp ? (grps[t.grp] ||= uid()) : undefined; // a split is copied whole, as a new split
+      if (t.transferAcct) { const had = new Set(A.tx.map(x => x.id)); saveTx({ acct: t.acct, date: t.date, payee: '', cat: t.cat, memo: t.memo, amount: t.amount, cleared: 'u', approved: true, flag: t.flag, transferAcct: t.transferAcct }); if (g) { const nt = A.tx.find(x => !had.has(x.id) && x.acct === t.acct); if (nt) nt.grp = g; } }
+      else A.tx.push({ ...JSON.parse(JSON.stringify(t)), id: uid(), importId: undefined, rawPayee: undefined, pend: undefined, matched: undefined, grp: g, cleared: 'u', approved: true });
     }));
   },
   ctxRepeat: () => { const t = ctxTargets()[0]; if (!t) return; txSheet(t.id); setTimeout(() => { const r = $('#txRep') || $$('.sheet select').find(s => /never/i.test(s.options[s.selectedIndex]?.text || '')); if (r) { r.focus(); r.scrollIntoView({ block: 'center' }); } toast('Choose how often it repeats, then Save'); }, 80); },
