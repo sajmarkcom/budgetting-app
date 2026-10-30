@@ -353,6 +353,7 @@ function regList() {
   if (!rv.rec) list = list.filter(t => t.cleared !== 'r');
   if (A.ui.catFilter) { const { cid, m } = A.ui.catFilter; list = list.filter(t => monthOf(t.date) === m && txLines(t).some(l => l.cat === cid)); }
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
+  list = collapseLegs(list);
   const so = A.ui.sort || { k: 'date', d: -1 }, byDate = (a, b) => a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1;
   const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag || '' }[so.k];
   return list.sort((a, b) => { if (key) { const x = key(a), y = key(b); if (x !== y) return (x < y ? -1 : 1) * so.d; } return byDate(a, b) * (key ? -1 : so.d); });
@@ -521,6 +522,14 @@ function clrBtn(t) {
     `<button class="clr ${t.cleared}" data-a="clr" data-id="${t.id}" aria-label="${t.cleared === 'u' ? 'Uncleared' : t.cleared === 'c' ? 'Cleared' : 'Reconciled'}">${t.cleared === 'r' ? I.lock : '<span>C</span>'}</button>`;
 }
 function txTr(t, all, runBal) {
+  if (t._legs) {
+    const rv = regView(), lead = t._legs[0];
+    const head = `<tr data-tid="${lead.id}" data-a="grpEdit" data-id="${lead.id}" class="rowclick ${t._legs.some(l => l.approved === false) ? 'unapproved' : ''}">
+      ${selOn() ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${lead.id}" ${A.ui.selected.has(lead.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}${rv.flags ? '<td></td>' : ''}${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[lead.acct]?.name || '')}</td>` : ''}
+      <td class="num">${fmtDate(lead.date)}</td><td><strong>${esc(legPayee(t._legs))}</strong></td><td class="muted">Split (${t._legs.length})</td><td class="muted ellip" style="max-width:200px">${esc(lead.memo || '')}</td>
+      <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td><td class="r num amt-pos">${t.amount > 0 ? fmt(t.amount) : ''}</td>${runBal != null ? `<td class="r num muted">${fmt(runBal)}</td>` : ''}<td class="r">${t._legs.some(l => l.approved === false) ? `<button class="btn sm pri" data-a="grpApprove" data-id="${lead.id}">Approve</button>` : clrBtn(lead)}</td></tr>`;
+    return head + t._legs.map(l => `<tr class="leg rowclick" data-a="txEditSheet" data-id="${l.id}">${selOn() ? '<td></td>' : ''}${rv.flags ? '<td></td>' : ''}${all ? '<td></td>' : ''}<td></td><td></td><td class="leg-c">↳ ${esc(legLabel(l))}</td><td class="muted">${esc(l.memo || '')}</td><td class="r num muted">${l.amount < 0 ? fmt(-l.amount) : ''}</td><td class="r num muted">${l.amount > 0 ? fmt(l.amount) : ''}</td>${runBal != null ? '<td></td>' : ''}<td></td></tr>`).join('');
+  }
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
   return `<tr data-tid="${t.id}" data-a="txEdit" data-id="${t.id}" class="rowclick ${t.approved === false ? 'unapproved' : ''}">
     ${selOn() ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
@@ -536,6 +545,11 @@ function txTr(t, all, runBal) {
     <td class="r">${clrBtn(t)}</td></tr>`;
 }
 function txRow(t, showAcct, runBal) {
+  if (t._legs) { const lead = t._legs[0];
+    return `<div data-tid="${lead.id}" class="tx ${t._legs.some(l => l.approved === false) ? 'unapproved' : ''}">
+      <button class="main-b" data-a="grpEdit" data-id="${lead.id}"><span class="p ellip">${esc(legPayee(t._legs))}</span><span class="legchips">${t._legs.map(l => `<span class="legchip">${esc(legLabel(l))} <b class="num">${fmt(l.amount)}</b></span>`).join('')}</span></button>
+      <div><div class="a ${t.amount > 0 ? 'amt-pos' : ''}">${t.amount > 0 ? '+' : ''}${fmt(t.amount)}</div>${runBal != null ? `<div class="rb num">${fmt(runBal)}</div>` : ''}</div>
+      ${t._legs.some(l => l.approved === false) ? `<button class="btn sm pri" data-a="grpApprove" data-id="${lead.id}">Approve</button>` : clrBtn(lead)}</div>`; }
   let c = txCatLabel(t); const todo = c === 'Category Needed';
   if (showAcct) c = (L.acct[t.acct]?.name || '') + (c ? ' · ' + c : '');
   if (t.memo) c += (c ? ' · ' : '') + t.memo;
@@ -647,3 +661,15 @@ function sth(k, label, cls = '') {
 }
 
 const selOn = () => A.ui.select || (DESK() && A.view !== 'plan' && A.view !== 'reflect' && A.view !== 'settings');
+
+/* ---------- split groups: one bank line split between categories AND a transfer (YNAB sub-transactions) ---------- */
+// legs share t.grp, or come from the same bank line (importId "x" + "x#2"…)
+function legKey(t) { if (t.grp) return 'g:' + t.grp; if (t.importId && /^ebp?:/.test(t.importId)) return 'i:' + t.acct + ':' + t.importId.split('#')[0]; return null; }
+function txLegs(t) { const k = legKey(t); if (!k) return [t]; const l = A.tx.filter(x => x.acct === t.acct && legKey(x) === k); return l.length > 1 ? l.sort((a, b) => (a.importId || '').length - (b.importId || '').length || (a.transferAcct ? 1 : 0) - (b.transferAcct ? 1 : 0)) : [t]; }
+function collapseLegs(list) {
+  const seen = new Set(), out = [];
+  for (const t of list) { const k = legKey(t); if (!k) { out.push(t); continue; } if (seen.has(k)) continue; const legs = txLegs(t); if (legs.length < 2) { out.push(t); continue; } seen.add(k); out.push(Object.assign(Object.create(t), { _legs: legs, amount: legs.reduce((a, x) => a + x.amount, 0), id: legs[0].id })); }
+  return out;
+}
+const legLabel = l => l.transferAcct ? 'Transfer : ' + (L.acct[l.transferAcct]?.name || '') : (txCatLabel(l) || 'Category Needed');
+const legPayee = legs => { const p = legs.find(l => !l.transferAcct && l.payee); return p ? payeeName(p) : payeeName(legs[0]) || 'Split'; };

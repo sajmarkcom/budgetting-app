@@ -187,6 +187,7 @@ function catPickList(t, q) {
     if (cats.length) h += `<div class="pm-h">${esc(g.name)}</div>` + cats.map(c => row(c.id)).join('');
   }
   if (!q || 'inflow ready to assign'.includes(q)) h += msep + row('rta');
+  if (!q || 'split'.includes(q)) h += msep + `<button class="pm-i" data-a="splitOpen" data-id="${t.id}"><span class="grow">⑂ Split (categories and transfers)…</span></button>`;
   const accs = A.plan.accounts.filter(a => a.id !== t.acct && !a.closed && (!q || norm(a.name).includes(q) || 'transfer'.includes(q) || q.startsWith('transf')));
   if (accs.length) h += msep + `<div class="pm-h">Transfer (no category)</div>` + accs.map(a => trRow(a.id)).join('');
   return h || '<div class="pm-h">No category found</div>';
@@ -509,3 +510,61 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
     fire(el);
   }
 })();
+
+/* ---------- split a bank line between categories and transfers (YNAB sub-transactions) ---------- */
+let SP = null;
+function splitTargets(sel, acct) {
+  const a = L.acct[acct]; let o = `<option value="">Category Needed</option>`;
+  if (onBudget(a)) o += A.plan.groups.filter(g => g.sys !== 'cc').map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && (!c.hidden || c.id === sel)); return cs.length ? `<optgroup label="${esc(g.name)}">${cs.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))}</option>`).join('')}</optgroup>` : ''; }).join('');
+  o += `<optgroup label="Transfer">${A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="tr:${x.id}" ${sel === 'tr:' + x.id ? 'selected' : ''}>Transfer : ${esc(x.name)}</option>`).join('')}</optgroup>`;
+  return o;
+}
+function lastSplitLike(t) {
+  const legs = txLegs(t), total = legs.reduce((a, x) => a + x.amount, 0), key = t.rawPayee ? learnKey(t.rawPayee) : null, pn = (payeeName(t) || '').toLowerCase();
+  const seen = new Set();
+  for (const x of A.tx.filter(x => x.acct === t.acct && x.date < t.date).sort((a, b) => a.date < b.date ? 1 : -1)) {
+    const k = legKey(x); if (!k || seen.has(k)) continue; seen.add(k); const g = txLegs(x); if (g.length < 2 || g.some(l => legs.includes(l))) continue;
+    if (g.reduce((a, l) => a + l.amount, 0) !== total) continue;
+    const gp = (legPayee(g) || '').toLowerCase(), gk = g[0].rawPayee ? learnKey(g[0].rawPayee) : null;
+    if ((key && gk && key.split(' ')[0] === gk.split(' ')[0]) || (pn && gp === pn) || true) return g;
+  }
+  return null;
+}
+function splitSheet(id) {
+  const t = A.tx.find(x => x.id === id); if (!t) return; const legs = txLegs(t), sign = legs.reduce((a, x) => a + x.amount, 0) < 0 ? -1 : 1;
+  SP = { id: legs[0].id, acct: t.acct, total: Math.abs(legs.reduce((a, x) => a + x.amount, 0)), sign, rows: legs.map(l => ({ amt: Math.abs(l.amount), to: l.transferAcct ? 'tr:' + l.transferAcct : (l.cat || ''), memo: l.memo || '' })) };
+  if (SP.rows.length < 2) SP.rows.push({ amt: 0, to: '', memo: '' });
+  splitRender();
+}
+function splitRender() {
+  const left = SP.total - SP.rows.reduce((a, r) => a + r.amt, 0), last = lastSplitLike(A.tx.find(x => x.id === SP.id));
+  const body = `<div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><span>Total</span><b class="num">${fmt(SP.sign * SP.total)}</b></div><div class="kpi"><span>Left to split</span><b class="num" style="color:${left ? 'var(--warn)' : 'var(--good)'}">${fmt(left)}</b></div></div>
+    ${last && txLegs(A.tx.find(x => x.id === SP.id)).length < 2 ? `<button class="btn block" data-a="splitLast">↺ Same as last time: ${last.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : ''}
+    ${SP.rows.map((r, i) => `<div class="sp-row"><select class="in" data-sp="to" data-i="${i}">${splitTargets(r.to, SP.acct)}</select><input class="in num" inputmode="decimal" data-sp="amt" data-i="${i}" value="${r.amt ? fmtIn(r.amt) : ''}" placeholder="0,00"><input class="in" data-sp="memo" data-i="${i}" value="${esc(r.memo)}" placeholder="Memo">${SP.rows.length > 2 ? `<button class="ibtn" data-a="splitDel" data-i="${i}" aria-label="Remove line">${I.trash}</button>` : ''}</div>`).join('')}
+    <button class="btn block" data-a="splitAdd">${I.plus} Add another split</button>`;
+  if ($('#scrim') && $('.sp-row')) refreshSheetBody(body); else openSheet('Split Transaction', body, `<button class="btn pri block" data-a="splitSave">Save</button>`);
+}
+document.addEventListener('change', e => { const el = e.target; if (!SP || !el.dataset?.sp) return; const r = SP.rows[+el.dataset.i]; if (el.dataset.sp === 'amt') { r.amt = Math.abs(evalExpr(el.value) || 0); const left = SP.total - SP.rows.reduce((a, x) => a + x.amt, 0); const nx = SP.rows.find((x, k) => k !== +el.dataset.i && !x.amt); if (nx && left > 0) nx.amt = left; splitRender(); } else r[el.dataset.sp] = el.value; });
+Object.assign(ACT, {
+  grpEdit: (el, e) => { if (e?.target?.closest?.('input,select,textarea,label')) return; splitSheet(el.dataset.id); },
+  grpApprove: el => { const legs = txLegs(A.tx.find(x => x.id === el.dataset.id)); mutate('Approved', () => legs.forEach(l => { l.approved = true; })); },
+  splitAdd: () => { const left = SP.total - SP.rows.reduce((a, r) => a + r.amt, 0); SP.rows.push({ amt: Math.max(0, left), to: '', memo: '' }); splitRender(); },
+  splitDel: el => { SP.rows.splice(+el.dataset.i, 1); splitRender(); },
+  splitLast: () => { const g = lastSplitLike(A.tx.find(x => x.id === SP.id)); if (!g) return; SP.rows = g.map(l => ({ amt: Math.abs(l.amount), to: l.transferAcct ? 'tr:' + l.transferAcct : (l.cat || ''), memo: '' })); SP.pname = legPayee(g); splitRender(); },
+  splitOpen: el => { closePop(); splitSheet(el.dataset.id); },
+  splitSave: () => {
+    const rows = SP.rows.filter(r => r.amt); const sum = rows.reduce((a, r) => a + r.amt, 0);
+    if (sum !== SP.total) { toast('The lines must add up to ' + fmt(SP.total) + ' (left: ' + fmt(SP.total - sum) + ')'); return; }
+    const lead = A.tx.find(x => x.id === SP.id), legs = txLegs(lead), base = lead.importId ? lead.importId.split('#')[0] : null, grp = lead.grp || uid();
+    const pname = SP.pname || (legPayee(legs) && legPayee(legs) !== 'Split' ? legPayee(legs) : (payeeName(lead) || ''));
+    mutate('Split saved', () => {
+      rows.forEach((r, i) => {
+        const old = legs[i]; const tr = r.to.startsWith('tr:') ? r.to.slice(3) : null;
+        const t = saveTx({ id: old?.id, acct: SP.acct, date: lead.date, payee: tr ? '' : pname, cat: tr ? null : (r.to || null), memo: r.memo, amount: SP.sign * r.amt, cleared: lead.cleared, flag: lead.flag, approved: true, transferAcct: tr, splits: null });
+        if (!t) return; t.grp = grp; if (base) t.importId = i ? base + '#' + (i + 1) : base; if (lead.rawPayee) t.rawPayee = lead.rawPayee; if (lead.pend) t.pend = true; delete t.auto;
+      });
+      for (const old of legs.slice(rows.length)) { const ids = new Set([old.id, old.transferId].filter(Boolean)); A.tx = A.tx.filter(x => !ids.has(x.id)); }
+    });
+    closeSheet(); SP = null;
+  },
+});

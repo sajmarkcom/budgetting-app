@@ -378,6 +378,10 @@ body.nocolor .amt-bad, body.nocolor .amt-warn{text-decoration:underline dotted} 
 .rtable th.sortable{position:relative; padding:0} .sortb{all:unset; display:flex; align-items:center; gap:4px; width:100%; box-sizing:border-box; padding:10px; cursor:pointer; font:inherit; color:inherit; text-transform:inherit; letter-spacing:inherit}
 .rtable th.r .sortb{justify-content:flex-end} .sarr{font-size:10px; opacity:.35} .rtable th.on .sarr{opacity:1; color:var(--accent)} .rtable th.sortable:hover .sarr{opacity:.8}
 .colgrip{position:absolute; right:0; top:6px; bottom:6px; width:6px; cursor:col-resize; border-right:2px solid transparent} .colgrip:hover, body.colresize .colgrip{border-right-color:var(--accent)} body.colresize{cursor:col-resize; user-select:none}
+.rtable tr.leg td{border-top:none; padding-top:0; padding-bottom:2px; height:24px; font-size:13px} .leg-c{color:var(--muted); padding-left:18px!important}
+.legchips{display:flex; flex-wrap:wrap; gap:4px; margin-top:3px} .legchip{font-size:12px; background:var(--surface-2); border-radius:8px; padding:2px 7px; color:var(--muted)} .legchip b{color:var(--fg); font-weight:700}
+.sp-row{display:grid; grid-template-columns:minmax(0,1.6fr) 110px minmax(0,1fr) auto; gap:6px; align-items:center; margin-top:6px}
+@media (max-width:640px){ .sp-row{grid-template-columns:1fr 100px auto} .sp-row [data-sp=memo]{grid-column:1 / -1} }
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}

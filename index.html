@@ -381,6 +381,10 @@ body.nocolor .amt-bad, body.nocolor .amt-warn{text-decoration:underline dotted} 
 .rtable th.sortable{position:relative; padding:0} .sortb{all:unset; display:flex; align-items:center; gap:4px; width:100%; box-sizing:border-box; padding:10px; cursor:pointer; font:inherit; color:inherit; text-transform:inherit; letter-spacing:inherit}
 .rtable th.r .sortb{justify-content:flex-end} .sarr{font-size:10px; opacity:.35} .rtable th.on .sarr{opacity:1; color:var(--accent)} .rtable th.sortable:hover .sarr{opacity:.8}
 .colgrip{position:absolute; right:0; top:6px; bottom:6px; width:6px; cursor:col-resize; border-right:2px solid transparent} .colgrip:hover, body.colresize .colgrip{border-right-color:var(--accent)} body.colresize{cursor:col-resize; user-select:none}
+.rtable tr.leg td{border-top:none; padding-top:0; padding-bottom:2px; height:24px; font-size:13px} .leg-c{color:var(--muted); padding-left:18px!important}
+.legchips{display:flex; flex-wrap:wrap; gap:4px; margin-top:3px} .legchip{font-size:12px; background:var(--surface-2); border-radius:8px; padding:2px 7px; color:var(--muted)} .legchip b{color:var(--fg); font-weight:700}
+.sp-row{display:grid; grid-template-columns:minmax(0,1.6fr) 110px minmax(0,1fr) auto; gap:6px; align-items:center; margin-top:6px}
+@media (max-width:640px){ .sp-row{grid-template-columns:1fr 100px auto} .sp-row [data-sp=memo]{grid-column:1 / -1} }
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -1413,6 +1417,7 @@ function regList() {
   if (!rv.rec) list = list.filter(t => t.cleared !== 'r');
   if (A.ui.catFilter) { const { cid, m } = A.ui.catFilter; list = list.filter(t => monthOf(t.date) === m && txLines(t).some(l => l.cat === cid)); }
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
+  list = collapseLegs(list);
   const so = A.ui.sort || { k: 'date', d: -1 }, byDate = (a, b) => a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1;
   const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag || '' }[so.k];
   return list.sort((a, b) => { if (key) { const x = key(a), y = key(b); if (x !== y) return (x < y ? -1 : 1) * so.d; } return byDate(a, b) * (key ? -1 : so.d); });
@@ -1581,6 +1586,14 @@ function clrBtn(t) {
     `<button class="clr ${t.cleared}" data-a="clr" data-id="${t.id}" aria-label="${t.cleared === 'u' ? 'Uncleared' : t.cleared === 'c' ? 'Cleared' : 'Reconciled'}">${t.cleared === 'r' ? I.lock : '<span>C</span>'}</button>`;
 }
 function txTr(t, all, runBal) {
+  if (t._legs) {
+    const rv = regView(), lead = t._legs[0];
+    const head = `<tr data-tid="${lead.id}" data-a="grpEdit" data-id="${lead.id}" class="rowclick ${t._legs.some(l => l.approved === false) ? 'unapproved' : ''}">
+      ${selOn() ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${lead.id}" ${A.ui.selected.has(lead.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}${rv.flags ? '<td></td>' : ''}${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[lead.acct]?.name || '')}</td>` : ''}
+      <td class="num">${fmtDate(lead.date)}</td><td><strong>${esc(legPayee(t._legs))}</strong></td><td class="muted">Split (${t._legs.length})</td><td class="muted ellip" style="max-width:200px">${esc(lead.memo || '')}</td>
+      <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td><td class="r num amt-pos">${t.amount > 0 ? fmt(t.amount) : ''}</td>${runBal != null ? `<td class="r num muted">${fmt(runBal)}</td>` : ''}<td class="r">${t._legs.some(l => l.approved === false) ? `<button class="btn sm pri" data-a="grpApprove" data-id="${lead.id}">Approve</button>` : clrBtn(lead)}</td></tr>`;
+    return head + t._legs.map(l => `<tr class="leg rowclick" data-a="txEditSheet" data-id="${l.id}">${selOn() ? '<td></td>' : ''}${rv.flags ? '<td></td>' : ''}${all ? '<td></td>' : ''}<td></td><td></td><td class="leg-c">↳ ${esc(legLabel(l))}</td><td class="muted">${esc(l.memo || '')}</td><td class="r num muted">${l.amount < 0 ? fmt(-l.amount) : ''}</td><td class="r num muted">${l.amount > 0 ? fmt(l.amount) : ''}</td>${runBal != null ? '<td></td>' : ''}<td></td></tr>`).join('');
+  }
   const cl = txCatLabel(t); const need = cl === 'Category Needed';
   return `<tr data-tid="${t.id}" data-a="txEdit" data-id="${t.id}" class="rowclick ${t.approved === false ? 'unapproved' : ''}">
     ${selOn() ? `<td><input type="checkbox" class="chk" data-c="selTx" data-id="${t.id}" ${A.ui.selected.has(t.id) ? 'checked' : ''} aria-label="Select"></td>` : ''}
@@ -1596,6 +1609,11 @@ function txTr(t, all, runBal) {
     <td class="r">${clrBtn(t)}</td></tr>`;
 }
 function txRow(t, showAcct, runBal) {
+  if (t._legs) { const lead = t._legs[0];
+    return `<div data-tid="${lead.id}" class="tx ${t._legs.some(l => l.approved === false) ? 'unapproved' : ''}">
+      <button class="main-b" data-a="grpEdit" data-id="${lead.id}"><span class="p ellip">${esc(legPayee(t._legs))}</span><span class="legchips">${t._legs.map(l => `<span class="legchip">${esc(legLabel(l))} <b class="num">${fmt(l.amount)}</b></span>`).join('')}</span></button>
+      <div><div class="a ${t.amount > 0 ? 'amt-pos' : ''}">${t.amount > 0 ? '+' : ''}${fmt(t.amount)}</div>${runBal != null ? `<div class="rb num">${fmt(runBal)}</div>` : ''}</div>
+      ${t._legs.some(l => l.approved === false) ? `<button class="btn sm pri" data-a="grpApprove" data-id="${lead.id}">Approve</button>` : clrBtn(lead)}</div>`; }
   let c = txCatLabel(t); const todo = c === 'Category Needed';
   if (showAcct) c = (L.acct[t.acct]?.name || '') + (c ? ' · ' + c : '');
   if (t.memo) c += (c ? ' · ' : '') + t.memo;
@@ -1707,6 +1725,18 @@ function sth(k, label, cls = '') {
 }
 
 const selOn = () => A.ui.select || (DESK() && A.view !== 'plan' && A.view !== 'reflect' && A.view !== 'settings');
+
+/* ---------- split groups: one bank line split between categories AND a transfer (YNAB sub-transactions) ---------- */
+// legs share t.grp, or come from the same bank line (importId "x" + "x#2"…)
+function legKey(t) { if (t.grp) return 'g:' + t.grp; if (t.importId && /^ebp?:/.test(t.importId)) return 'i:' + t.acct + ':' + t.importId.split('#')[0]; return null; }
+function txLegs(t) { const k = legKey(t); if (!k) return [t]; const l = A.tx.filter(x => x.acct === t.acct && legKey(x) === k); return l.length > 1 ? l.sort((a, b) => (a.importId || '').length - (b.importId || '').length || (a.transferAcct ? 1 : 0) - (b.transferAcct ? 1 : 0)) : [t]; }
+function collapseLegs(list) {
+  const seen = new Set(), out = [];
+  for (const t of list) { const k = legKey(t); if (!k) { out.push(t); continue; } if (seen.has(k)) continue; const legs = txLegs(t); if (legs.length < 2) { out.push(t); continue; } seen.add(k); out.push(Object.assign(Object.create(t), { _legs: legs, amount: legs.reduce((a, x) => a + x.amount, 0), id: legs[0].id })); }
+  return out;
+}
+const legLabel = l => l.transferAcct ? 'Transfer : ' + (L.acct[l.transferAcct]?.name || '') : (txCatLabel(l) || 'Category Needed');
+const legPayee = legs => { const p = legs.find(l => !l.transferAcct && l.payee); return p ? payeeName(p) : payeeName(legs[0]) || 'Split'; };
 /* ================= Budget — sheets (bottom panels) ================= */
 let SH = null; // { render(), onClose }
 function openSheet(title, body, foot = '', opts = {}) {
@@ -4061,6 +4091,7 @@ function catPickList(t, q) {
     if (cats.length) h += `<div class="pm-h">${esc(g.name)}</div>` + cats.map(c => row(c.id)).join('');
   }
   if (!q || 'inflow ready to assign'.includes(q)) h += msep + row('rta');
+  if (!q || 'split'.includes(q)) h += msep + `<button class="pm-i" data-a="splitOpen" data-id="${t.id}"><span class="grow">⑂ Split (categories and transfers)…</span></button>`;
   const accs = A.plan.accounts.filter(a => a.id !== t.acct && !a.closed && (!q || norm(a.name).includes(q) || 'transfer'.includes(q) || q.startsWith('transf')));
   if (accs.length) h += msep + `<div class="pm-h">Transfer (no category)</div>` + accs.map(a => trRow(a.id)).join('');
   return h || '<div class="pm-h">No category found</div>';
@@ -4383,6 +4414,64 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
     fire(el);
   }
 })();
+
+/* ---------- split a bank line between categories and transfers (YNAB sub-transactions) ---------- */
+let SP = null;
+function splitTargets(sel, acct) {
+  const a = L.acct[acct]; let o = `<option value="">Category Needed</option>`;
+  if (onBudget(a)) o += A.plan.groups.filter(g => g.sys !== 'cc').map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && (!c.hidden || c.id === sel)); return cs.length ? `<optgroup label="${esc(g.name)}">${cs.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))}</option>`).join('')}</optgroup>` : ''; }).join('');
+  o += `<optgroup label="Transfer">${A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="tr:${x.id}" ${sel === 'tr:' + x.id ? 'selected' : ''}>Transfer : ${esc(x.name)}</option>`).join('')}</optgroup>`;
+  return o;
+}
+function lastSplitLike(t) {
+  const legs = txLegs(t), total = legs.reduce((a, x) => a + x.amount, 0), key = t.rawPayee ? learnKey(t.rawPayee) : null, pn = (payeeName(t) || '').toLowerCase();
+  const seen = new Set();
+  for (const x of A.tx.filter(x => x.acct === t.acct && x.date < t.date).sort((a, b) => a.date < b.date ? 1 : -1)) {
+    const k = legKey(x); if (!k || seen.has(k)) continue; seen.add(k); const g = txLegs(x); if (g.length < 2 || g.some(l => legs.includes(l))) continue;
+    if (g.reduce((a, l) => a + l.amount, 0) !== total) continue;
+    const gp = (legPayee(g) || '').toLowerCase(), gk = g[0].rawPayee ? learnKey(g[0].rawPayee) : null;
+    if ((key && gk && key.split(' ')[0] === gk.split(' ')[0]) || (pn && gp === pn) || true) return g;
+  }
+  return null;
+}
+function splitSheet(id) {
+  const t = A.tx.find(x => x.id === id); if (!t) return; const legs = txLegs(t), sign = legs.reduce((a, x) => a + x.amount, 0) < 0 ? -1 : 1;
+  SP = { id: legs[0].id, acct: t.acct, total: Math.abs(legs.reduce((a, x) => a + x.amount, 0)), sign, rows: legs.map(l => ({ amt: Math.abs(l.amount), to: l.transferAcct ? 'tr:' + l.transferAcct : (l.cat || ''), memo: l.memo || '' })) };
+  if (SP.rows.length < 2) SP.rows.push({ amt: 0, to: '', memo: '' });
+  splitRender();
+}
+function splitRender() {
+  const left = SP.total - SP.rows.reduce((a, r) => a + r.amt, 0), last = lastSplitLike(A.tx.find(x => x.id === SP.id));
+  const body = `<div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><span>Total</span><b class="num">${fmt(SP.sign * SP.total)}</b></div><div class="kpi"><span>Left to split</span><b class="num" style="color:${left ? 'var(--warn)' : 'var(--good)'}">${fmt(left)}</b></div></div>
+    ${last && txLegs(A.tx.find(x => x.id === SP.id)).length < 2 ? `<button class="btn block" data-a="splitLast">↺ Same as last time: ${last.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : ''}
+    ${SP.rows.map((r, i) => `<div class="sp-row"><select class="in" data-sp="to" data-i="${i}">${splitTargets(r.to, SP.acct)}</select><input class="in num" inputmode="decimal" data-sp="amt" data-i="${i}" value="${r.amt ? fmtIn(r.amt) : ''}" placeholder="0,00"><input class="in" data-sp="memo" data-i="${i}" value="${esc(r.memo)}" placeholder="Memo">${SP.rows.length > 2 ? `<button class="ibtn" data-a="splitDel" data-i="${i}" aria-label="Remove line">${I.trash}</button>` : ''}</div>`).join('')}
+    <button class="btn block" data-a="splitAdd">${I.plus} Add another split</button>`;
+  if ($('#scrim') && $('.sp-row')) refreshSheetBody(body); else openSheet('Split Transaction', body, `<button class="btn pri block" data-a="splitSave">Save</button>`);
+}
+document.addEventListener('change', e => { const el = e.target; if (!SP || !el.dataset?.sp) return; const r = SP.rows[+el.dataset.i]; if (el.dataset.sp === 'amt') { r.amt = Math.abs(evalExpr(el.value) || 0); const left = SP.total - SP.rows.reduce((a, x) => a + x.amt, 0); const nx = SP.rows.find((x, k) => k !== +el.dataset.i && !x.amt); if (nx && left > 0) nx.amt = left; splitRender(); } else r[el.dataset.sp] = el.value; });
+Object.assign(ACT, {
+  grpEdit: (el, e) => { if (e?.target?.closest?.('input,select,textarea,label')) return; splitSheet(el.dataset.id); },
+  grpApprove: el => { const legs = txLegs(A.tx.find(x => x.id === el.dataset.id)); mutate('Approved', () => legs.forEach(l => { l.approved = true; })); },
+  splitAdd: () => { const left = SP.total - SP.rows.reduce((a, r) => a + r.amt, 0); SP.rows.push({ amt: Math.max(0, left), to: '', memo: '' }); splitRender(); },
+  splitDel: el => { SP.rows.splice(+el.dataset.i, 1); splitRender(); },
+  splitLast: () => { const g = lastSplitLike(A.tx.find(x => x.id === SP.id)); if (!g) return; SP.rows = g.map(l => ({ amt: Math.abs(l.amount), to: l.transferAcct ? 'tr:' + l.transferAcct : (l.cat || ''), memo: '' })); SP.pname = legPayee(g); splitRender(); },
+  splitOpen: el => { closePop(); splitSheet(el.dataset.id); },
+  splitSave: () => {
+    const rows = SP.rows.filter(r => r.amt); const sum = rows.reduce((a, r) => a + r.amt, 0);
+    if (sum !== SP.total) { toast('The lines must add up to ' + fmt(SP.total) + ' (left: ' + fmt(SP.total - sum) + ')'); return; }
+    const lead = A.tx.find(x => x.id === SP.id), legs = txLegs(lead), base = lead.importId ? lead.importId.split('#')[0] : null, grp = lead.grp || uid();
+    const pname = SP.pname || (legPayee(legs) && legPayee(legs) !== 'Split' ? legPayee(legs) : (payeeName(lead) || ''));
+    mutate('Split saved', () => {
+      rows.forEach((r, i) => {
+        const old = legs[i]; const tr = r.to.startsWith('tr:') ? r.to.slice(3) : null;
+        const t = saveTx({ id: old?.id, acct: SP.acct, date: lead.date, payee: tr ? '' : pname, cat: tr ? null : (r.to || null), memo: r.memo, amount: SP.sign * r.amt, cleared: lead.cleared, flag: lead.flag, approved: true, transferAcct: tr, splits: null });
+        if (!t) return; t.grp = grp; if (base) t.importId = i ? base + '#' + (i + 1) : base; if (lead.rawPayee) t.rawPayee = lead.rawPayee; if (lead.pend) t.pend = true; delete t.auto;
+      });
+      for (const old of legs.slice(rows.length)) { const ids = new Set([old.id, old.transferId].filter(Boolean)); A.tx = A.tx.filter(x => !ids.has(x.id)); }
+    });
+    closeSheet(); SP = null;
+  },
+});
 </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})</script>
 </body></html>
