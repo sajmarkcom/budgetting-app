@@ -316,7 +316,8 @@ Object.assign(ACT, {
     const rc = (k, l) => `<button class="chip ${rv.range === k ? 'on' : ''}" data-a="rvSet" data-k="range" data-v="${k}">${l}</button>`;
     const ck = (k, l) => `<label class="pm-chk"><input type="checkbox" data-c="rvChk" data-k="${k}" ${rv[k] ? 'checked' : ''}> ${l}</label>`;
     popMenu(Math.max(8, r.right - 360), r.bottom + 6, `<div class="pm-form" style="width:340px"><div class="pm-h" style="padding-left:0">View Options</div>
-      <div class="chips" style="flex-wrap:wrap; margin:4px 0 10px">${rc('tm', 'This Month')}${rc('lm', 'Last Month')}${rc('3m', 'Latest 3 Months')}${rc('ty', 'This Year')}${rc('ly', 'Last Year')}${rc('all', 'All Dates')}</div>
+      <div class="small muted" style="margin-top:2px">Show</div><div class="chips" style="flex-wrap:wrap; margin:4px 0 10px">${[['all', 'All'], ['unapproved', 'Unapproved'], ['uncat', 'Category Needed'], ['uncleared', 'Uncleared'], ['cleared', 'Cleared'], ['flagged', 'Flagged']].map(([f, l]) => `<button class="chip ${A.ui.regFilter === f ? 'on' : ''}" data-a="regFilter" data-f="${f}">${l}</button>`).join('')}</div>
+      <div class="small muted">Dates</div><div class="chips" style="flex-wrap:wrap; margin:4px 0 10px">${rc('tm', 'This Month')}${rc('lm', 'Last Month')}${rc('3m', 'Latest 3 Months')}${rc('ty', 'This Year')}${rc('ly', 'Last Year')}${rc('all', 'All Dates')}</div>
       <div class="row" style="gap:6px; align-items:center; margin-bottom:10px"><span class="small muted">From</span><input type="month" class="in sm" data-c="rvFrom" value="${rv.from || ''}" aria-label="From"><span class="small muted">To</span><input type="month" class="in sm" data-c="rvTo" value="${rv.to || ''}" aria-label="To"></div>
       ${ck('rec', 'Show Reconciled Transactions')}${ck('bal', 'Show Running Balance')}${ck('flags', 'Show Flags')}${ck('img', 'Show Images')}</div>`, 'pm-view');
   },

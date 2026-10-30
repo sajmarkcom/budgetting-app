@@ -265,7 +265,7 @@ function catRow(c, m) {
   const s = catStatus(c, m), x = s.x, ti = s.ti;
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
   const note = targetText(c, m, s);
-  const pillIcon = s.cls === 'good' && ti ? '<i class="picon">✓ </i>' : s.cls === 'warn' ? '<i class="picon">! </i>' : s.cls === 'bad' ? '<i class="picon">✕ </i>' : ''; // shown only with Display Options → Differentiate Without Color, like YNAB
+  const pillIcon = s.cls === 'good' && ti ? '<i class="picon">✓ </i>' : s.cls === 'warn' ? '<i class="picon">! </i>' : ''; // shown only with Display Options → Differentiate Without Color, like YNAB
   const ck = (A.ui.selCats || new Set()).has(c.id);
   return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id || ck ? 'sel' : ''}" data-a="catSel" data-c="${c.id}" ${DESK() && !c.cc ? `draggable="true" data-cdrag="${c.id}"` : ''}>${DESK() ? `<input type="checkbox" class="cchk" data-c="catChk" data-id="${c.id}" ${ck ? 'checked' : ''} aria-label="Select ${esc(c.name)}">` : ''}
     <div class="cname">
@@ -466,7 +466,7 @@ function viewRegister() {
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
   const ago = d => { const n = daysBetween(d, todayISO()); return n < 1 ? 'today' : n < 31 ? n + ' day' + (n > 1 ? 's' : '') + ' ago' : n < 365 ? Math.round(n / 30) + ' month' + (Math.round(n / 30) > 1 ? 's' : '') + ' ago' : Math.round(n / 365) + ' year' + (Math.round(n / 365) > 1 ? 's' : '') + ' ago'; };
   const sub2 = all ? (A.view === 'tx' && !desk ? 'Cash and credit accounts' : 'Budget accounts') : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
-  let h = topBar(all ? (A.view === 'tx' && !desk ? 'Spending' : 'All Accounts') : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
+  let h = desk ? `<div class="rhead"><div class="grow"><h1>${all ? 'All Accounts' : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`}</h1><div class="sub">${esc(sub2)}</div></div>${all ? '' : `<button class="rh-edit" data-a="acctEdit" data-id="${id}" aria-label="Edit account" title="Edit Account">${I.edit}</button><button class="btn pri rh-rec" data-a="reconcile" data-id="${id}">Reconcile</button>`}</div>` : topBar(all ? (A.view === 'tx' && !desk ? 'Spending' : 'All Accounts') : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
     all ? (A.view === 'tx' && !desk ? `<button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button>` : `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>`) : (desk ? `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>` : `<button class="ibtn" data-a="acctMore" data-id="${id}" aria-label="More">${I.dots}</button>`));
   h += `<div class="wrap">`;
@@ -486,17 +486,18 @@ function viewRegister() {
   if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;
   h += `<div class="toolbar">
     ${desk ? `<button class="tbtn" data-a="newTx">${I.plus} Add Transaction</button>` : ''}
-    ${!all ? `<button class="tbtn" data-a="reconcile" data-id="${id}">${I.lock} Reconcile</button>` : ''}
+    ${!all && !desk ? `<button class="tbtn" data-a="reconcile" data-id="${id}">${I.lock} Reconcile</button>` : ''}
     <button class="tbtn" data-a="importSheet" data-id="${all ? '' : id}">${I.upload} File Import</button>
     ${!all && isDebt(a) && ACCT[a.type]?.grp !== 'loan' ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
     ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
-    ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year', custom: 'Custom' })[regView().range] : ''}</button>` : ''}
-    ${desk ? `<button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button><button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>` : `<button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>`}
+    ${desk ? `<button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button><button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button><span style="flex:1"></span>` : ''}
+    ${desk ? `<button class="tbtn" data-a="regViewMenu">View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year', custom: 'Custom' })[regView().range] : ''}</button>` : ''}
+    ${desk ? `<input id="regSearch" class="in rsearch" type="search" placeholder="Search ${esc(all ? 'All Accounts' : a.name)}" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions">` : `<button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>`}
   </div>`;
-  h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
+  if (!desk) h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
   const rf = (f, l) => `<button class="chip ${A.ui.regFilter === f ? 'on' : ''}" data-a="regFilter" data-f="${f}">${l}</button>`;
   if (A.ui.catFilter) h += `<div class="banner info">${I.info}<span>${esc(catName(A.ui.catFilter.cid))} · ${esc(monthLabel(A.ui.catFilter.m))} · ${fmt(regList().reduce((s, t) => s + txLines(t).filter(l => l.cat === A.ui.catFilter.cid).reduce((a, l) => a + l.amount, 0), 0))}</span><button class="btn sm" data-a="catActivityOff">Show all</button></div>`;
-  h += `<div class="chips">${rf('all', 'All')}${rf('unapproved', 'Unapproved')}${rf('uncat', 'Category Needed')}${rf('uncleared', 'Uncleared')}${rf('cleared', 'Cleared')}${rf('flagged', 'Flagged')}</div>`;
+  if (!desk || A.ui.regFilter !== 'all') h += `<div class="chips">${rf('all', 'All')}${rf('unapproved', 'Unapproved')}${rf('uncat', 'Category Needed')}${rf('uncleared', 'Uncleared')}${rf('cleared', 'Cleared')}${rf('flagged', 'Flagged')}</div>`;
   const sch = A.plan.scheduled.filter(s => all || s.acct === id || s.transferAcct === id).sort((x, y) => x.next < y.next ? -1 : 1);
   if (sch.length && A.ui.regFilter === 'all' && !A.ui.search) {
     h += `<div class="day">Scheduled</div><div class="card">`;
