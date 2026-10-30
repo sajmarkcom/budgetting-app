@@ -237,25 +237,38 @@ function txBody() {
       <div class="row"><button class="btn sm" data-a="spAdd">${I.plus} Add split</button>${sum !== D.amount ? `<button class="btn sm" data-a="spFill">Put remainder on last line</button>` : ''}<button class="btn sm ghost" data-a="spOff">Remove split</button></div>`;
   }
   const lastSp = (() => { try { const t = D.id && A.tx.find(x => x.id === D.id); if (!t || t.transferAcct || (t.splits && t.splits.length) || txLegs(t).length > 1 || (t.cat && t.approved !== false)) return null; return lastSplitLike(t); } catch (e) { return null; } })();
-  return (lastSp ? `<button class="btn block sp-last" data-a="splitLastFor" data-id="${D.id}">↺ Same as last time: ${lastSp.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : '') + `<div class="seg" role="group" aria-label="Type">
-      <button class="${D.kind === 'out' ? 'on' : ''}" data-a="kind" data-v="out">Outflow</button>
-      <button class="${D.kind === 'in' ? 'on' : ''}" data-a="kind" data-v="in">Inflow</button>
-      <button class="${D.kind === 'transfer' ? 'on' : ''}" data-a="kind" data-v="transfer">Transfer</button></div>
-    <input id="txAmt" class="bigamt ${D.kind === 'in' ? 'in' : 'out'}" inputmode="decimal" value="${D.amount ? fmtIn(D.amount) : ''}" placeholder="0,00" data-d="amount" aria-label="Amount">
+  const row = (icn, label, ctrl, extra = '') => `<div class="yrow ${extra}"><span class="yic">${icn}</span><div class="ylab"><small>${label}</small>${ctrl}</div></div>`;
+  const cal = () => { // inline calendar like YNAB's sheet
+    const cm = D.calM || monthOf(D.date || todayISO()), [y, mo] = cm.split('-').map(Number), first = new Date(y, mo - 1, 1), off = (first.getDay() + 6) % 7, n = new Date(y, mo, 0).getDate();
+    let g = ''; for (let k = 0; k < off; k++) g += '<span></span>';
+    for (let d = 1; d <= n; d++) { const iso = cm + '-' + pad(d); g += `<button class="${iso === D.date ? 'on' : ''} ${iso === todayISO() ? 'today' : ''}" data-a="txCalDay" data-v="${iso}">${d}</button>`; }
+    return `<div class="ycal"><div class="row"><strong class="grow">${esc(cap(MONTHS[mo - 1]))} ${y}</strong><button class="ibtn" data-a="txCalNav" data-d="-1" aria-label="Previous month">${I.left}</button><button class="ibtn" data-a="txCalNav" data-d="1" aria-label="Next month">${I.right}</button></div>
+      <div class="ycal-g">${['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(x => `<i>${x}</i>`).join('')}${g}</div></div>`;
+  };
+  return `<div class="ytx">` + (lastSp ? `<button class="btn block sp-last" data-a="splitLastFor" data-id="${D.id}">↺ Same as last time: ${lastSp.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : '') + `
+    <input id="txAmt" class="bigamt ybig ${D.kind === 'in' ? 'in' : 'out'}" inputmode="decimal" value="${D.amount ? fmtIn(D.amount) : ''}" placeholder="0,00" data-d="amount" aria-label="Amount">
+    <div class="ykind"><select class="ykind-s" data-c="kindSel" aria-label="Type">${[['out', 'Spending'], ['in', 'Income'], ['transfer', 'Transfer']].map(([k, l]) => `<option value="${k}" ${D.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     ${D.approved === false ? `<div class="banner info">${I.info}<span>Imported transaction: check the category, then approve.</span></div>` : ''}
-    <div class="field"><label for="txAcct">${D.kind === 'transfer' ? 'From account' : 'Account'}</label><select id="txAcct" class="in" data-d="acct">${acctOptions(D.acct)}</select></div>
-    ${D.kind === 'transfer' ? `<div class="field"><label for="txTo">To account</label><select id="txTo" class="in" data-d="transferAcct"><option value="">Choose…</option>${acctOptions(D.transferAcct, x => x.id !== D.acct)}</select></div>`
-      : `<div class="field"><label for="txPayee">Payee</label><input id="txPayee" class="in" list="payeeList" value="${esc(D.payee)}" data-d="payee" placeholder="e.g. Lidl, Salary…" autocomplete="off"><datalist id="payeeList">${payees}</datalist></div>`}
-    ${needCat && !D.splits ? `<div class="field"><label for="txCat">Category</label><div class="row"><select id="txCat" class="in grow" data-d="cat">${catOptions(D.cat, { m: monthOf(D.date || todayISO()), rta: D.kind !== 'transfer' })}</select>${D.kind !== 'transfer' ? `<button class="ibtn" data-a="spOn" aria-label="Split">${I.split}</button>` : ''}</div></div>` : ''}
+    <div class="ycard">
+      ${D.kind === 'transfer' ? row(I.swap, 'To account', `<select id="txTo" class="yin" data-d="transferAcct"><option value="">Choose…</option>${acctOptions(D.transferAcct, x => x.id !== D.acct)}</select>`)
+        : row(I.people, 'Payee', `<input id="txPayee" class="yin" list="payeeList" value="${esc(D.payee)}" data-d="payee" placeholder="Choose a payee" autocomplete="off"><datalist id="payeeList">${payees}</datalist>`)}
+      ${needCat && !D.splits ? row(I.plan, 'Category', `<div class="row"><select id="txCat" class="yin grow" data-d="cat">${catOptions(D.cat, { m: monthOf(D.date || todayISO()), rta: D.kind !== 'transfer' })}</select>${D.kind !== 'transfer' ? `<button class="ibtn" data-a="spOn" aria-label="Split" title="Split">${I.split}</button>` : ''}</div>`) : ''}
+      ${row(I.accts, D.kind === 'transfer' ? 'From account' : 'Account', `<select id="txAcct" class="yin" data-d="acct">${acctOptions(D.acct)}</select>`)}
+      ${row(I.cal, 'Date', `<button class="yin ydate" data-a="txCalToggle">${esc(new Date(D.date + 'T12:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^(\d+) (\w+)/, '$2 $1,'))}</button><input id="txDate" type="hidden" value="${D.date}" data-d="date">`, D.calOpen ? 'open' : '')}
+      ${D.calOpen ? cal() : ''}
+    </div>
     ${D.kind === 'transfer' && tb && onBudget(a) && onBudget(tb) ? `<div class="small muted">Transfer between budget accounts: no category needed.${isCredit(tb) ? ' This payment comes out of the card payment category.' : ''}</div>` : ''}
     ${splitHtml}
-    <div class="grid2"><div class="field"><label for="txDate">Date</label><input id="txDate" class="in" type="date" value="${D.date}" data-d="date"></div>
-      <div class="field"><label for="txFreq">Repeat</label><select id="txFreq" class="in" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
-    <div class="field"><label for="txMemo">Memo</label><input id="txMemo" class="in" value="${esc(D.memo)}" data-d="memo" placeholder="Optional"></div>
-    <div class="field"><span class="lbl2">Image</span>${D.img ? `<div class="row" style="gap:8px; align-items:center"><img src="${D.img}" alt="Receipt" style="max-height:90px; border-radius:8px; border:1px solid var(--line)"><button class="btn sm" data-a="imgRemove">Remove</button></div>` : `<label class="btn sm" style="width:max-content">📎 Add Image<input type="file" accept="image/*" data-c="imgPick" hidden></label>`}</div>
-    <div class="field"><span class="lbl2">Flag</span><div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div></div>
-    <label class="switch"><span><strong>Cleared</strong><div class="small muted">Shows on your bank statement</div></span><input type="checkbox" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''}></label>
-    ${D.id ? `<button class="btn danger block" data-a="txDelete">${I.trash} Delete Transaction</button>` : ''}`;
+    <div class="ycard">
+      ${row('📷', 'Photo', D.img ? `<div class="row" style="gap:8px; align-items:center"><img src="${D.img}" alt="Receipt" style="max-height:90px; border-radius:8px; border:1px solid var(--line)"><button class="btn sm" data-a="imgRemove">Remove</button></div>` : `<label class="yin" style="cursor:pointer">Add a photo<input type="file" accept="image/*" data-c="imgPick" hidden></label>`)}
+      ${row(I.note, 'Memo', `<input id="txMemo" class="yin" value="${esc(D.memo)}" data-d="memo" placeholder="Add a memo">`)}
+    </div>
+    <div class="ycard">
+      ${row(I.flag, 'Flag', `<div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div>`)}
+      ${row(D.cleared === 'r' ? I.lock || '🔒' : 'Ⓒ', D.cleared === 'r' ? 'Reconciled' : 'Cleared', `<span class="small muted">${D.cleared === 'r' ? 'Locked: matched your bank at reconciliation' : 'Shows on your bank statement'}</span>`, 'ysw') .replace('</div></div>', `</div><input type="checkbox" class="tgl" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''} aria-label="Cleared"></div>`)}
+      ${row(I.repeat, 'Repeat', `<select id="txFreq" class="yin" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
+    </div>
+    ${D.id ? `<button class="btn danger block ydel" data-a="txDelete">Delete Transaction</button>` : ''}</div>`;
 }
 function updSplitStatus() { const el = $('#spStatus'); if (!el || !D?.splits) return; const sum = D.splits.reduce((s, x) => s + x.amount, 0); el.textContent = sum === D.amount ? 'Balanced' : 'Remaining ' + fmt(D.amount - sum); el.style.color = sum === D.amount ? 'var(--good)' : 'var(--warn)'; }
 function txFoot() { return `${D.id ? `<button class="btn danger" data-a="txDelete" aria-label="Delete transaction" title="Delete transaction" style="flex:0 0 auto">${I.trash}</button>` : ''}<button class="btn pri block" data-a="txSave">${D.approved === false ? 'Approve' : D.id ? 'Save' : 'Save'}</button>${!D.id ? `<button class="btn" data-a="txSaveNew" aria-label="Save and add another">Save & Add Another</button>` : ''}`; }

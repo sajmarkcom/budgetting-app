@@ -557,6 +557,17 @@ html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .mpick .caret svg{width:18px;height:18px;vertical-align:-3px}
 .mplan{display:grid!important;grid-template-columns:auto auto 1fr auto;align-items:center}
 .mplan .top-title{justify-content:flex-start;padding-left:10px}
+.calcbar{flex-direction:column}.calcbar .cb-ops{display:flex;gap:6px;width:100%}.calcbar .cb-cat{display:none;gap:6px;width:100%;margin-bottom:6px}.calcbar.withcat .cb-cat{display:flex}
+.calcbar .cb-cat button{flex:1;height:auto;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--muted)}.calcbar .cb-cat svg{width:18px;height:18px}
+.ytx{display:flex;flex-direction:column;gap:12px}.ytx .ybig{text-align:center;font-size:40px;font-weight:700;border:0;background:transparent;height:auto;padding:6px 0}
+.ykind{display:flex;justify-content:center}.ykind-s{appearance:none;-webkit-appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:8px 34px 8px 16px;font:inherit;font-size:15px;font-weight:600;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+.ycard{background:var(--surface);border-radius:16px;overflow:hidden}.yrow{display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:52px}.yrow+.yrow{border-top:1px solid var(--line)}
+.yic{width:22px;display:grid;place-items:center;color:var(--muted);flex:none}.yic svg{width:20px;height:20px}.ylab{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}.ylab small{font-size:12px;color:var(--muted)}
+.yin{border:0;background:transparent;color:var(--fg);font:inherit;font-size:16px;padding:0;width:100%;min-height:24px;text-align:left;appearance:none;-webkit-appearance:none}.yin:focus{outline:none}.ydate{color:var(--accent)}
+.yrow.ysw .tgl{flex:none}.tgl{appearance:none;-webkit-appearance:none;width:50px;height:30px;border-radius:15px;background:var(--surface-2);position:relative;transition:background .2s;margin:0}.tgl::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}.tgl:checked{background:#34C759}.tgl:checked::after{transform:translateX(20px)}.tgl:disabled{opacity:.6}
+.ycal{padding:6px 14px 12px}.ycal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}.ycal-g i{font-style:normal;font-size:11px;color:var(--muted);padding:4px 0}.ycal-g button{border:0;background:none;color:var(--fg);font:inherit;font-size:16px;height:38px;border-radius:50%}.ycal-g button.today{color:var(--accent);font-weight:700}.ycal-g button.on{background:#fff;color:#000;font-weight:700}
+.ydel{background:#5a1a22!important;color:#fff!important;border:0}
+:root[data-theme="light"] .ycal-g button.on{background:var(--accent);color:#fff}
 </style>
 </head><body>
 <div id="app"></div>
@@ -1654,7 +1665,7 @@ function viewRegister() {
   const sub2 = all ? (A.view === 'tx' && !desk ? 'Cash and credit accounts' : 'Budget accounts') : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
   let h = topBar(all ? (A.view === 'tx' && !desk ? 'Spending' : 'All Accounts') : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
-    all ? (A.view === 'tx' && !desk ? `<button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button>` : `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>`) : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
+    all ? (A.view === 'tx' && !desk ? `<button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button>` : `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>`) : (desk ? `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>` : `<button class="ibtn" data-a="acctMore" data-id="${id}" aria-label="More">${I.dots}</button>`));
   h += `<div class="wrap">`;
   { const un = (all ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id)).filter(t => t.approved === false).length;
     const spendTab = A.view === 'tx' && all && !desk;
@@ -2116,25 +2127,38 @@ function txBody() {
       <div class="row"><button class="btn sm" data-a="spAdd">${I.plus} Add split</button>${sum !== D.amount ? `<button class="btn sm" data-a="spFill">Put remainder on last line</button>` : ''}<button class="btn sm ghost" data-a="spOff">Remove split</button></div>`;
   }
   const lastSp = (() => { try { const t = D.id && A.tx.find(x => x.id === D.id); if (!t || t.transferAcct || (t.splits && t.splits.length) || txLegs(t).length > 1 || (t.cat && t.approved !== false)) return null; return lastSplitLike(t); } catch (e) { return null; } })();
-  return (lastSp ? `<button class="btn block sp-last" data-a="splitLastFor" data-id="${D.id}">↺ Same as last time: ${lastSp.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : '') + `<div class="seg" role="group" aria-label="Type">
-      <button class="${D.kind === 'out' ? 'on' : ''}" data-a="kind" data-v="out">Outflow</button>
-      <button class="${D.kind === 'in' ? 'on' : ''}" data-a="kind" data-v="in">Inflow</button>
-      <button class="${D.kind === 'transfer' ? 'on' : ''}" data-a="kind" data-v="transfer">Transfer</button></div>
-    <input id="txAmt" class="bigamt ${D.kind === 'in' ? 'in' : 'out'}" inputmode="decimal" value="${D.amount ? fmtIn(D.amount) : ''}" placeholder="0,00" data-d="amount" aria-label="Amount">
+  const row = (icn, label, ctrl, extra = '') => `<div class="yrow ${extra}"><span class="yic">${icn}</span><div class="ylab"><small>${label}</small>${ctrl}</div></div>`;
+  const cal = () => { // inline calendar like YNAB's sheet
+    const cm = D.calM || monthOf(D.date || todayISO()), [y, mo] = cm.split('-').map(Number), first = new Date(y, mo - 1, 1), off = (first.getDay() + 6) % 7, n = new Date(y, mo, 0).getDate();
+    let g = ''; for (let k = 0; k < off; k++) g += '<span></span>';
+    for (let d = 1; d <= n; d++) { const iso = cm + '-' + pad(d); g += `<button class="${iso === D.date ? 'on' : ''} ${iso === todayISO() ? 'today' : ''}" data-a="txCalDay" data-v="${iso}">${d}</button>`; }
+    return `<div class="ycal"><div class="row"><strong class="grow">${esc(cap(MONTHS[mo - 1]))} ${y}</strong><button class="ibtn" data-a="txCalNav" data-d="-1" aria-label="Previous month">${I.left}</button><button class="ibtn" data-a="txCalNav" data-d="1" aria-label="Next month">${I.right}</button></div>
+      <div class="ycal-g">${['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(x => `<i>${x}</i>`).join('')}${g}</div></div>`;
+  };
+  return `<div class="ytx">` + (lastSp ? `<button class="btn block sp-last" data-a="splitLastFor" data-id="${D.id}">↺ Same as last time: ${lastSp.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : '') + `
+    <input id="txAmt" class="bigamt ybig ${D.kind === 'in' ? 'in' : 'out'}" inputmode="decimal" value="${D.amount ? fmtIn(D.amount) : ''}" placeholder="0,00" data-d="amount" aria-label="Amount">
+    <div class="ykind"><select class="ykind-s" data-c="kindSel" aria-label="Type">${[['out', 'Spending'], ['in', 'Income'], ['transfer', 'Transfer']].map(([k, l]) => `<option value="${k}" ${D.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     ${D.approved === false ? `<div class="banner info">${I.info}<span>Imported transaction: check the category, then approve.</span></div>` : ''}
-    <div class="field"><label for="txAcct">${D.kind === 'transfer' ? 'From account' : 'Account'}</label><select id="txAcct" class="in" data-d="acct">${acctOptions(D.acct)}</select></div>
-    ${D.kind === 'transfer' ? `<div class="field"><label for="txTo">To account</label><select id="txTo" class="in" data-d="transferAcct"><option value="">Choose…</option>${acctOptions(D.transferAcct, x => x.id !== D.acct)}</select></div>`
-      : `<div class="field"><label for="txPayee">Payee</label><input id="txPayee" class="in" list="payeeList" value="${esc(D.payee)}" data-d="payee" placeholder="e.g. Lidl, Salary…" autocomplete="off"><datalist id="payeeList">${payees}</datalist></div>`}
-    ${needCat && !D.splits ? `<div class="field"><label for="txCat">Category</label><div class="row"><select id="txCat" class="in grow" data-d="cat">${catOptions(D.cat, { m: monthOf(D.date || todayISO()), rta: D.kind !== 'transfer' })}</select>${D.kind !== 'transfer' ? `<button class="ibtn" data-a="spOn" aria-label="Split">${I.split}</button>` : ''}</div></div>` : ''}
+    <div class="ycard">
+      ${D.kind === 'transfer' ? row(I.swap, 'To account', `<select id="txTo" class="yin" data-d="transferAcct"><option value="">Choose…</option>${acctOptions(D.transferAcct, x => x.id !== D.acct)}</select>`)
+        : row(I.people, 'Payee', `<input id="txPayee" class="yin" list="payeeList" value="${esc(D.payee)}" data-d="payee" placeholder="Choose a payee" autocomplete="off"><datalist id="payeeList">${payees}</datalist>`)}
+      ${needCat && !D.splits ? row(I.plan, 'Category', `<div class="row"><select id="txCat" class="yin grow" data-d="cat">${catOptions(D.cat, { m: monthOf(D.date || todayISO()), rta: D.kind !== 'transfer' })}</select>${D.kind !== 'transfer' ? `<button class="ibtn" data-a="spOn" aria-label="Split" title="Split">${I.split}</button>` : ''}</div>`) : ''}
+      ${row(I.accts, D.kind === 'transfer' ? 'From account' : 'Account', `<select id="txAcct" class="yin" data-d="acct">${acctOptions(D.acct)}</select>`)}
+      ${row(I.cal, 'Date', `<button class="yin ydate" data-a="txCalToggle">${esc(new Date(D.date + 'T12:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/^(\d+) (\w+)/, '$2 $1,'))}</button><input id="txDate" type="hidden" value="${D.date}" data-d="date">`, D.calOpen ? 'open' : '')}
+      ${D.calOpen ? cal() : ''}
+    </div>
     ${D.kind === 'transfer' && tb && onBudget(a) && onBudget(tb) ? `<div class="small muted">Transfer between budget accounts: no category needed.${isCredit(tb) ? ' This payment comes out of the card payment category.' : ''}</div>` : ''}
     ${splitHtml}
-    <div class="grid2"><div class="field"><label for="txDate">Date</label><input id="txDate" class="in" type="date" value="${D.date}" data-d="date"></div>
-      <div class="field"><label for="txFreq">Repeat</label><select id="txFreq" class="in" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
-    <div class="field"><label for="txMemo">Memo</label><input id="txMemo" class="in" value="${esc(D.memo)}" data-d="memo" placeholder="Optional"></div>
-    <div class="field"><span class="lbl2">Image</span>${D.img ? `<div class="row" style="gap:8px; align-items:center"><img src="${D.img}" alt="Receipt" style="max-height:90px; border-radius:8px; border:1px solid var(--line)"><button class="btn sm" data-a="imgRemove">Remove</button></div>` : `<label class="btn sm" style="width:max-content">📎 Add Image<input type="file" accept="image/*" data-c="imgPick" hidden></label>`}</div>
-    <div class="field"><span class="lbl2">Flag</span><div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div></div>
-    <label class="switch"><span><strong>Cleared</strong><div class="small muted">Shows on your bank statement</div></span><input type="checkbox" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''}></label>
-    ${D.id ? `<button class="btn danger block" data-a="txDelete">${I.trash} Delete Transaction</button>` : ''}`;
+    <div class="ycard">
+      ${row('📷', 'Photo', D.img ? `<div class="row" style="gap:8px; align-items:center"><img src="${D.img}" alt="Receipt" style="max-height:90px; border-radius:8px; border:1px solid var(--line)"><button class="btn sm" data-a="imgRemove">Remove</button></div>` : `<label class="yin" style="cursor:pointer">Add a photo<input type="file" accept="image/*" data-c="imgPick" hidden></label>`)}
+      ${row(I.note, 'Memo', `<input id="txMemo" class="yin" value="${esc(D.memo)}" data-d="memo" placeholder="Add a memo">`)}
+    </div>
+    <div class="ycard">
+      ${row(I.flag, 'Flag', `<div class="flags"><button class="${!D.flag ? 'on' : ''}" style="background:var(--surface-2)" data-a="dFlag" data-v="" aria-label="No flag"></button>${flagList().map(([k, l]) => `<button class="${D.flag === k ? 'on' : ''}" style="background:var(--flag-${k})" data-a="dFlag" data-v="${k}" aria-label="${l}"></button>`).join('')}</div>`)}
+      ${row(D.cleared === 'r' ? I.lock || '🔒' : 'Ⓒ', D.cleared === 'r' ? 'Reconciled' : 'Cleared', `<span class="small muted">${D.cleared === 'r' ? 'Locked: matched your bank at reconciliation' : 'Shows on your bank statement'}</span>`, 'ysw') .replace('</div></div>', `</div><input type="checkbox" class="tgl" id="txClr" data-d="cleared" ${D.cleared !== 'u' ? 'checked' : ''} ${D.cleared === 'r' ? 'disabled' : ''} aria-label="Cleared"></div>`)}
+      ${row(I.repeat, 'Repeat', `<select id="txFreq" class="yin" data-d="freq" ${D.id ? 'disabled' : ''}>${Object.entries(FREQ).map(([k, l]) => `<option value="${k}" ${D.freq === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
+    </div>
+    ${D.id ? `<button class="btn danger block ydel" data-a="txDelete">Delete Transaction</button>` : ''}</div>`;
 }
 function updSplitStatus() { const el = $('#spStatus'); if (!el || !D?.splits) return; const sum = D.splits.reduce((s, x) => s + x.amount, 0); el.textContent = sum === D.amount ? 'Balanced' : 'Remaining ' + fmt(D.amount - sum); el.style.color = sum === D.amount ? 'var(--good)' : 'var(--warn)'; }
 function txFoot() { return `${D.id ? `<button class="btn danger" data-a="txDelete" aria-label="Delete transaction" title="Delete transaction" style="flex:0 0 auto">${I.trash}</button>` : ''}<button class="btn pri block" data-a="txSave">${D.approved === false ? 'Approve' : D.id ? 'Save' : 'Save'}</button>${!D.id ? `<button class="btn" data-a="txSaveNew" aria-label="Save and add another">Save & Add Another</button>` : ''}`; }
@@ -4703,11 +4727,11 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
   const SEL = 'input[inputmode="decimal"]';
   const bar = document.createElement('div'); bar.className = 'calcbar'; bar.hidden = true; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Calculator');
   const ops = [['+', '+', 'Plus'], ['−', '-', 'Minus'], ['×', '*', 'Times'], ['÷', '/', 'Divided by'], ['=', '=', 'Equals']];
-  bar.innerHTML = ops.map(([l, v, a]) => `<button type="button" data-op="${v}" class="${v === '=' ? 'eq' : ''}" aria-label="${a}">${l}</button>`).join('');
+  bar.innerHTML = `<div class="cb-cat"><button type="button" data-op="cat:auto">${I.wand}<span>Auto-Assign</span></button><button type="button" data-op="cat:move">${I.swap}<span>Move Money</span></button><button type="button" data-op="cat:details">${I.dots}<span>Details</span></button></div><div class="cb-ops">` + ops.map(([l, v, a]) => `<button type="button" data-op="${v}" class="${v === '=' ? 'eq' : ''}" aria-label="${a}">${l}</button>`).join('') + `</div>`;
   document.body.appendChild(bar);
   let cur = null;
   const place = () => { const vv = window.visualViewport; const off = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0; bar.style.bottom = off + 'px'; };
-  document.addEventListener('focusin', e => { if (e.target.matches?.(SEL)) { cur = e.target; bar.hidden = false; place(); } });
+  document.addEventListener('focusin', e => { if (e.target.matches?.(SEL)) { cur = e.target; bar.hidden = false; bar.classList.toggle('withcat', !!cur.dataset.assign); place(); } });
   document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement?.matches?.(SEL)) { bar.hidden = true; cur = null; } }, 80));
   window.visualViewport?.addEventListener('resize', place); window.visualViewport?.addEventListener('scroll', place);
   const fire = el => el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -4717,6 +4741,10 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
   function act(b) {
     if (!b || !cur || !document.body.contains(cur)) return;
     const op = b.dataset.op, el = cur;
+    if (op.startsWith('cat:')) { // like YNAB's keypad: act on the category being assigned
+      const cid = el.dataset.assign; if (!cid) return; el.blur(); bar.hidden = true; const k = op.slice(4);
+      setTimeout(() => { if (k === 'move') moveSheet(cid); else { catSheet(cid); if (k === 'auto') setTimeout(() => { const h = [...$$('#scrim .sec-t, .insp .sec-t')].find(x => /Auto-Assign/.test(x.textContent)); h?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 120); } }, 60); return;
+    }
     if (op === '=') {
       let raw = el.value.trim();
       // assigned field: "+20" means 20 more than what is already assigned (same rule as when leaving the field)
@@ -4848,6 +4876,28 @@ Object.assign(ACT, {
 });
 
 try { if (localStorage.getItem('budget.mbars')) document.body.classList.add('mbars'); } catch (e) { }
+
+/* YNAB-style transaction sheet: type selector and inline calendar */
+Object.assign(ACT, {
+  txCalToggle: () => { D.calOpen = !D.calOpen; D.calM = monthOf(D.date || todayISO()); txRefresh(); },
+  txCalNav: el => { D.calM = addMonths(D.calM || monthOf(D.date), +el.dataset.d); txRefresh(); },
+  txCalDay: el => { D.date = el.dataset.v; D.calOpen = false; txRefresh(); },
+});
+document.addEventListener('change', e => { if (e.target.dataset?.c !== 'kindSel' || !D) return; const amt = $('#txAmt'); if (amt) { const v = evalExpr(amt.value); D.amount = v == null ? 0 : Math.abs(v); } ACT.kind({ dataset: { v: e.target.value } }); });
+
+/* account ⋯ menu on the phone (YNAB app): Reconcile, Hide Reconciled, Edit Account, Link Account */
+Object.assign(ACT, {
+  acctMore: el => {
+    const id = el.dataset.id, a = L.acct[id], r = el.getBoundingClientRect(), rv = regView();
+    const ago = a.lastRec ? Math.max(0, daysBetween(a.lastRec, todayISO())) : null;
+    popMenu(r.right - 250, r.bottom + 6,
+      `<button class="pm-i" role="menuitem" data-a="reconcile" data-id="${id}"><span class="pm-ic">${I.lock}</span><span class="grow">Reconcile${ago != null ? `<div class="small muted">Reconciled ${ago} days ago</div>` : ''}</span></button>` +
+      mi(rv.rec ? I.eyeoff : I.eye, rv.rec ? 'Hide Reconciled' : 'Show Reconciled', 'rvToggleRec') +
+      msep + mi(I.edit, 'Edit Account', 'acctEdit', `data-id="${id}"`) + mi(I.link, bankAcctOf(id) ? 'Bank Connections' : 'Link Account', 'bankSetup') + mi(I.upload, 'File Import', 'importSheet') +
+      msep + mi(I.check, 'Select', 'toggleSelect'));
+  },
+  rvToggleRec: () => { A.ui.rv = { ...regView(), rec: !regView().rec }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); },
+});
 </script>
 <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})</script>
 </body></html>

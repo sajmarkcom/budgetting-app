@@ -468,7 +468,7 @@ function viewRegister() {
   const sub2 = all ? (A.view === 'tx' && !desk ? 'Cash and credit accounts' : 'Budget accounts') : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
   let h = topBar(all ? (A.view === 'tx' && !desk ? 'Spending' : 'All Accounts') : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
-    all ? (A.view === 'tx' && !desk ? `<button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button>` : `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>`) : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
+    all ? (A.view === 'tx' && !desk ? `<button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button>` : `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>`) : (desk ? `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>` : `<button class="ibtn" data-a="acctMore" data-id="${id}" aria-label="More">${I.dots}</button>`));
   h += `<div class="wrap">`;
   { const un = (all ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id)).filter(t => t.approved === false).length;
     const spendTab = A.view === 'tx' && all && !desk;

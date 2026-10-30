@@ -521,11 +521,11 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
   const SEL = 'input[inputmode="decimal"]';
   const bar = document.createElement('div'); bar.className = 'calcbar'; bar.hidden = true; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Calculator');
   const ops = [['+', '+', 'Plus'], ['−', '-', 'Minus'], ['×', '*', 'Times'], ['÷', '/', 'Divided by'], ['=', '=', 'Equals']];
-  bar.innerHTML = ops.map(([l, v, a]) => `<button type="button" data-op="${v}" class="${v === '=' ? 'eq' : ''}" aria-label="${a}">${l}</button>`).join('');
+  bar.innerHTML = `<div class="cb-cat"><button type="button" data-op="cat:auto">${I.wand}<span>Auto-Assign</span></button><button type="button" data-op="cat:move">${I.swap}<span>Move Money</span></button><button type="button" data-op="cat:details">${I.dots}<span>Details</span></button></div><div class="cb-ops">` + ops.map(([l, v, a]) => `<button type="button" data-op="${v}" class="${v === '=' ? 'eq' : ''}" aria-label="${a}">${l}</button>`).join('') + `</div>`;
   document.body.appendChild(bar);
   let cur = null;
   const place = () => { const vv = window.visualViewport; const off = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0; bar.style.bottom = off + 'px'; };
-  document.addEventListener('focusin', e => { if (e.target.matches?.(SEL)) { cur = e.target; bar.hidden = false; place(); } });
+  document.addEventListener('focusin', e => { if (e.target.matches?.(SEL)) { cur = e.target; bar.hidden = false; bar.classList.toggle('withcat', !!cur.dataset.assign); place(); } });
   document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement?.matches?.(SEL)) { bar.hidden = true; cur = null; } }, 80));
   window.visualViewport?.addEventListener('resize', place); window.visualViewport?.addEventListener('scroll', place);
   const fire = el => el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -535,6 +535,10 @@ Object.assign(ACT, { regSort: el => { const k = el.dataset.k, so = A.ui.sort || 
   function act(b) {
     if (!b || !cur || !document.body.contains(cur)) return;
     const op = b.dataset.op, el = cur;
+    if (op.startsWith('cat:')) { // like YNAB's keypad: act on the category being assigned
+      const cid = el.dataset.assign; if (!cid) return; el.blur(); bar.hidden = true; const k = op.slice(4);
+      setTimeout(() => { if (k === 'move') moveSheet(cid); else { catSheet(cid); if (k === 'auto') setTimeout(() => { const h = [...$$('#scrim .sec-t, .insp .sec-t')].find(x => /Auto-Assign/.test(x.textContent)); h?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 120); } }, 60); return;
+    }
     if (op === '=') {
       let raw = el.value.trim();
       // assigned field: "+20" means 20 more than what is already assigned (same rule as when leaving the field)
@@ -666,3 +670,25 @@ Object.assign(ACT, {
 });
 
 try { if (localStorage.getItem('budget.mbars')) document.body.classList.add('mbars'); } catch (e) { }
+
+/* YNAB-style transaction sheet: type selector and inline calendar */
+Object.assign(ACT, {
+  txCalToggle: () => { D.calOpen = !D.calOpen; D.calM = monthOf(D.date || todayISO()); txRefresh(); },
+  txCalNav: el => { D.calM = addMonths(D.calM || monthOf(D.date), +el.dataset.d); txRefresh(); },
+  txCalDay: el => { D.date = el.dataset.v; D.calOpen = false; txRefresh(); },
+});
+document.addEventListener('change', e => { if (e.target.dataset?.c !== 'kindSel' || !D) return; const amt = $('#txAmt'); if (amt) { const v = evalExpr(amt.value); D.amount = v == null ? 0 : Math.abs(v); } ACT.kind({ dataset: { v: e.target.value } }); });
+
+/* account ⋯ menu on the phone (YNAB app): Reconcile, Hide Reconciled, Edit Account, Link Account */
+Object.assign(ACT, {
+  acctMore: el => {
+    const id = el.dataset.id, a = L.acct[id], r = el.getBoundingClientRect(), rv = regView();
+    const ago = a.lastRec ? Math.max(0, daysBetween(a.lastRec, todayISO())) : null;
+    popMenu(r.right - 250, r.bottom + 6,
+      `<button class="pm-i" role="menuitem" data-a="reconcile" data-id="${id}"><span class="pm-ic">${I.lock}</span><span class="grow">Reconcile${ago != null ? `<div class="small muted">Reconciled ${ago} days ago</div>` : ''}</span></button>` +
+      mi(rv.rec ? I.eyeoff : I.eye, rv.rec ? 'Hide Reconciled' : 'Show Reconciled', 'rvToggleRec') +
+      msep + mi(I.edit, 'Edit Account', 'acctEdit', `data-id="${id}"`) + mi(I.link, bankAcctOf(id) ? 'Bank Connections' : 'Link Account', 'bankSetup') + mi(I.upload, 'File Import', 'importSheet') +
+      msep + mi(I.check, 'Select', 'toggleSelect'));
+  },
+  rvToggleRec: () => { A.ui.rv = { ...regView(), rec: !regView().rec }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); },
+});
