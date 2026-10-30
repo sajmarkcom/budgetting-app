@@ -52,7 +52,7 @@ function ctxOpen(row, x, y, touch) {
   const s = n > 1 ? n + ' Transactions' : '1 Transaction';
   if (touch) { // the short menu of YNAB's iOS app
     popMenu(x, y,
-      (unappr ? mi(I.check, 'Approve', 'bulk', 'data-k="approve"') : '') +
+      (unappr ? mi(I.check, 'Approve', 'bulk', 'data-k="approve"') + (ts.some(t => t.approved === false && isBankImp(t)) ? mi('⊗', 'Reject', 'bulk', 'data-k="reject"') : '') : '') +
       mi(I.accts, 'Move', 'ctxMove', '', '', ts.flatMap(txLegs).some(t => t.transferAcct)) +
       (uncl ? mi('Ⓒ', 'Clear', 'ctxClear', 'data-v="c"') : mi('Ⓒ', 'Unclear', 'ctxClear', 'data-v="u"', '', !cl)) +
       mi(I.flag, 'Flag', 'bulk', 'data-k="flag"') +
@@ -64,6 +64,7 @@ function ctxOpen(row, x, y, touch) {
   }
   popMenu(x, y,
     mi(I.check, 'Approve', 'bulk', 'data-k="approve"', 'A', !unappr) +
+    mi('⊗', 'Reject', 'bulk', 'data-k="reject"', 'shift R', !ts.some(t => t.approved === false && isBankImp(t))) +
     msep +
     mi('Ⓒ', 'Mark as Cleared', 'ctxClear', 'data-v="c"', 'C', !uncl) +
     mi('Ⓒ', 'Mark as Uncleared', 'ctxClear', 'data-v="u"', 'C', !cl) +
@@ -92,6 +93,7 @@ document.addEventListener('keydown', e => {
 });
 
 Object.assign(ACT, {
+  barMore: el => { const id = [...A.ui.selected][0]; if (!id) return; const r = el.getBoundingClientRect(); ctxOpen({ dataset: { tid: id } }, r.left, r.top - 8, !DESK()); setTimeout(() => { const m = $('.pmenu'); if (m) m.style.top = Math.max(8, r.top - m.offsetHeight - 8) + 'px'; }, 0); },
   ctxClear: el => { const ts = ctxTargets(), v = el.dataset.v; mutate(v === 'c' ? 'Marked as cleared' : 'Marked as uncleared', () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared !== 'r') t.cleared = v; })); },
   ctxDup: () => {
     const ts = ctxTargets(), grps = {};
@@ -315,7 +317,8 @@ Object.assign(ACT, {
     const ck = (k, l) => `<label class="pm-chk"><input type="checkbox" data-c="rvChk" data-k="${k}" ${rv[k] ? 'checked' : ''}> ${l}</label>`;
     popMenu(Math.max(8, r.right - 360), r.bottom + 6, `<div class="pm-form" style="width:340px"><div class="pm-h" style="padding-left:0">View Options</div>
       <div class="chips" style="flex-wrap:wrap; margin:4px 0 10px">${rc('tm', 'This Month')}${rc('lm', 'Last Month')}${rc('3m', 'Latest 3 Months')}${rc('ty', 'This Year')}${rc('ly', 'Last Year')}${rc('all', 'All Dates')}</div>
-      ${ck('rec', 'Show Reconciled Transactions')}${ck('bal', 'Show Running Balance')}${ck('flags', 'Show Flags')}</div>`, 'pm-view');
+      <div class="row" style="gap:6px; align-items:center; margin-bottom:10px"><span class="small muted">From</span><input type="month" class="in sm" data-c="rvFrom" value="${rv.from || ''}" aria-label="From"><span class="small muted">To</span><input type="month" class="in sm" data-c="rvTo" value="${rv.to || ''}" aria-label="To"></div>
+      ${ck('rec', 'Show Reconciled Transactions')}${ck('bal', 'Show Running Balance')}${ck('flags', 'Show Flags')}${ck('img', 'Show Images')}</div>`, 'pm-view');
   },
   rvSet: el => { A.ui.rv = { ...regView(), [el.dataset.k]: el.dataset.v }; savePref('rv', A.ui.rv); closePop(); render._keepScroll = true; render(); },
   displayOpts: () => {
@@ -343,7 +346,8 @@ Object.assign(ACT, {
   },
   sideToggle: () => { A.ui.sideHide = !A.ui.sideHide; savePref('sideHide', A.ui.sideHide); render._keepScroll = true; render(); },
 });
-document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'rvChk') { A.ui.rv = { ...regView(), [el.dataset.k]: el.checked }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); } });
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'rvChk') { A.ui.rv = { ...regView(), [el.dataset.k]: el.checked }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); }
+  if (el.dataset?.c === 'rvFrom' || el.dataset?.c === 'rvTo') { A.ui.rv = { ...regView(), [el.dataset.c === 'rvFrom' ? 'from' : 'to']: el.value || null, range: 'custom' }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); } });
 document.addEventListener('keydown', e => {
   if (e.target.matches?.('input, textarea, select') || $('#scrim') || !A.plan) return;
   if (e.key === '?') { e.preventDefault(); ACT.shortcutsHelp(); }
@@ -461,6 +465,7 @@ document.addEventListener('click', e => { if (e.target.matches?.('.cchk')) e.sto
     if (!ts.length) return;
     if (e.shiftKey && e.key === 'F') { e.preventDefault(); flagWait = Date.now(); toast('Flag: press 1-6 (0 = none)'); }
     else if (e.shiftKey && e.key === 'D') run(['ctxDup']);
+    else if (e.shiftKey && e.key === 'R') run(['bulk', { k: 'reject' }]);
     else if (e.shiftKey && e.key === 'T' && ts.length === 1) run(['ctxRepeat']);
     else if (e.shiftKey && e.key === 'U') run(['ctxUnmatch']);
     else if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
@@ -545,7 +550,7 @@ let SP = null;
 function splitTargets(sel, acct) {
   const a = L.acct[acct]; let o = `<option value="">Category Needed</option>`;
   if (onBudget(a)) o += A.plan.groups.filter(g => g.sys !== 'cc').map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && (!c.hidden || c.id === sel)); return cs.length ? `<optgroup label="${esc(g.name)}">${cs.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))}</option>`).join('')}</optgroup>` : ''; }).join('');
-  o += `<optgroup label="Transfer">${A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="tr:${x.id}" ${sel === 'tr:' + x.id ? 'selected' : ''}>Transfer : ${esc(x.name)}</option>`).join('')}</optgroup>`;
+  o += `<optgroup label="Transfer">${A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="tr:${x.id}" ${sel === 'tr:' + x.id ? 'selected' : ''}>${esc(trLabel(x.id, acct))}</option>`).join('')}</optgroup>`;
   return o;
 }
 function lastSplitLike(t) {

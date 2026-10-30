@@ -444,6 +444,8 @@ body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
 .pmenu{max-height:calc(100vh - 16px);overflow-y:auto}
 .pmenu.touch{min-width:220px}.pmenu.touch .pm-i{min-height:46px;font-size:16px}
 html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+.avb{padding:0}.avb>summary{cursor:pointer;list-style:none}.avb>summary::-webkit-details-marker{display:none}.avb>summary::after{content:'▾';margin-left:8px;opacity:.5}.avb[open]>summary::after{content:'▴'}
+.icoth{width:26px}.icoth .sortb{padding:0;opacity:.6}.icoth .sortb svg{width:13px;height:13px}.in.sm{padding:6px 8px;font-size:13px;min-height:0;flex:1}
 </style>
 </head><body>
 <div id="app"></div>
@@ -492,7 +494,7 @@ function fmt(c, opts = {}) {
   const key = cur + (opts.short ? 's' : '');
   if (_nfKey !== key) { _nf = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: opts.short ? 0 : 2, maximumFractionDigits: opts.short ? 0 : 2 }); _nfKey = key; }
   const v = (c || 0) / 100;
-  const s = _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
+  const s = _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '').replace(/\u202f/g, '\u00a0'); // Manrope has no narrow space glyph
   return A.ui?.balStyle === 'paren' && v < 0 ? '(' + s.replace('−', '') + ')' : s;
 }
 const fmtS = c => fmt(c, { short: true });
@@ -513,6 +515,8 @@ function evalExpr(raw) {
 }
 
 /* ---------- account types ---------- */
+// YNAB shows 'Payment: X' for a transfer with a loan account, 'Transfer: X' otherwise
+function trLabel(to, from) { const a = L.acct[to], b = L.acct[from]; if (!a) return 'Transfer: deleted account'; return (ACCT[a.type]?.debt || ACCT[b?.type]?.debt ? 'Payment: ' : 'Transfer: ') + a.name; }
 const ACCT = {
   checking: { label: 'Checking', grp: 'budget' },
   savings: { label: 'Savings', grp: 'budget' },
@@ -606,7 +610,7 @@ function rebuildLookups() {
 }
 const catName = id => id === 'rta' ? 'Inflow: Ready to Assign' : (L.cat[id] ? ((L.cat[id].emoji ? L.cat[id].emoji + ' ' : '') + L.cat[id].name) : '');
 function payeeName(t) {
-  if (t.transferAcct) return 'Transfer : ' + (L.acct[t.transferAcct]?.name || 'deleted account');
+  if (t.transferAcct) return trLabel(t.transferAcct, t.acct);
   return L.payee[t.payee]?.name || '';
 }
 function getPayee(name, create = true) {
@@ -1208,18 +1212,29 @@ function viewOnboarding() {
 }
 
 /* ---------- target text (YNAB wording) ---------- */
-function dueLabel(c, m) { const t = c.target; if (!t) return ''; const d = t.type === 'yearly' ? dueMonth(t, m) : t.date; return d && ['yearly', 'date', 'balance'].includes(t.type) ? ' by ' + monthLabel(d) : ' this month'; }
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const lastDayOf = m => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate(); };
+// YNAB wording: "by the 18th" (monthly), "this month" (yearly / by date), "eventually" (balance without a date)
+function dueLabel(c, m) {
+  const t = c.target; if (!t) return '';
+  if (t.type === 'monthly' || t.type === 'debt') return ' by the ' + ordinal(Math.min(t.day || 31, lastDayOf(m)));
+  if (t.type === 'weekly') return ' this month';
+  if (t.type === 'balance' && !t.date) return ' eventually';
+  return ' this month';
+}
 function targetText(c, m, s) {
-  const x = s.x, ti = s.ti;
-  if (x.available < 0) return x.creditOver > 0 && !x.cashOver ? 'Overspent ' + fmt(x.creditOver) + ' on credit' : 'Overspent ' + fmt(-x.available);
+  const x = s.x, ti = s.ti, spent = -Math.min(0, x.activity), fundedAll = x.carry + x.assigned;
+  if (x.available < 0) return x.creditOver > 0 && !x.cashOver ? 'Overspent ' + fmt(x.creditOver) + ' on credit' : fundedAll > 0 ? 'Overspent · ' + fmt(spent) + ' of ' + fmt(fundedAll) : 'Overspent ' + fmt(-x.available);
   if (c.cc) { const bal = -(balances()[c.cc]?.working || 0); return bal > x.available ? fmt(bal - x.available) + ' more needed to pay balance' : 'Paid in full'; }
-  if (!ti) { const spent = -Math.min(0, x.activity); return spent && x.available === 0 && x.assigned + x.carry > 0 ? 'Fully Spent' : ''; }
+  if (!ti) return spent && x.available === 0 && fundedAll > 0 ? 'Fully Spent' : '';
   if (ti.snoozed) return 'Snoozed';
-  if (ti.under > 0) return fmt(ti.under) + ' more needed' + dueLabel(c, m);
-  const spent = -Math.min(0, x.activity);
+  const t = c.target;
+  if (ti.under > 0) { const more = t.mode !== 'refill' && t.type !== 'debt' && t.type !== 'balance' || ti.funded > 0 || x.carry > 0; return fmt(ti.under) + (more ? ' more needed' : ' needed') + dueLabel(c, m); }
   if (spent > 0 && x.available === 0) return 'Fully Spent';
-  if (spent > 0) return 'Funded. Spent ' + fmt(spent) + ' of ' + fmt(x.carry + x.assigned);
-  return 'Funded';
+  const onTrack = ['yearly', 'date', 'balance'].includes(t.type) && dueMonth(t, m) && fundedAll < t.amount;
+  const head = onTrack ? 'On Track' : 'Funded';
+  if (spent > 0) return head + ' · Spent ' + fmt(spent) + ' of ' + fmt(fundedAll);
+  return head;
 }
 
 /* ---------- PLAN ---------- */
@@ -1406,10 +1421,10 @@ function viewAccounts() {
 }
 
 /* ---------- REGISTER ---------- */
-const regView = () => ({ range: 'all', rec: true, bal: false, flags: true, ...(A.ui.rv || {}) });
+const regView = () => ({ range: 'all', rec: true, bal: false, flags: true, img: true, ...(A.ui.rv || {}) });
 function regRange(k) {
   const cm = curMonth(), end = m => addMonths(m, 1) + '-00', y = cm.slice(0, 4);
-  return { tm: [cm + '-01', end(cm)], lm: [addMonths(cm, -1) + '-01', end(addMonths(cm, -1))], '3m': [addMonths(cm, -2) + '-01', end(cm)], ty: [y + '-01-01', y + '-12-31'], ly: [(+y - 1) + '-01-01', (+y - 1) + '-12-31'] }[k] || ['0000', '9999'];
+  return { tm: [cm + '-01', end(cm)], lm: [addMonths(cm, -1) + '-01', end(addMonths(cm, -1))], '3m': [addMonths(cm, -2) + '-01', end(cm)], ty: [y + '-01-01', y + '-12-31'], ly: [(+y - 1) + '-01-01', (+y - 1) + '-12-31'], custom: [(regView().from || '0000-01') + '-01', (regView().to || '9999-12') + '-31'] }[k] || ['0000', '9999'];
 }
 function regList() {
   const id = A.acct; const f = A.ui.regFilter; const q = A.ui.search.trim().toLowerCase();
@@ -1426,7 +1441,7 @@ function regList() {
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
   list = collapseLegs(list);
   const so = A.ui.sort || { k: 'date', d: -1 }, byDate = (a, b) => a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1;
-  const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag || '' }[so.k];
+  const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag ? 0 + t.flag : '~', clr: t => ({ u: 0, c: 1, r: 2 })[t.cleared] ?? 1 }[so.k];
   return list.sort((a, b) => { if (key) { const x = key(a), y = key(b); if (x !== y) return (x < y ? -1 : 1) * so.d; } return byDate(a, b) * (key ? -1 : so.d); });
 }
 function txCatLabel(t) {
@@ -1543,7 +1558,7 @@ function viewRegister() {
     <button class="tbtn" data-a="importSheet" data-id="${all ? '' : id}">${I.upload} File Import</button>
     ${!all && isDebt(a) && ACCT[a.type]?.grp !== 'loan' ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
     ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
-    ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year' })[regView().range] : ''}</button>` : ''}
+    ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year', custom: 'Custom' })[regView().range] : ''}</button>` : ''}
     ${desk ? `<button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button><button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>` : `<button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>`}
   </div>`;
   h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
@@ -1554,7 +1569,7 @@ function viewRegister() {
   if (sch.length && A.ui.regFilter === 'all' && !A.ui.search) {
     h += `<div class="day">Scheduled</div><div class="card">`;
     for (const s of sch.slice(0, 8)) h += `<div class="tx"><span style="width:30px;color:var(--muted)">${I.repeat}</span>
-      <button class="main-b" data-a="schEdit" data-id="${s.id}"><span class="p ellip">${esc(s.transferAcct ? 'Transfer : ' + (L.acct[s.transferAcct]?.name || '') : s.payee)}</span><span class="c">${fmtDate(s.next)} · ${FREQ[s.freq]}${s.cat ? ' · ' + esc(catName(s.cat)) : ''}</span></button>
+      <button class="main-b" data-a="schEdit" data-id="${s.id}"><span class="p ellip">${esc(s.transferAcct ? trLabel(s.transferAcct, s.acct) : s.payee)}</span><span class="c">${fmtDate(s.next)} · ${FREQ[s.freq]}${s.cat ? ' · ' + esc(catName(s.cat)) : ''}</span></button>
       <span class="a num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</span>
       <button class="btn sm" data-a="schNow" data-id="${s.id}">Enter Now</button></div>`;
     h += `</div>`;
@@ -1568,7 +1583,7 @@ function viewRegister() {
     const lim = A.ui.regLimit || 150;
     if (desk) {
       const rv = regView(), showBal = rv.bal && !all;
-      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${selOn() ? `<th style="width:28px"><input type="checkbox" class="chk" data-c="selAll" aria-label="Check all" ${list.length && list.slice(0, lim).every(t => A.ui.selected.has(t.id)) ? 'checked' : ''}></th>` : ''}${rv.flags ? '<th></th>' : ''}${all ? sth('acct', 'Account') : ''}${sth('date', 'Date')}${sth('payee', 'Payee')}${sth('cat', 'Category')}${sth('memo', 'Memo')}${sth('out', 'Outflow', 'r')}${sth('in', 'Inflow', 'r')}${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
+      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${selOn() ? `<th style="width:28px"><input type="checkbox" class="chk" data-c="selAll" aria-label="Check all" ${list.length && list.slice(0, lim).every(t => A.ui.selected.has(t.id)) ? 'checked' : ''}></th>` : ''}${rv.flags ? `<th class="sortable icoth"><button class="sortb" data-a="regSort" data-k="flag" aria-label="Sort by flag" title="Sort by flag">${I.flag}</button></th>` : ''}${all ? sth('acct', 'Account') : ''}${sth('date', 'Date')}${sth('payee', 'Payee')}${sth('cat', 'Category')}${sth('memo', 'Memo')}${sth('out', 'Outflow', 'r')}${sth('in', 'Inflow', 'r')}${showBal ? '<th class="r">Balance</th>' : ''}<th class="sortable icoth"><button class="sortb" data-a="regSort" data-k="clr" aria-label="Sort by cleared" title="Sort by cleared">Ⓒ</button></th></tr></thead><tbody>`;
       if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
       const cols = (selOn() ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
       const rowOf = t => A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
@@ -1607,7 +1622,7 @@ function txTr(t, all, runBal) {
     ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
-    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button>${t.img ? ` <button class="cellbtn" data-a="imgView" data-id="${t.id}" title="View image" aria-label="View image">📎</button>` : ''}${t.matched ? ` <span class="muted" title="Matched with an imported bank transaction">⇄</span>` : ''}</td>
+    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button>${t.img && regView().img ? ` <button class="cellbtn" data-a="imgView" data-id="${t.id}" title="View image" aria-label="View image">📎</button>` : ''}${t.matched ? ` <span class="muted" title="Matched with an imported bank transaction">⇄</span>` : ''}</td>
     <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${t.cat && L.cat[t.cat] && L.group[L.cat[t.cat].gid] && !(t.splits && t.splits.length) ? `<span class="muted">${esc(L.group[L.cat[t.cat].gid].name)}: </span>` : ''}${esc(cl || '—')}</button>`}</td>
     <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
     <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>
@@ -1632,10 +1647,10 @@ function txRow(t, showAcct, runBal) {
     ${clrBtn(t)}</div>`;
 }
 function actionBar() {
-  const n = A.ui.selected.size;
-  return `<div role="toolbar" aria-label="Bulk actions"><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n} selected</span>
-    <button data-a="bulk" data-k="cat">Categorize</button><button data-a="bulk" data-k="approve">Approve</button><button data-a="bulk" data-k="clear">Clear</button>
-    <button data-a="bulk" data-k="flag">Flag</button><button data-a="bulk" data-k="date">Date</button><button data-a="bulk" data-k="del">Delete</button><button data-a="bulk" data-k="none" aria-label="Deselect all">${I.close.replace('<svg', '<svg width="18" height="18"')}</button></div>`;
+  const n = A.ui.selected.size, ts = A.tx.filter(t => A.ui.selected.has(t.id));
+  const un = ts.some(t => t.approved === false), rj = ts.some(t => t.approved === false && isBankImp(t));
+  return `<div role="toolbar" aria-label="Bulk actions"><button data-a="bulk" data-k="none" aria-label="Deselect all" title="Deselect all">${I.close.replace('<svg', '<svg width="16" height="16"')}</button><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n} Transaction${n > 1 ? 's' : ''}</span>
+    ${un ? `<button data-a="bulk" data-k="approve">${I.check} Approve</button>` : ''}${rj ? `<button data-a="bulk" data-k="reject">⊗ Reject</button>` : ''}<button data-a="bulk" data-k="cat">Categorize</button><button data-a="barMore">⋯ More</button></div>`;
 }
 
 /* ---------- loan account: YNAB-style progress (past balance, original schedule, current track) ---------- */
@@ -1704,12 +1719,12 @@ document.addEventListener('pointermove', e => {
 function inlRow(t, all, showBal, rv) {
   const id = A.acct === 'all' ? null : A.acct;
   const acct = t ? t.acct : (A.ui.inl.acct || id || A.plan.accounts.find(a => !a.closed && onBudget(a))?.id);
-  const tr = t?.transferAcct ? 'Transfer : ' + (L.acct[t.transferAcct]?.name || '') : (t ? payeeName(t) || '' : '');
+  const tr = t?.transferAcct ? trLabel(t.transferAcct, t.acct) : (t ? payeeName(t) || '' : '');
   const a = L.acct[acct], tb = t?.transferAcct ? L.acct[t.transferAcct] : null;
   const catOff = !onBudget(a) || (tb && onBudget(tb));
   const out = t && t.amount < 0 ? fmtIn(-t.amount) : '', inn = t && t.amount > 0 ? fmtIn(t.amount) : '';
   const cols = (selOn() ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
-  const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="Transfer : ${esc(x.name)}">`).join('');
+  const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="${esc(trLabel(x.id, acct))}">`).join('');
   return `<tr class="inl" data-inl="${t ? t.id : 'new'}">
     ${selOn() ? '<td></td>' : ''}${rv.flags ? `<td style="width:10px">${t?.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>` : ''}
     ${all ? `<td><select class="in inl-in" id="inlAcct">${A.plan.accounts.filter(x => !x.closed).map(x => `<option value="${x.id}" ${x.id === acct ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></td>` : `<input type="hidden" id="inlAcct" value="${acct}">`}
@@ -1742,7 +1757,7 @@ function collapseLegs(list) {
   for (const t of list) { const k = legKey(t); if (!k) { out.push(t); continue; } if (seen.has(k)) continue; const legs = txLegs(t); if (legs.length < 2) { out.push(t); continue; } seen.add(k); out.push(Object.assign(Object.create(t), { _legs: legs, amount: legs.reduce((a, x) => a + x.amount, 0), id: legs[0].id })); }
   return out;
 }
-const legLabel = l => l.transferAcct ? 'Transfer : ' + (L.acct[l.transferAcct]?.name || '') : (txCatLabel(l) || 'Category Needed');
+const legLabel = l => l.transferAcct ? trLabel(l.transferAcct, l.acct) : (txCatLabel(l) || 'Category Needed');
 const legPayee = legs => { const p = legs.find(l => !l.transferAcct && l.payee); return p ? payeeName(p) : payeeName(legs[0]) || 'Split'; };
 /* ================= Budget — sheets (bottom panels) ================= */
 let SH = null; // { render(), onClose }
@@ -1799,7 +1814,11 @@ function catSheet(cid, asHtml) {
       <div class="kpi"><span>Activity</span><b class="num" style="font-size:17px">${fmt(x.activity)}</b></div>
       <div class="kpi"><span>Available</span><b class="num" style="font-size:17px; color:${x.available < 0 ? 'var(--bad)' : 'inherit'}">${fmt(x.available)}</b></div>
     </div>
-    <div class="small muted">Cash Left Over From ${monthLabel(prev)}: ${fmt(x.carry)}</div>
+    <details class="card avb"><summary class="li"><span class="grow">Available Balance</span><strong class="num">${fmt(x.available)}</strong></summary>
+      <div class="li small"><span class="grow muted">Cash Left Over From ${monthLabel(prev)}</span><span class="num">${fmt(x.carry)}</span></div>
+      <div class="li small"><span class="grow muted">Assigned This Month</span><span class="num">${x.assigned >= 0 ? '+' : ''}${fmt(x.assigned)}</span></div>
+      <div class="li small"><span class="grow muted">Cash Spending</span><span class="num">${fmt(x.cashAct || 0)}</span></div>
+      <div class="li small"><span class="grow muted">Credit Spending</span><span class="num">${fmt(x.credAct || 0)}</span></div></details>
     ${x.available < 0 ? `<div class="banner bad">${I.info}<span>${x.creditOver && !x.cashOver ? 'Overspent on credit: this becomes debt you will need to pay.' : 'Overspent: cover it with money from another category.'}</span></div>
       <button class="btn pri block" data-a="coverSheet" data-c="${cid}">Cover Overspending (${fmt(-x.available)})</button>` : ''}
     <div class="row"><button class="btn grow" data-a="moveSheet" data-c="${cid}">${I.swap} Move Money</button></div>
@@ -1831,28 +1850,37 @@ function ccInfo(c) {
     ${gap > 0 ? `<button class="btn block" data-a="setAssign" data-c="${c.id}" data-v="${getAssigned(A.month, c.id) + gap}">Assign ${fmt(gap)} to pay in full</button>` : ''}
     <button class="btn pri block" data-a="ccPay" data-id="${c.cc}">${I.swap} Record Payment</button>`;
 }
+// YNAB's target editor: Weekly / Monthly / Yearly / Custom tabs
+function targetTab(t) { if (!t || !t.type) return ''; if (t.type === 'date' || t.type === 'balance') return 'custom'; return t.type; }
 function targetEditor(c) {
-  const t = c.target || {};
-  const type = t.type || '';
-  const wd = t.weekday ?? 1;
+  const t = c.target || {}, tab = targetTab(t);
   const ti = targetInfo(c, A.month);
-  const opt = (v, l, cur) => `<option value="${v}" ${cur == v ? 'selected' : ''}>${l}</option>`;
+  const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`;
+  const amt = t.amount ? fmt(t.amount) : fmt(0);
+  const tabs = [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly'], ['custom', 'Custom']];
+  const need = `<div class="field"><label for="tAmt">I need</label><input id="tAmt" class="in" inputmode="decimal" value="${t.amount ? fmtIn(t.amount) : ''}" placeholder="0,00" data-tf="amount" data-c="${c.id}"></div>`;
+  const mode = (next, per = '') => `<div class="field"><label for="tModeSel">${next}</label><select id="tModeSel" class="in" data-tf="mode" data-c="${c.id}">${opt('set', 'Set aside another ' + amt + per, t.mode || 'set')}${opt('refill', 'Refill up to ' + amt + per, t.mode || 'set')}</select>
+    <div class="small muted" style="margin-top:4px">${t.mode === 'refill' ? 'Whatever you don’t spend is applied toward the next ' + amt + '.' : 'Most people choose this. Adds ' + amt + ' every time, even if money is left over.'}</div></div>`;
+  let body = '';
+  if (tab === 'weekly') body = need + `<div class="field"><label for="tWd">Every</label><select id="tWd" class="in" data-tf="weekday" data-c="${c.id}">${[0, 1, 2, 3, 4, 5, 6].map(d => opt(d, cap(DAYS[d]), t.weekday ?? 1)).join('')}</select></div>` + mode('Next month I want to', '/week');
+  else if (tab === 'monthly' || t.type === 'debt') body = need + `<div class="field"><label for="tDay">By</label><select id="tDay" class="in" data-tf="day" data-c="${c.id}">${opt(0, 'Last Day of Month', t.day || 0)}${Array.from({ length: 31 }, (_, k) => 31 - k).map(d => opt(d, ordinal(d), t.day || 0)).join('')}</select></div>` + (t.type === 'debt' ? '<div class="small muted">Monthly debt payment</div>' : mode('Next month I want to'));
+  else if (tab === 'yearly') body = need + `<div class="field"><label>By</label><div class="row" style="gap:8px"><select id="tYDay" class="in" aria-label="Day" data-tf="day" data-c="${c.id}">${opt(0, 'Last day', t.day || 0)}${Array.from({ length: 31 }, (_, k) => k + 1).map(d => opt(d, ordinal(d), t.day || 0)).join('')}</select><select id="tMo" class="in" aria-label="Month" data-tf="month" data-c="${c.id}">${MONTHS.map((n, k) => opt(k + 1, cap(n), t.month || 12)).join('')}</select></div></div>` + mode('Next year I want to');
+  else if (tab === 'custom') {
+    const want = t.type === 'balance' ? 'balance' : t.mode === 'refill' ? 'fill' : 'set';
+    const rep = t.repeat || 0, unit = rep && rep % 12 === 0 ? 'y' : 'm', every = rep ? (unit === 'y' ? rep / 12 : rep) : 1;
+    body = `<div class="field"><label for="tAmt">Amount</label><input id="tAmt" class="in" inputmode="decimal" value="${t.amount ? fmtIn(t.amount) : ''}" placeholder="0,00" data-tf="amount" data-c="${c.id}"></div>
+      <div class="field"><label for="tWant">I want to</label><select id="tWant" class="in" data-tf="want" data-c="${c.id}">${opt('set', 'Set aside ' + amt, want)}${opt('fill', 'Fill up to ' + amt, want)}${opt('balance', 'Have a balance of ' + amt, want)}</select>
+      <div class="small muted" style="margin-top:4px">${want === 'balance' ? 'Reach this amount by a specific time and refrain from spending until you reach it.' : want === 'fill' ? 'Use what is already in this category and fill it up.' : 'Add the amount to this category, regardless of its current balance.'}</div></div>
+      <div class="field"><label for="tDate">Due on${want === 'balance' ? ' (optional)' : ''}</label><input id="tDate" class="in" type="month" value="${t.date || ''}" data-tf="date" data-c="${c.id}"></div>
+      <label class="row" style="gap:8px"><input type="checkbox" class="chk" data-tf="repOn" data-c="${c.id}" ${rep ? 'checked' : ''}> Repeat</label>
+      ${rep ? `<div class="row" style="gap:8px"><span class="small muted">Every</span><select class="in" aria-label="Interval" data-tf="repN" data-c="${c.id}">${Array.from({ length: 11 }, (_, k) => opt(k + 1, k + 1, every)).join('')}</select><select class="in" aria-label="Unit" data-tf="repU" data-c="${c.id}">${opt('m', 'Month', unit)}${opt('y', 'Year', unit)}</select></div>` : ''}`;
+  }
   return `<div class="sec-t"><span>Target</span>${ti ? `<span>${Math.round(ti.pct * 100)} %</span>` : ''}</div>
   <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:12px" id="tgtBox">
-    <div class="field"><label for="tType">Target type</label><select id="tType" class="in" data-tf="type" data-c="${c.id}">
-      ${opt('', 'No target', type)}${Object.entries(TARGET_TYPES).map(([k, l]) => opt(k, l, type)).join('')}</select></div>
-    ${type ? `<div class="field"><label for="tAmt">Amount</label><input id="tAmt" class="in" inputmode="decimal" value="${t.amount ? fmtIn(t.amount) : ''}" placeholder="0,00" data-tf="amount" data-c="${c.id}"></div>` : ''}
-    ${type === 'weekly' ? `<div class="field"><label for="tWd">Every</label><select id="tWd" class="in" data-tf="weekday" data-c="${c.id}">${[1, 2, 3, 4, 5, 6, 0].map(d => opt(d, cap(DAYS[d]), wd)).join('')}</select></div>` : ''}
-    ${type === 'yearly' ? `<div class="field"><label for="tMo">Due in</label><select id="tMo" class="in" data-tf="month" data-c="${c.id}">${MONTHS.map((n, i) => opt(i + 1, cap(n), t.month || 12)).join('')}</select></div>` : ''}
-    ${type === 'date' || type === 'balance' ? `<div class="field"><label for="tDate">${type === 'balance' ? 'By (optional)' : 'By'}</label><input id="tDate" class="in" type="month" value="${t.date || ''}" data-tf="date" data-c="${c.id}"></div>` : ''}
-    ${type === 'date' ? `<div class="field"><label for="tRep">Repeat</label><select id="tRep" class="in" data-tf="repeat" data-c="${c.id}">${opt(0, 'Does not repeat', t.repeat || 0)}${opt(1, 'Every month', t.repeat)}${opt(3, 'Every 3 months', t.repeat)}${opt(6, 'Every 6 months', t.repeat)}${opt(12, 'Every year', t.repeat)}${opt(24, 'Every 2 years', t.repeat)}</select></div>` : ''}
-    ${type === 'monthly' || type === 'weekly' ? `<div class="seg" role="group" aria-label="Mode">
-      <button class="${t.mode !== 'refill' ? 'on' : ''}" data-a="tMode" data-c="${c.id}" data-v="set">Set aside another</button>
-      <button class="${t.mode === 'refill' ? 'on' : ''}" data-a="tMode" data-c="${c.id}" data-v="refill">Refill up to</button></div>
-      <div class="small muted">${t.mode === 'refill' ? 'Available is topped up to the amount; money left from last month counts.' : 'The full amount is asked for every month, even if money is left over.'}</div>` : ''}
-    ${type ? `<div class="field"><label for="tStart">Starting</label><input id="tStart" class="in" type="month" value="${t.start || ''}" data-tf="start" data-c="${c.id}"></div>` : ''}
-    ${ti ? `<div class="bar ${ti.under > 0 ? 'warn' : ''}"><i style="width:${Math.round(ti.pct * 100)}%"></i></div><div class="small"><strong>${esc(ti.label)}</strong>${ti.need ? ' · needed this month: ' + fmt(ti.need) : ''}</div>
-      <button class="btn sm" data-a="tSnooze" data-c="${c.id}">${ti.snoozed ? 'Unsnooze' : 'Snooze this month'}</button>` : ''}
+    <div class="seg" role="tablist" aria-label="Target type">${tabs.map(([k, l]) => `<button role="tab" class="${tab === k || (k === 'monthly' && t.type === 'debt') ? 'on' : ''}" data-a="tTab" data-c="${c.id}" data-v="${k}">${l}</button>`).join('')}</div>
+    ${tab ? body + `<div class="field"><label for="tStart">Starting</label><input id="tStart" class="in" type="month" value="${t.start || ''}" data-tf="start" data-c="${c.id}"></div>` : `<div class="small muted">How much do you need for ${esc(c.name)}? Pick a type to create a target.</div>`}
+    ${ti ? `<div class="bar ${ti.under > 0 ? 'warn' : ''}"><i style="width:${Math.round(ti.pct * 100)}%"></i></div><div class="small"><strong>${esc(targetText(c, A.month, catStatus(c, A.month)) || ti.label)}</strong>${ti.need ? ' · needed this month: ' + fmt(ti.need) : ''}</div>
+      <div class="row" style="gap:8px"><button class="btn sm" data-a="tSnooze" data-c="${c.id}">${ti.snoozed ? 'Unsnooze' : 'Snooze this month'}</button><span class="grow"></span><button class="btn sm danger" data-a="tDel" data-c="${c.id}">Delete Target</button></div>` : tab ? `<button class="btn sm danger" data-a="tDel" data-c="${c.id}" style="align-self:flex-end">Delete Target</button>` : ''}
   </div>`;
 }
 
@@ -1892,6 +1920,7 @@ function autoOptions(m, cats) {
     lastS: { l: 'Spent Last Month', f: c => Math.max(0, -catM(prev, c.id).activity) },
     avgA: { l: 'Average Assigned', f: c => { const n = Math.max(1, Math.min(12, monthDiff(calc().minM, m))); let s = 0; for (let i = 1; i <= n; i++) s += catM(addMonths(m, -i), c.id).assigned; return Math.round(s / n); } },
     avgS: { l: 'Average Spent', f: c => { const n = Math.max(1, Math.min(12, monthDiff(calc().minM, m))); let s = 0; for (let i = 1; i <= n; i++) s += Math.max(0, -catM(addMonths(m, -i), c.id).activity); return Math.round(s / n); } },
+    reduceOver: { l: 'Reduce Overfunding', f: c => { const ti = targetInfo(c, m), x = catM(m, c.id); if (!ti || ti.snoozed || !(ti.total > 0) || x.available <= ti.total) return null; return Math.max(0, getAssigned(m, c.id) - (x.available - ti.total)); } },
     resetAv: { l: 'Reset Available Amounts', f: c => { const x = catM(m, c.id); return x.available > 0 ? getAssigned(m, c.id) - x.available : null; } },
     resetAs: { l: 'Reset Assigned Amounts', f: () => 0 },
   };
@@ -2088,7 +2117,7 @@ function schSheet(id) {
 }
 function schListSheet() {
   const list = A.plan.scheduled.slice().sort((a, b) => a.next < b.next ? -1 : 1);
-  const body = list.length ? `<div class="card">${list.map(s => `<button class="li" data-a="schEdit" data-id="${s.id}"><span class="ic">${I.repeat}</span><span class="grow"><strong class="ellip" style="display:block">${esc(s.transferAcct ? 'Transfer : ' + (L.acct[s.transferAcct]?.name || '') : s.payee || 'No payee')}</strong><span class="small muted">${fmtDate(s.next)} · ${FREQ[s.freq]} · ${esc(L.acct[s.acct]?.name || '')}</span></span><strong class="num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</strong></button>`).join('')}</div>`
+  const body = list.length ? `<div class="card">${list.map(s => `<button class="li" data-a="schEdit" data-id="${s.id}"><span class="ic">${I.repeat}</span><span class="grow"><strong class="ellip" style="display:block">${esc(s.transferAcct ? trLabel(s.transferAcct, s.acct) : s.payee || 'No payee')}</strong><span class="small muted">${fmtDate(s.next)} · ${FREQ[s.freq]} · ${esc(L.acct[s.acct]?.name || '')}</span></span><strong class="num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</strong></button>`).join('')}</div>`
     : `<div class="empty"><strong>No scheduled transactions</strong><span>When adding a transaction, pick Repeat or a future date.</span></div>`;
   openSheet('Scheduled Transactions', body, `<button class="btn block" data-a="newTx">${I.plus} Add Transaction</button>`);
 }
@@ -3598,6 +3627,8 @@ const ACT = {
     mutate(o.l, () => { for (const [cid, v] of o.changes) setAssigned(A.month, cid, v); }); closeSheet();
   },
   tMode: el => { const c = L.cat[el.dataset.c]; mutate('Target updated', () => { c.target.mode = el.dataset.v; }, { silent: true }); catSheet(c.id); },
+  tTab: el => { const c = L.cat[el.dataset.c], v = el.dataset.v; mutate('Target updated', () => { const o = c.target || { amount: 0, mode: 'set' }; const type = v === 'custom' ? (o.type === 'balance' || o.type === 'date' ? o.type : 'date') : v; c.target = targetTab(o) === v ? { ...o, type } : { type, amount: o.amount || 0, mode: o.mode || 'set', snooze: o.snooze || null, ...(o.start ? { start: o.start } : {}) }; if (type === 'date' && !c.target.date) c.target.date = A.month; }, { silent: true }); catSheet(c.id); },
+  tDel: el => { const c = L.cat[el.dataset.c]; mutate('Target deleted', () => { c.target = null; }); catSheet(c.id); },
   tSnooze: el => { const c = L.cat[el.dataset.c]; mutate('Target updated', () => { c.target.snooze = c.target.snooze === A.month ? null : A.month; }); catSheet(c.id); },
   cMove: el => { const cs = A.plan.cats, i = cs.findIndex(c => c.id === el.dataset.c), d = +el.dataset.d; const g = cs[i].gid; let j = i + d; while (j >= 0 && j < cs.length && cs[j].gid !== g) j += d; if (j < 0 || j >= cs.length) return; mutate('Order updated', () => { [cs[i], cs[j]] = [cs[j], cs[i]]; }, { silent: true }); },
   gMove: el => { const gs = A.plan.groups, i = gs.findIndex(g => g.id === el.dataset.g), d = +el.dataset.d; let j = i + d; while (j >= 0 && j < gs.length && gs[j].sys) j += d; if (j < 0 || j >= gs.length) return; mutate('Order updated', () => { [gs[i], gs[j]] = [gs[j], gs[i]]; }, { silent: true }); },
@@ -3669,7 +3700,8 @@ const ACT = {
     if (k === 'none') { A.ui.selected.clear(); render(); return; }
     if (k === 'approve') mutate(`${ids.length} approved`, () => ts.forEach(t => t.approved = true));
     else if (k === 'clear') mutate(`${ids.length} cleared`, () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared === 'u') t.cleared = 'c'; }));
-    else if (k === 'del') { mutate(`${ids.length} deleted`, () => deleteTx(ids)); A.ui.selected.clear(); }
+    else if (k === 'del') { const all = [...new Set(ts.flatMap(txLegs).map(t => t.id))]; mutate(`${ids.length} deleted`, () => deleteTx(all)); A.ui.selected.clear(); }
+    else if (k === 'reject') { const rj = [...new Set(ts.filter(t => t.approved === false && isBankImp(t)).flatMap(txLegs).map(t => t.id))]; if (!rj.length) return; mutate(rj.length > 1 ? rj.length + ' transactions rejected' : 'Transaction rejected', () => deleteTx(rj)); A.ui.selected.clear(); }
     else if (k === 'cat') openSheet('Categorize ' + ids.length + ' transactions', `<div class="field"><label for="bkCat">Category</label><select id="bkCat" class="in">${catOptions('')}</select></div><label class="switch"><span>Approve at the same time</span><input type="checkbox" id="bkAp" checked></label>`, `<button class="btn pri block" data-a="bulkCatDo">Apply</button>`);
     else if (k === 'flag') openSheet('Flag', `<div class="flags"><button style="background:var(--surface-2)" data-a="bulkFlagDo" data-v="" aria-label="None"></button>${flagList().map(([f, l]) => `<button style="background:var(--flag-${f})" data-a="bulkFlagDo" data-v="${f}" aria-label="${l}"></button>`).join('')}</div>`);
     else if (k === 'date') openSheet('Change Date', `<input type="date" id="bkDate" class="in" value="${todayISO()}">`, `<button class="btn pri block" data-a="bulkDateDo">Apply</button>`);
@@ -3831,7 +3863,10 @@ document.addEventListener('change', e => {
       if (k === 'type') { if (!el.value) c.target = null; else c.target = { ...(c.target || { amount: 0, mode: 'set' }), type: el.value }; return; }
       c.target ||= { type: 'monthly', amount: 0 };
       if (k === 'amount') c.target.amount = Math.abs(evalExpr(el.value) || 0);
-      else if (['weekday', 'month', 'repeat'].includes(k)) c.target[k] = +el.value;
+      else if (['weekday', 'month', 'repeat', 'day'].includes(k)) c.target[k] = +el.value;
+      else if (k === 'want') { if (el.value === 'balance') c.target.type = 'balance'; else { c.target.type = 'date'; c.target.mode = el.value === 'fill' ? 'refill' : 'set'; if (!c.target.date) c.target.date = A.month; } }
+      else if (k === 'repOn') c.target.repeat = el.checked ? 1 : 0;
+      else if (k === 'repN' || k === 'repU') { const box = el.closest('#tgtBox'); const n = +box.querySelector('[data-tf=repN]').value, u = box.querySelector('[data-tf=repU]').value; c.target.repeat = u === 'y' ? n * 12 : n; }
       else c.target[k] = el.value || null;
     }, { silent: true });
     catSheet(c.id); return;
@@ -3903,7 +3938,7 @@ function inlSave(again) {
   const acct = $('#inlAcct')?.value, date = $('#inlDate')?.value || todayISO(), payee = ($('#inlPayee')?.value || '').trim(), memo = $('#inlMemo')?.value || '';
   const o = evalExpr($('#inlOut')?.value || '') || 0, n = evalExpr($('#inlIn')?.value || '') || 0; const amount = Math.abs(n) - Math.abs(o);
   if (!acct) return toast('Choose an account'); if (!amount) { toast('Enter an outflow or an inflow'); $('#inlOut')?.focus(); return; }
-  const trm = payee.match(/^Transfer\s*:\s*(.+)$/i); const tra = trm ? A.plan.accounts.find(x => x.name.trim().toLowerCase() === trm[1].trim().toLowerCase() && x.id !== acct) : null;
+  const trm = payee.match(/^(?:Transfer|Payment)\s*:\s*(.+)$/i); const tra = trm ? A.plan.accounts.find(x => x.name.trim().toLowerCase() === trm[1].trim().toLowerCase() && x.id !== acct) : null;
   let cat = $('#inlCat') && !$('#inlCat').disabled ? ($('#inlCat').value || null) : (t?.cat || null);
   if (!tra && !cat && payee) { const y = L.payeeByName[payee.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat] && onBudget(L.acct[acct])) cat = y.lastCat; }
   const draft = { id: t?.id, acct, date, payee: tra ? '' : payee, cat, memo, amount, cleared: t ? t.cleared : 'u', flag: t?.flag || null, approved: true, transferAcct: tra ? tra.id : null, splits: t?.splits && t.splits.length > 1 ? t.splits : null };
@@ -3977,7 +4012,7 @@ function ctxOpen(row, x, y, touch) {
   const s = n > 1 ? n + ' Transactions' : '1 Transaction';
   if (touch) { // the short menu of YNAB's iOS app
     popMenu(x, y,
-      (unappr ? mi(I.check, 'Approve', 'bulk', 'data-k="approve"') : '') +
+      (unappr ? mi(I.check, 'Approve', 'bulk', 'data-k="approve"') + (ts.some(t => t.approved === false && isBankImp(t)) ? mi('⊗', 'Reject', 'bulk', 'data-k="reject"') : '') : '') +
       mi(I.accts, 'Move', 'ctxMove', '', '', ts.flatMap(txLegs).some(t => t.transferAcct)) +
       (uncl ? mi('Ⓒ', 'Clear', 'ctxClear', 'data-v="c"') : mi('Ⓒ', 'Unclear', 'ctxClear', 'data-v="u"', '', !cl)) +
       mi(I.flag, 'Flag', 'bulk', 'data-k="flag"') +
@@ -3989,6 +4024,7 @@ function ctxOpen(row, x, y, touch) {
   }
   popMenu(x, y,
     mi(I.check, 'Approve', 'bulk', 'data-k="approve"', 'A', !unappr) +
+    mi('⊗', 'Reject', 'bulk', 'data-k="reject"', 'shift R', !ts.some(t => t.approved === false && isBankImp(t))) +
     msep +
     mi('Ⓒ', 'Mark as Cleared', 'ctxClear', 'data-v="c"', 'C', !uncl) +
     mi('Ⓒ', 'Mark as Uncleared', 'ctxClear', 'data-v="u"', 'C', !cl) +
@@ -4017,6 +4053,7 @@ document.addEventListener('keydown', e => {
 });
 
 Object.assign(ACT, {
+  barMore: el => { const id = [...A.ui.selected][0]; if (!id) return; const r = el.getBoundingClientRect(); ctxOpen({ dataset: { tid: id } }, r.left, r.top - 8, !DESK()); setTimeout(() => { const m = $('.pmenu'); if (m) m.style.top = Math.max(8, r.top - m.offsetHeight - 8) + 'px'; }, 0); },
   ctxClear: el => { const ts = ctxTargets(), v = el.dataset.v; mutate(v === 'c' ? 'Marked as cleared' : 'Marked as uncleared', () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared !== 'r') t.cleared = v; })); },
   ctxDup: () => {
     const ts = ctxTargets(), grps = {};
@@ -4240,7 +4277,8 @@ Object.assign(ACT, {
     const ck = (k, l) => `<label class="pm-chk"><input type="checkbox" data-c="rvChk" data-k="${k}" ${rv[k] ? 'checked' : ''}> ${l}</label>`;
     popMenu(Math.max(8, r.right - 360), r.bottom + 6, `<div class="pm-form" style="width:340px"><div class="pm-h" style="padding-left:0">View Options</div>
       <div class="chips" style="flex-wrap:wrap; margin:4px 0 10px">${rc('tm', 'This Month')}${rc('lm', 'Last Month')}${rc('3m', 'Latest 3 Months')}${rc('ty', 'This Year')}${rc('ly', 'Last Year')}${rc('all', 'All Dates')}</div>
-      ${ck('rec', 'Show Reconciled Transactions')}${ck('bal', 'Show Running Balance')}${ck('flags', 'Show Flags')}</div>`, 'pm-view');
+      <div class="row" style="gap:6px; align-items:center; margin-bottom:10px"><span class="small muted">From</span><input type="month" class="in sm" data-c="rvFrom" value="${rv.from || ''}" aria-label="From"><span class="small muted">To</span><input type="month" class="in sm" data-c="rvTo" value="${rv.to || ''}" aria-label="To"></div>
+      ${ck('rec', 'Show Reconciled Transactions')}${ck('bal', 'Show Running Balance')}${ck('flags', 'Show Flags')}${ck('img', 'Show Images')}</div>`, 'pm-view');
   },
   rvSet: el => { A.ui.rv = { ...regView(), [el.dataset.k]: el.dataset.v }; savePref('rv', A.ui.rv); closePop(); render._keepScroll = true; render(); },
   displayOpts: () => {
@@ -4268,7 +4306,8 @@ Object.assign(ACT, {
   },
   sideToggle: () => { A.ui.sideHide = !A.ui.sideHide; savePref('sideHide', A.ui.sideHide); render._keepScroll = true; render(); },
 });
-document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'rvChk') { A.ui.rv = { ...regView(), [el.dataset.k]: el.checked }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); } });
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'rvChk') { A.ui.rv = { ...regView(), [el.dataset.k]: el.checked }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); }
+  if (el.dataset?.c === 'rvFrom' || el.dataset?.c === 'rvTo') { A.ui.rv = { ...regView(), [el.dataset.c === 'rvFrom' ? 'from' : 'to']: el.value || null, range: 'custom' }; savePref('rv', A.ui.rv); render._keepScroll = true; render(); } });
 document.addEventListener('keydown', e => {
   if (e.target.matches?.('input, textarea, select') || $('#scrim') || !A.plan) return;
   if (e.key === '?') { e.preventDefault(); ACT.shortcutsHelp(); }
@@ -4386,6 +4425,7 @@ document.addEventListener('click', e => { if (e.target.matches?.('.cchk')) e.sto
     if (!ts.length) return;
     if (e.shiftKey && e.key === 'F') { e.preventDefault(); flagWait = Date.now(); toast('Flag: press 1-6 (0 = none)'); }
     else if (e.shiftKey && e.key === 'D') run(['ctxDup']);
+    else if (e.shiftKey && e.key === 'R') run(['bulk', { k: 'reject' }]);
     else if (e.shiftKey && e.key === 'T' && ts.length === 1) run(['ctxRepeat']);
     else if (e.shiftKey && e.key === 'U') run(['ctxUnmatch']);
     else if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
@@ -4470,7 +4510,7 @@ let SP = null;
 function splitTargets(sel, acct) {
   const a = L.acct[acct]; let o = `<option value="">Category Needed</option>`;
   if (onBudget(a)) o += A.plan.groups.filter(g => g.sys !== 'cc').map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && (!c.hidden || c.id === sel)); return cs.length ? `<optgroup label="${esc(g.name)}">${cs.map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(catName(c.id))}</option>`).join('')}</optgroup>` : ''; }).join('');
-  o += `<optgroup label="Transfer">${A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="tr:${x.id}" ${sel === 'tr:' + x.id ? 'selected' : ''}>Transfer : ${esc(x.name)}</option>`).join('')}</optgroup>`;
+  o += `<optgroup label="Transfer">${A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="tr:${x.id}" ${sel === 'tr:' + x.id ? 'selected' : ''}>${esc(trLabel(x.id, acct))}</option>`).join('')}</optgroup>`;
   return o;
 }
 function lastSplitLike(t) {

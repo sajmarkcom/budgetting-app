@@ -137,18 +137,29 @@ function viewOnboarding() {
 }
 
 /* ---------- target text (YNAB wording) ---------- */
-function dueLabel(c, m) { const t = c.target; if (!t) return ''; const d = t.type === 'yearly' ? dueMonth(t, m) : t.date; return d && ['yearly', 'date', 'balance'].includes(t.type) ? ' by ' + monthLabel(d) : ' this month'; }
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const lastDayOf = m => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate(); };
+// YNAB wording: "by the 18th" (monthly), "this month" (yearly / by date), "eventually" (balance without a date)
+function dueLabel(c, m) {
+  const t = c.target; if (!t) return '';
+  if (t.type === 'monthly' || t.type === 'debt') return ' by the ' + ordinal(Math.min(t.day || 31, lastDayOf(m)));
+  if (t.type === 'weekly') return ' this month';
+  if (t.type === 'balance' && !t.date) return ' eventually';
+  return ' this month';
+}
 function targetText(c, m, s) {
-  const x = s.x, ti = s.ti;
-  if (x.available < 0) return x.creditOver > 0 && !x.cashOver ? 'Overspent ' + fmt(x.creditOver) + ' on credit' : 'Overspent ' + fmt(-x.available);
+  const x = s.x, ti = s.ti, spent = -Math.min(0, x.activity), fundedAll = x.carry + x.assigned;
+  if (x.available < 0) return x.creditOver > 0 && !x.cashOver ? 'Overspent ' + fmt(x.creditOver) + ' on credit' : fundedAll > 0 ? 'Overspent · ' + fmt(spent) + ' of ' + fmt(fundedAll) : 'Overspent ' + fmt(-x.available);
   if (c.cc) { const bal = -(balances()[c.cc]?.working || 0); return bal > x.available ? fmt(bal - x.available) + ' more needed to pay balance' : 'Paid in full'; }
-  if (!ti) { const spent = -Math.min(0, x.activity); return spent && x.available === 0 && x.assigned + x.carry > 0 ? 'Fully Spent' : ''; }
+  if (!ti) return spent && x.available === 0 && fundedAll > 0 ? 'Fully Spent' : '';
   if (ti.snoozed) return 'Snoozed';
-  if (ti.under > 0) return fmt(ti.under) + ' more needed' + dueLabel(c, m);
-  const spent = -Math.min(0, x.activity);
+  const t = c.target;
+  if (ti.under > 0) { const more = t.mode !== 'refill' && t.type !== 'debt' && t.type !== 'balance' || ti.funded > 0 || x.carry > 0; return fmt(ti.under) + (more ? ' more needed' : ' needed') + dueLabel(c, m); }
   if (spent > 0 && x.available === 0) return 'Fully Spent';
-  if (spent > 0) return 'Funded. Spent ' + fmt(spent) + ' of ' + fmt(x.carry + x.assigned);
-  return 'Funded';
+  const onTrack = ['yearly', 'date', 'balance'].includes(t.type) && dueMonth(t, m) && fundedAll < t.amount;
+  const head = onTrack ? 'On Track' : 'Funded';
+  if (spent > 0) return head + ' · Spent ' + fmt(spent) + ' of ' + fmt(fundedAll);
+  return head;
 }
 
 /* ---------- PLAN ---------- */
@@ -335,10 +346,10 @@ function viewAccounts() {
 }
 
 /* ---------- REGISTER ---------- */
-const regView = () => ({ range: 'all', rec: true, bal: false, flags: true, ...(A.ui.rv || {}) });
+const regView = () => ({ range: 'all', rec: true, bal: false, flags: true, img: true, ...(A.ui.rv || {}) });
 function regRange(k) {
   const cm = curMonth(), end = m => addMonths(m, 1) + '-00', y = cm.slice(0, 4);
-  return { tm: [cm + '-01', end(cm)], lm: [addMonths(cm, -1) + '-01', end(addMonths(cm, -1))], '3m': [addMonths(cm, -2) + '-01', end(cm)], ty: [y + '-01-01', y + '-12-31'], ly: [(+y - 1) + '-01-01', (+y - 1) + '-12-31'] }[k] || ['0000', '9999'];
+  return { tm: [cm + '-01', end(cm)], lm: [addMonths(cm, -1) + '-01', end(addMonths(cm, -1))], '3m': [addMonths(cm, -2) + '-01', end(cm)], ty: [y + '-01-01', y + '-12-31'], ly: [(+y - 1) + '-01-01', (+y - 1) + '-12-31'], custom: [(regView().from || '0000-01') + '-01', (regView().to || '9999-12') + '-31'] }[k] || ['0000', '9999'];
 }
 function regList() {
   const id = A.acct; const f = A.ui.regFilter; const q = A.ui.search.trim().toLowerCase();
@@ -355,7 +366,7 @@ function regList() {
   if (q) list = list.filter(t => [payeeName(t), t.memo, catName(t.cat), ...(t.splits || []).map(s => catName(s.cat) + ' ' + (s.memo || '')), fmtIn(Math.abs(t.amount)), L.acct[t.acct]?.name].join(' ').toLowerCase().includes(q));
   list = collapseLegs(list);
   const so = A.ui.sort || { k: 'date', d: -1 }, byDate = (a, b) => a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1;
-  const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag || '' }[so.k];
+  const key = { acct: t => L.acct[t.acct]?.name || '', payee: t => (payeeName(t) || '').toLowerCase(), cat: t => (txCatLabel(t) || '').toLowerCase(), memo: t => (t.memo || '').toLowerCase(), out: t => t.amount < 0 ? -t.amount : 0, in: t => t.amount > 0 ? t.amount : 0, flag: t => t.flag ? 0 + t.flag : '~', clr: t => ({ u: 0, c: 1, r: 2 })[t.cleared] ?? 1 }[so.k];
   return list.sort((a, b) => { if (key) { const x = key(a), y = key(b); if (x !== y) return (x < y ? -1 : 1) * so.d; } return byDate(a, b) * (key ? -1 : so.d); });
 }
 function txCatLabel(t) {
@@ -472,7 +483,7 @@ function viewRegister() {
     <button class="tbtn" data-a="importSheet" data-id="${all ? '' : id}">${I.upload} File Import</button>
     ${!all && isDebt(a) && ACCT[a.type]?.grp !== 'loan' ? `<button class="tbtn" data-a="loanPlanner" data-id="${id}">${I.target} Loan Planner</button>` : ''}
     ${!all && isCredit(a) ? `<button class="tbtn" data-a="ccPay" data-id="${id}">${I.swap} Record Payment</button>` : ''}
-    ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year' })[regView().range] : ''}</button>` : ''}
+    ${desk ? `<button class="tbtn" data-a="regViewMenu">${I.eye} View${regView().range !== 'all' ? ' · ' + ({ tm: 'This Month', lm: 'Last Month', '3m': 'Latest 3 Months', ty: 'This Year', ly: 'Last Year', custom: 'Custom' })[regView().range] : ''}</button>` : ''}
     ${desk ? `<button class="tbtn" data-a="undo" ${A.undo.length ? '' : 'disabled'}>${I.undo} Undo</button><button class="tbtn" data-a="redo" ${A.redo.length ? '' : 'disabled'}>${I.redo} Redo</button>` : `<button class="tbtn ${A.ui.select ? 'on' : ''}" data-a="toggleSelect">${I.sel} ${A.ui.select ? 'Done' : 'Select'}</button>`}
   </div>`;
   h += `<input id="regSearch" class="in" type="search" placeholder="Search payee, category, memo, amount…" value="${esc(A.ui.search)}" data-i="search" aria-label="Search transactions" style="margin-top:8px">`;
@@ -483,7 +494,7 @@ function viewRegister() {
   if (sch.length && A.ui.regFilter === 'all' && !A.ui.search) {
     h += `<div class="day">Scheduled</div><div class="card">`;
     for (const s of sch.slice(0, 8)) h += `<div class="tx"><span style="width:30px;color:var(--muted)">${I.repeat}</span>
-      <button class="main-b" data-a="schEdit" data-id="${s.id}"><span class="p ellip">${esc(s.transferAcct ? 'Transfer : ' + (L.acct[s.transferAcct]?.name || '') : s.payee)}</span><span class="c">${fmtDate(s.next)} · ${FREQ[s.freq]}${s.cat ? ' · ' + esc(catName(s.cat)) : ''}</span></button>
+      <button class="main-b" data-a="schEdit" data-id="${s.id}"><span class="p ellip">${esc(s.transferAcct ? trLabel(s.transferAcct, s.acct) : s.payee)}</span><span class="c">${fmtDate(s.next)} · ${FREQ[s.freq]}${s.cat ? ' · ' + esc(catName(s.cat)) : ''}</span></button>
       <span class="a num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</span>
       <button class="btn sm" data-a="schNow" data-id="${s.id}">Enter Now</button></div>`;
     h += `</div>`;
@@ -497,7 +508,7 @@ function viewRegister() {
     const lim = A.ui.regLimit || 150;
     if (desk) {
       const rv = regView(), showBal = rv.bal && !all;
-      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${selOn() ? `<th style="width:28px"><input type="checkbox" class="chk" data-c="selAll" aria-label="Check all" ${list.length && list.slice(0, lim).every(t => A.ui.selected.has(t.id)) ? 'checked' : ''}></th>` : ''}${rv.flags ? '<th></th>' : ''}${all ? sth('acct', 'Account') : ''}${sth('date', 'Date')}${sth('payee', 'Payee')}${sth('cat', 'Category')}${sth('memo', 'Memo')}${sth('out', 'Outflow', 'r')}${sth('in', 'Inflow', 'r')}${showBal ? '<th class="r">Balance</th>' : ''}<th></th></tr></thead><tbody>`;
+      h += `<div class="rtable-wrap"><table class="rtable"><thead><tr>${selOn() ? `<th style="width:28px"><input type="checkbox" class="chk" data-c="selAll" aria-label="Check all" ${list.length && list.slice(0, lim).every(t => A.ui.selected.has(t.id)) ? 'checked' : ''}></th>` : ''}${rv.flags ? `<th class="sortable icoth"><button class="sortb" data-a="regSort" data-k="flag" aria-label="Sort by flag" title="Sort by flag">${I.flag}</button></th>` : ''}${all ? sth('acct', 'Account') : ''}${sth('date', 'Date')}${sth('payee', 'Payee')}${sth('cat', 'Category')}${sth('memo', 'Memo')}${sth('out', 'Outflow', 'r')}${sth('in', 'Inflow', 'r')}${showBal ? '<th class="r">Balance</th>' : ''}<th class="sortable icoth"><button class="sortb" data-a="regSort" data-k="clr" aria-label="Sort by cleared" title="Sort by cleared">Ⓒ</button></th></tr></thead><tbody>`;
       if (A.ui.inl && A.ui.inl.id === 'new') h += inlRow(null, all, showBal, rv);
       const cols = (selOn() ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
       const rowOf = t => A.ui.inl && A.ui.inl.id === t.id ? inlRow(t, all, showBal, rv) : txTr(t, all, showBal ? run[t.id] : null);
@@ -536,7 +547,7 @@ function txTr(t, all, runBal) {
     ${regView().flags ? `<td style="width:10px">${t.flag ? `<span class="flag" style="background:var(--flag-${t.flag})" title="${esc(flagName(t.flag))}"></span>` : ''}</td>` : ''}
     ${all ? `<td class="ellip" style="max-width:150px">${esc(L.acct[t.acct]?.name || '')}</td>` : ''}
     <td class="num">${fmtDate(t.date)}</td>
-    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button>${t.img ? ` <button class="cellbtn" data-a="imgView" data-id="${t.id}" title="View image" aria-label="View image">📎</button>` : ''}${t.matched ? ` <span class="muted" title="Matched with an imported bank transaction">⇄</span>` : ''}</td>
+    <td><button class="cellbtn" data-a="txEdit" data-id="${t.id}">${esc(payeeName(t) || '—')}</button>${t.img && regView().img ? ` <button class="cellbtn" data-a="imgView" data-id="${t.id}" title="View image" aria-label="View image">📎</button>` : ''}${t.matched ? ` <span class="muted" title="Matched with an imported bank transaction">⇄</span>` : ''}</td>
     <td class="${need ? 'todo' : ''}">${t.transferAcct && !t.cat ? esc(cl) : `<button class="cellbtn catcell ${need ? 'todo' : ''}" data-a="catPick" data-id="${t.id}">${t.cat && L.cat[t.cat] && L.group[L.cat[t.cat].gid] && !(t.splits && t.splits.length) ? `<span class="muted">${esc(L.group[L.cat[t.cat].gid].name)}: </span>` : ''}${esc(cl || '—')}</button>`}</td>
     <td class="muted ellip" style="max-width:200px">${esc(t.memo || '')}</td>
     <td class="r num">${t.amount < 0 ? fmt(-t.amount) : ''}</td>
@@ -561,10 +572,10 @@ function txRow(t, showAcct, runBal) {
     ${clrBtn(t)}</div>`;
 }
 function actionBar() {
-  const n = A.ui.selected.size;
-  return `<div role="toolbar" aria-label="Bulk actions"><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n} selected</span>
-    <button data-a="bulk" data-k="cat">Categorize</button><button data-a="bulk" data-k="approve">Approve</button><button data-a="bulk" data-k="clear">Clear</button>
-    <button data-a="bulk" data-k="flag">Flag</button><button data-a="bulk" data-k="date">Date</button><button data-a="bulk" data-k="del">Delete</button><button data-a="bulk" data-k="none" aria-label="Deselect all">${I.close.replace('<svg', '<svg width="18" height="18"')}</button></div>`;
+  const n = A.ui.selected.size, ts = A.tx.filter(t => A.ui.selected.has(t.id));
+  const un = ts.some(t => t.approved === false), rj = ts.some(t => t.approved === false && isBankImp(t));
+  return `<div role="toolbar" aria-label="Bulk actions"><button data-a="bulk" data-k="none" aria-label="Deselect all" title="Deselect all">${I.close.replace('<svg', '<svg width="16" height="16"')}</button><span style="padding:0 8px; font-weight:800; white-space:nowrap">${n} Transaction${n > 1 ? 's' : ''}</span>
+    ${un ? `<button data-a="bulk" data-k="approve">${I.check} Approve</button>` : ''}${rj ? `<button data-a="bulk" data-k="reject">⊗ Reject</button>` : ''}<button data-a="bulk" data-k="cat">Categorize</button><button data-a="barMore">⋯ More</button></div>`;
 }
 
 /* ---------- loan account: YNAB-style progress (past balance, original schedule, current track) ---------- */
@@ -633,12 +644,12 @@ document.addEventListener('pointermove', e => {
 function inlRow(t, all, showBal, rv) {
   const id = A.acct === 'all' ? null : A.acct;
   const acct = t ? t.acct : (A.ui.inl.acct || id || A.plan.accounts.find(a => !a.closed && onBudget(a))?.id);
-  const tr = t?.transferAcct ? 'Transfer : ' + (L.acct[t.transferAcct]?.name || '') : (t ? payeeName(t) || '' : '');
+  const tr = t?.transferAcct ? trLabel(t.transferAcct, t.acct) : (t ? payeeName(t) || '' : '');
   const a = L.acct[acct], tb = t?.transferAcct ? L.acct[t.transferAcct] : null;
   const catOff = !onBudget(a) || (tb && onBudget(tb));
   const out = t && t.amount < 0 ? fmtIn(-t.amount) : '', inn = t && t.amount > 0 ? fmtIn(t.amount) : '';
   const cols = (selOn() ? 1 : 0) + (rv.flags ? 1 : 0) + (all ? 1 : 0) + 6 + (showBal ? 1 : 0) + 1;
-  const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="Transfer : ${esc(x.name)}">`).join('');
+  const pl = A.plan.payees.filter(y => !/^(starting balance|transfer)/i.test(y.name)).map(y => `<option value="${esc(y.name)}">`).join('') + A.plan.accounts.filter(x => !x.closed && x.id !== acct).map(x => `<option value="${esc(trLabel(x.id, acct))}">`).join('');
   return `<tr class="inl" data-inl="${t ? t.id : 'new'}">
     ${selOn() ? '<td></td>' : ''}${rv.flags ? `<td style="width:10px">${t?.flag ? `<span class="flag" style="background:var(--flag-${t.flag})"></span>` : ''}</td>` : ''}
     ${all ? `<td><select class="in inl-in" id="inlAcct">${A.plan.accounts.filter(x => !x.closed).map(x => `<option value="${x.id}" ${x.id === acct ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></td>` : `<input type="hidden" id="inlAcct" value="${acct}">`}
@@ -671,5 +682,5 @@ function collapseLegs(list) {
   for (const t of list) { const k = legKey(t); if (!k) { out.push(t); continue; } if (seen.has(k)) continue; const legs = txLegs(t); if (legs.length < 2) { out.push(t); continue; } seen.add(k); out.push(Object.assign(Object.create(t), { _legs: legs, amount: legs.reduce((a, x) => a + x.amount, 0), id: legs[0].id })); }
   return out;
 }
-const legLabel = l => l.transferAcct ? 'Transfer : ' + (L.acct[l.transferAcct]?.name || '') : (txCatLabel(l) || 'Category Needed');
+const legLabel = l => l.transferAcct ? trLabel(l.transferAcct, l.acct) : (txCatLabel(l) || 'Category Needed');
 const legPayee = legs => { const p = legs.find(l => !l.transferAcct && l.payee); return p ? payeeName(p) : payeeName(legs[0]) || 'Split'; };

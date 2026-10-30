@@ -39,7 +39,7 @@ function fmt(c, opts = {}) {
   const key = cur + (opts.short ? 's' : '');
   if (_nfKey !== key) { _nf = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: opts.short ? 0 : 2, maximumFractionDigits: opts.short ? 0 : 2 }); _nfKey = key; }
   const v = (c || 0) / 100;
-  const s = _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '');
+  const s = _nf.format(Object.is(v, -0) ? 0 : v).replace('-', '−').replace(/\s(?=[€$£])/, '').replace(/\u202f/g, '\u00a0'); // Manrope has no narrow space glyph
   return A.ui?.balStyle === 'paren' && v < 0 ? '(' + s.replace('−', '') + ')' : s;
 }
 const fmtS = c => fmt(c, { short: true });
@@ -60,6 +60,8 @@ function evalExpr(raw) {
 }
 
 /* ---------- account types ---------- */
+// YNAB shows 'Payment: X' for a transfer with a loan account, 'Transfer: X' otherwise
+function trLabel(to, from) { const a = L.acct[to], b = L.acct[from]; if (!a) return 'Transfer: deleted account'; return (ACCT[a.type]?.debt || ACCT[b?.type]?.debt ? 'Payment: ' : 'Transfer: ') + a.name; }
 const ACCT = {
   checking: { label: 'Checking', grp: 'budget' },
   savings: { label: 'Savings', grp: 'budget' },
@@ -153,7 +155,7 @@ function rebuildLookups() {
 }
 const catName = id => id === 'rta' ? 'Inflow: Ready to Assign' : (L.cat[id] ? ((L.cat[id].emoji ? L.cat[id].emoji + ' ' : '') + L.cat[id].name) : '');
 function payeeName(t) {
-  if (t.transferAcct) return 'Transfer : ' + (L.acct[t.transferAcct]?.name || 'deleted account');
+  if (t.transferAcct) return trLabel(t.transferAcct, t.acct);
   return L.payee[t.payee]?.name || '';
 }
 function getPayee(name, create = true) {

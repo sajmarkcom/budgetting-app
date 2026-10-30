@@ -44,6 +44,8 @@ const ACT = {
     mutate(o.l, () => { for (const [cid, v] of o.changes) setAssigned(A.month, cid, v); }); closeSheet();
   },
   tMode: el => { const c = L.cat[el.dataset.c]; mutate('Target updated', () => { c.target.mode = el.dataset.v; }, { silent: true }); catSheet(c.id); },
+  tTab: el => { const c = L.cat[el.dataset.c], v = el.dataset.v; mutate('Target updated', () => { const o = c.target || { amount: 0, mode: 'set' }; const type = v === 'custom' ? (o.type === 'balance' || o.type === 'date' ? o.type : 'date') : v; c.target = targetTab(o) === v ? { ...o, type } : { type, amount: o.amount || 0, mode: o.mode || 'set', snooze: o.snooze || null, ...(o.start ? { start: o.start } : {}) }; if (type === 'date' && !c.target.date) c.target.date = A.month; }, { silent: true }); catSheet(c.id); },
+  tDel: el => { const c = L.cat[el.dataset.c]; mutate('Target deleted', () => { c.target = null; }); catSheet(c.id); },
   tSnooze: el => { const c = L.cat[el.dataset.c]; mutate('Target updated', () => { c.target.snooze = c.target.snooze === A.month ? null : A.month; }); catSheet(c.id); },
   cMove: el => { const cs = A.plan.cats, i = cs.findIndex(c => c.id === el.dataset.c), d = +el.dataset.d; const g = cs[i].gid; let j = i + d; while (j >= 0 && j < cs.length && cs[j].gid !== g) j += d; if (j < 0 || j >= cs.length) return; mutate('Order updated', () => { [cs[i], cs[j]] = [cs[j], cs[i]]; }, { silent: true }); },
   gMove: el => { const gs = A.plan.groups, i = gs.findIndex(g => g.id === el.dataset.g), d = +el.dataset.d; let j = i + d; while (j >= 0 && j < gs.length && gs[j].sys) j += d; if (j < 0 || j >= gs.length) return; mutate('Order updated', () => { [gs[i], gs[j]] = [gs[j], gs[i]]; }, { silent: true }); },
@@ -115,7 +117,8 @@ const ACT = {
     if (k === 'none') { A.ui.selected.clear(); render(); return; }
     if (k === 'approve') mutate(`${ids.length} approved`, () => ts.forEach(t => t.approved = true));
     else if (k === 'clear') mutate(`${ids.length} cleared`, () => [...new Set(ts.flatMap(txLegs))].forEach(t => { if (t.cleared === 'u') t.cleared = 'c'; }));
-    else if (k === 'del') { mutate(`${ids.length} deleted`, () => deleteTx(ids)); A.ui.selected.clear(); }
+    else if (k === 'del') { const all = [...new Set(ts.flatMap(txLegs).map(t => t.id))]; mutate(`${ids.length} deleted`, () => deleteTx(all)); A.ui.selected.clear(); }
+    else if (k === 'reject') { const rj = [...new Set(ts.filter(t => t.approved === false && isBankImp(t)).flatMap(txLegs).map(t => t.id))]; if (!rj.length) return; mutate(rj.length > 1 ? rj.length + ' transactions rejected' : 'Transaction rejected', () => deleteTx(rj)); A.ui.selected.clear(); }
     else if (k === 'cat') openSheet('Categorize ' + ids.length + ' transactions', `<div class="field"><label for="bkCat">Category</label><select id="bkCat" class="in">${catOptions('')}</select></div><label class="switch"><span>Approve at the same time</span><input type="checkbox" id="bkAp" checked></label>`, `<button class="btn pri block" data-a="bulkCatDo">Apply</button>`);
     else if (k === 'flag') openSheet('Flag', `<div class="flags"><button style="background:var(--surface-2)" data-a="bulkFlagDo" data-v="" aria-label="None"></button>${flagList().map(([f, l]) => `<button style="background:var(--flag-${f})" data-a="bulkFlagDo" data-v="${f}" aria-label="${l}"></button>`).join('')}</div>`);
     else if (k === 'date') openSheet('Change Date', `<input type="date" id="bkDate" class="in" value="${todayISO()}">`, `<button class="btn pri block" data-a="bulkDateDo">Apply</button>`);
@@ -277,7 +280,10 @@ document.addEventListener('change', e => {
       if (k === 'type') { if (!el.value) c.target = null; else c.target = { ...(c.target || { amount: 0, mode: 'set' }), type: el.value }; return; }
       c.target ||= { type: 'monthly', amount: 0 };
       if (k === 'amount') c.target.amount = Math.abs(evalExpr(el.value) || 0);
-      else if (['weekday', 'month', 'repeat'].includes(k)) c.target[k] = +el.value;
+      else if (['weekday', 'month', 'repeat', 'day'].includes(k)) c.target[k] = +el.value;
+      else if (k === 'want') { if (el.value === 'balance') c.target.type = 'balance'; else { c.target.type = 'date'; c.target.mode = el.value === 'fill' ? 'refill' : 'set'; if (!c.target.date) c.target.date = A.month; } }
+      else if (k === 'repOn') c.target.repeat = el.checked ? 1 : 0;
+      else if (k === 'repN' || k === 'repU') { const box = el.closest('#tgtBox'); const n = +box.querySelector('[data-tf=repN]').value, u = box.querySelector('[data-tf=repU]').value; c.target.repeat = u === 'y' ? n * 12 : n; }
       else c.target[k] = el.value || null;
     }, { silent: true });
     catSheet(c.id); return;
@@ -349,7 +355,7 @@ function inlSave(again) {
   const acct = $('#inlAcct')?.value, date = $('#inlDate')?.value || todayISO(), payee = ($('#inlPayee')?.value || '').trim(), memo = $('#inlMemo')?.value || '';
   const o = evalExpr($('#inlOut')?.value || '') || 0, n = evalExpr($('#inlIn')?.value || '') || 0; const amount = Math.abs(n) - Math.abs(o);
   if (!acct) return toast('Choose an account'); if (!amount) { toast('Enter an outflow or an inflow'); $('#inlOut')?.focus(); return; }
-  const trm = payee.match(/^Transfer\s*:\s*(.+)$/i); const tra = trm ? A.plan.accounts.find(x => x.name.trim().toLowerCase() === trm[1].trim().toLowerCase() && x.id !== acct) : null;
+  const trm = payee.match(/^(?:Transfer|Payment)\s*:\s*(.+)$/i); const tra = trm ? A.plan.accounts.find(x => x.name.trim().toLowerCase() === trm[1].trim().toLowerCase() && x.id !== acct) : null;
   let cat = $('#inlCat') && !$('#inlCat').disabled ? ($('#inlCat').value || null) : (t?.cat || null);
   if (!tra && !cat && payee) { const y = L.payeeByName[payee.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat] && onBudget(L.acct[acct])) cat = y.lastCat; }
   const draft = { id: t?.id, acct, date, payee: tra ? '' : payee, cat, memo, amount, cleared: t ? t.cleared : 'u', flag: t?.flag || null, approved: true, transferAcct: tra ? tra.id : null, splits: t?.splits && t.splits.length > 1 ? t.splits : null };

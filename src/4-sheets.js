@@ -53,7 +53,11 @@ function catSheet(cid, asHtml) {
       <div class="kpi"><span>Activity</span><b class="num" style="font-size:17px">${fmt(x.activity)}</b></div>
       <div class="kpi"><span>Available</span><b class="num" style="font-size:17px; color:${x.available < 0 ? 'var(--bad)' : 'inherit'}">${fmt(x.available)}</b></div>
     </div>
-    <div class="small muted">Cash Left Over From ${monthLabel(prev)}: ${fmt(x.carry)}</div>
+    <details class="card avb"><summary class="li"><span class="grow">Available Balance</span><strong class="num">${fmt(x.available)}</strong></summary>
+      <div class="li small"><span class="grow muted">Cash Left Over From ${monthLabel(prev)}</span><span class="num">${fmt(x.carry)}</span></div>
+      <div class="li small"><span class="grow muted">Assigned This Month</span><span class="num">${x.assigned >= 0 ? '+' : ''}${fmt(x.assigned)}</span></div>
+      <div class="li small"><span class="grow muted">Cash Spending</span><span class="num">${fmt(x.cashAct || 0)}</span></div>
+      <div class="li small"><span class="grow muted">Credit Spending</span><span class="num">${fmt(x.credAct || 0)}</span></div></details>
     ${x.available < 0 ? `<div class="banner bad">${I.info}<span>${x.creditOver && !x.cashOver ? 'Overspent on credit: this becomes debt you will need to pay.' : 'Overspent: cover it with money from another category.'}</span></div>
       <button class="btn pri block" data-a="coverSheet" data-c="${cid}">Cover Overspending (${fmt(-x.available)})</button>` : ''}
     <div class="row"><button class="btn grow" data-a="moveSheet" data-c="${cid}">${I.swap} Move Money</button></div>
@@ -85,28 +89,37 @@ function ccInfo(c) {
     ${gap > 0 ? `<button class="btn block" data-a="setAssign" data-c="${c.id}" data-v="${getAssigned(A.month, c.id) + gap}">Assign ${fmt(gap)} to pay in full</button>` : ''}
     <button class="btn pri block" data-a="ccPay" data-id="${c.cc}">${I.swap} Record Payment</button>`;
 }
+// YNAB's target editor: Weekly / Monthly / Yearly / Custom tabs
+function targetTab(t) { if (!t || !t.type) return ''; if (t.type === 'date' || t.type === 'balance') return 'custom'; return t.type; }
 function targetEditor(c) {
-  const t = c.target || {};
-  const type = t.type || '';
-  const wd = t.weekday ?? 1;
+  const t = c.target || {}, tab = targetTab(t);
   const ti = targetInfo(c, A.month);
-  const opt = (v, l, cur) => `<option value="${v}" ${cur == v ? 'selected' : ''}>${l}</option>`;
+  const opt = (v, l, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`;
+  const amt = t.amount ? fmt(t.amount) : fmt(0);
+  const tabs = [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly'], ['custom', 'Custom']];
+  const need = `<div class="field"><label for="tAmt">I need</label><input id="tAmt" class="in" inputmode="decimal" value="${t.amount ? fmtIn(t.amount) : ''}" placeholder="0,00" data-tf="amount" data-c="${c.id}"></div>`;
+  const mode = (next, per = '') => `<div class="field"><label for="tModeSel">${next}</label><select id="tModeSel" class="in" data-tf="mode" data-c="${c.id}">${opt('set', 'Set aside another ' + amt + per, t.mode || 'set')}${opt('refill', 'Refill up to ' + amt + per, t.mode || 'set')}</select>
+    <div class="small muted" style="margin-top:4px">${t.mode === 'refill' ? 'Whatever you don’t spend is applied toward the next ' + amt + '.' : 'Most people choose this. Adds ' + amt + ' every time, even if money is left over.'}</div></div>`;
+  let body = '';
+  if (tab === 'weekly') body = need + `<div class="field"><label for="tWd">Every</label><select id="tWd" class="in" data-tf="weekday" data-c="${c.id}">${[0, 1, 2, 3, 4, 5, 6].map(d => opt(d, cap(DAYS[d]), t.weekday ?? 1)).join('')}</select></div>` + mode('Next month I want to', '/week');
+  else if (tab === 'monthly' || t.type === 'debt') body = need + `<div class="field"><label for="tDay">By</label><select id="tDay" class="in" data-tf="day" data-c="${c.id}">${opt(0, 'Last Day of Month', t.day || 0)}${Array.from({ length: 31 }, (_, k) => 31 - k).map(d => opt(d, ordinal(d), t.day || 0)).join('')}</select></div>` + (t.type === 'debt' ? '<div class="small muted">Monthly debt payment</div>' : mode('Next month I want to'));
+  else if (tab === 'yearly') body = need + `<div class="field"><label>By</label><div class="row" style="gap:8px"><select id="tYDay" class="in" aria-label="Day" data-tf="day" data-c="${c.id}">${opt(0, 'Last day', t.day || 0)}${Array.from({ length: 31 }, (_, k) => k + 1).map(d => opt(d, ordinal(d), t.day || 0)).join('')}</select><select id="tMo" class="in" aria-label="Month" data-tf="month" data-c="${c.id}">${MONTHS.map((n, k) => opt(k + 1, cap(n), t.month || 12)).join('')}</select></div></div>` + mode('Next year I want to');
+  else if (tab === 'custom') {
+    const want = t.type === 'balance' ? 'balance' : t.mode === 'refill' ? 'fill' : 'set';
+    const rep = t.repeat || 0, unit = rep && rep % 12 === 0 ? 'y' : 'm', every = rep ? (unit === 'y' ? rep / 12 : rep) : 1;
+    body = `<div class="field"><label for="tAmt">Amount</label><input id="tAmt" class="in" inputmode="decimal" value="${t.amount ? fmtIn(t.amount) : ''}" placeholder="0,00" data-tf="amount" data-c="${c.id}"></div>
+      <div class="field"><label for="tWant">I want to</label><select id="tWant" class="in" data-tf="want" data-c="${c.id}">${opt('set', 'Set aside ' + amt, want)}${opt('fill', 'Fill up to ' + amt, want)}${opt('balance', 'Have a balance of ' + amt, want)}</select>
+      <div class="small muted" style="margin-top:4px">${want === 'balance' ? 'Reach this amount by a specific time and refrain from spending until you reach it.' : want === 'fill' ? 'Use what is already in this category and fill it up.' : 'Add the amount to this category, regardless of its current balance.'}</div></div>
+      <div class="field"><label for="tDate">Due on${want === 'balance' ? ' (optional)' : ''}</label><input id="tDate" class="in" type="month" value="${t.date || ''}" data-tf="date" data-c="${c.id}"></div>
+      <label class="row" style="gap:8px"><input type="checkbox" class="chk" data-tf="repOn" data-c="${c.id}" ${rep ? 'checked' : ''}> Repeat</label>
+      ${rep ? `<div class="row" style="gap:8px"><span class="small muted">Every</span><select class="in" aria-label="Interval" data-tf="repN" data-c="${c.id}">${Array.from({ length: 11 }, (_, k) => opt(k + 1, k + 1, every)).join('')}</select><select class="in" aria-label="Unit" data-tf="repU" data-c="${c.id}">${opt('m', 'Month', unit)}${opt('y', 'Year', unit)}</select></div>` : ''}`;
+  }
   return `<div class="sec-t"><span>Target</span>${ti ? `<span>${Math.round(ti.pct * 100)} %</span>` : ''}</div>
   <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:12px" id="tgtBox">
-    <div class="field"><label for="tType">Target type</label><select id="tType" class="in" data-tf="type" data-c="${c.id}">
-      ${opt('', 'No target', type)}${Object.entries(TARGET_TYPES).map(([k, l]) => opt(k, l, type)).join('')}</select></div>
-    ${type ? `<div class="field"><label for="tAmt">Amount</label><input id="tAmt" class="in" inputmode="decimal" value="${t.amount ? fmtIn(t.amount) : ''}" placeholder="0,00" data-tf="amount" data-c="${c.id}"></div>` : ''}
-    ${type === 'weekly' ? `<div class="field"><label for="tWd">Every</label><select id="tWd" class="in" data-tf="weekday" data-c="${c.id}">${[1, 2, 3, 4, 5, 6, 0].map(d => opt(d, cap(DAYS[d]), wd)).join('')}</select></div>` : ''}
-    ${type === 'yearly' ? `<div class="field"><label for="tMo">Due in</label><select id="tMo" class="in" data-tf="month" data-c="${c.id}">${MONTHS.map((n, i) => opt(i + 1, cap(n), t.month || 12)).join('')}</select></div>` : ''}
-    ${type === 'date' || type === 'balance' ? `<div class="field"><label for="tDate">${type === 'balance' ? 'By (optional)' : 'By'}</label><input id="tDate" class="in" type="month" value="${t.date || ''}" data-tf="date" data-c="${c.id}"></div>` : ''}
-    ${type === 'date' ? `<div class="field"><label for="tRep">Repeat</label><select id="tRep" class="in" data-tf="repeat" data-c="${c.id}">${opt(0, 'Does not repeat', t.repeat || 0)}${opt(1, 'Every month', t.repeat)}${opt(3, 'Every 3 months', t.repeat)}${opt(6, 'Every 6 months', t.repeat)}${opt(12, 'Every year', t.repeat)}${opt(24, 'Every 2 years', t.repeat)}</select></div>` : ''}
-    ${type === 'monthly' || type === 'weekly' ? `<div class="seg" role="group" aria-label="Mode">
-      <button class="${t.mode !== 'refill' ? 'on' : ''}" data-a="tMode" data-c="${c.id}" data-v="set">Set aside another</button>
-      <button class="${t.mode === 'refill' ? 'on' : ''}" data-a="tMode" data-c="${c.id}" data-v="refill">Refill up to</button></div>
-      <div class="small muted">${t.mode === 'refill' ? 'Available is topped up to the amount; money left from last month counts.' : 'The full amount is asked for every month, even if money is left over.'}</div>` : ''}
-    ${type ? `<div class="field"><label for="tStart">Starting</label><input id="tStart" class="in" type="month" value="${t.start || ''}" data-tf="start" data-c="${c.id}"></div>` : ''}
-    ${ti ? `<div class="bar ${ti.under > 0 ? 'warn' : ''}"><i style="width:${Math.round(ti.pct * 100)}%"></i></div><div class="small"><strong>${esc(ti.label)}</strong>${ti.need ? ' · needed this month: ' + fmt(ti.need) : ''}</div>
-      <button class="btn sm" data-a="tSnooze" data-c="${c.id}">${ti.snoozed ? 'Unsnooze' : 'Snooze this month'}</button>` : ''}
+    <div class="seg" role="tablist" aria-label="Target type">${tabs.map(([k, l]) => `<button role="tab" class="${tab === k || (k === 'monthly' && t.type === 'debt') ? 'on' : ''}" data-a="tTab" data-c="${c.id}" data-v="${k}">${l}</button>`).join('')}</div>
+    ${tab ? body + `<div class="field"><label for="tStart">Starting</label><input id="tStart" class="in" type="month" value="${t.start || ''}" data-tf="start" data-c="${c.id}"></div>` : `<div class="small muted">How much do you need for ${esc(c.name)}? Pick a type to create a target.</div>`}
+    ${ti ? `<div class="bar ${ti.under > 0 ? 'warn' : ''}"><i style="width:${Math.round(ti.pct * 100)}%"></i></div><div class="small"><strong>${esc(targetText(c, A.month, catStatus(c, A.month)) || ti.label)}</strong>${ti.need ? ' · needed this month: ' + fmt(ti.need) : ''}</div>
+      <div class="row" style="gap:8px"><button class="btn sm" data-a="tSnooze" data-c="${c.id}">${ti.snoozed ? 'Unsnooze' : 'Snooze this month'}</button><span class="grow"></span><button class="btn sm danger" data-a="tDel" data-c="${c.id}">Delete Target</button></div>` : tab ? `<button class="btn sm danger" data-a="tDel" data-c="${c.id}" style="align-self:flex-end">Delete Target</button>` : ''}
   </div>`;
 }
 
@@ -146,6 +159,7 @@ function autoOptions(m, cats) {
     lastS: { l: 'Spent Last Month', f: c => Math.max(0, -catM(prev, c.id).activity) },
     avgA: { l: 'Average Assigned', f: c => { const n = Math.max(1, Math.min(12, monthDiff(calc().minM, m))); let s = 0; for (let i = 1; i <= n; i++) s += catM(addMonths(m, -i), c.id).assigned; return Math.round(s / n); } },
     avgS: { l: 'Average Spent', f: c => { const n = Math.max(1, Math.min(12, monthDiff(calc().minM, m))); let s = 0; for (let i = 1; i <= n; i++) s += Math.max(0, -catM(addMonths(m, -i), c.id).activity); return Math.round(s / n); } },
+    reduceOver: { l: 'Reduce Overfunding', f: c => { const ti = targetInfo(c, m), x = catM(m, c.id); if (!ti || ti.snoozed || !(ti.total > 0) || x.available <= ti.total) return null; return Math.max(0, getAssigned(m, c.id) - (x.available - ti.total)); } },
     resetAv: { l: 'Reset Available Amounts', f: c => { const x = catM(m, c.id); return x.available > 0 ? getAssigned(m, c.id) - x.available : null; } },
     resetAs: { l: 'Reset Assigned Amounts', f: () => 0 },
   };
@@ -342,7 +356,7 @@ function schSheet(id) {
 }
 function schListSheet() {
   const list = A.plan.scheduled.slice().sort((a, b) => a.next < b.next ? -1 : 1);
-  const body = list.length ? `<div class="card">${list.map(s => `<button class="li" data-a="schEdit" data-id="${s.id}"><span class="ic">${I.repeat}</span><span class="grow"><strong class="ellip" style="display:block">${esc(s.transferAcct ? 'Transfer : ' + (L.acct[s.transferAcct]?.name || '') : s.payee || 'No payee')}</strong><span class="small muted">${fmtDate(s.next)} · ${FREQ[s.freq]} · ${esc(L.acct[s.acct]?.name || '')}</span></span><strong class="num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</strong></button>`).join('')}</div>`
+  const body = list.length ? `<div class="card">${list.map(s => `<button class="li" data-a="schEdit" data-id="${s.id}"><span class="ic">${I.repeat}</span><span class="grow"><strong class="ellip" style="display:block">${esc(s.transferAcct ? trLabel(s.transferAcct, s.acct) : s.payee || 'No payee')}</strong><span class="small muted">${fmtDate(s.next)} · ${FREQ[s.freq]} · ${esc(L.acct[s.acct]?.name || '')}</span></span><strong class="num ${s.amount > 0 ? 'amt-pos' : ''}">${fmt(s.amount)}</strong></button>`).join('')}</div>`
     : `<div class="empty"><strong>No scheduled transactions</strong><span>When adding a transaction, pick Repeat or a future date.</span></div>`;
   openSheet('Scheduled Transactions', body, `<button class="btn block" data-a="newTx">${I.plus} Add Transaction</button>`);
 }
