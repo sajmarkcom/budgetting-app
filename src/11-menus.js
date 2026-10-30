@@ -609,3 +609,54 @@ Object.assign(ACT, {
     closeSheet(); SP = null;
   },
 });
+
+/* Home / Card Mode / mobile Reflect actions (views in 5-more.js) */
+Object.assign(ACT, {
+  cardMode: () => { A.ui.cmSkip = new Set(); cardModeSheet(); },
+  cmApprove: el => { const t = A.tx.find(x => x.id === el.dataset.id); if (!t) return; mutate('Approved', () => { for (const l of txLegs(t)) l.approved = true; }, { silent: true }); cardModeSheet(); },
+  cmSkip: el => { (A.ui.cmSkip ||= new Set()).add(el.dataset.id); cardModeSheet(); },
+  cmList: () => { closeSheet(); A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = 'unapproved'; A.ui.search = ''; render(); },
+  homeUncat: () => { A.view = 'tx'; A.acct = 'all'; A.ui.regFilter = 'uncat'; A.ui.search = ''; render(); },
+  homeUnder: () => { A.view = 'plan'; A.month = curMonth(); A.ui.filter = 'under'; render(); },
+  costToBeMe: () => { A.view = 'plan'; A.month = curMonth(); if (ACT.toggleEditPlan) ACT.toggleEditPlan(); else render(); },
+  homeOver: () => { A.view = 'plan'; A.month = curMonth(); A.ui.filter = 'over'; render(); },
+  monthNext: () => { A.view = 'plan'; A.month = addMonths(curMonth(), 1); render(); },
+  pinEdit: () => {
+    const pins = new Set(A.plan.pins || []);
+    openSheet('Pinned Categories', A.plan.groups.filter(g => !g.sys).map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden); if (!cs.length) return ''; return `<div class="sec-t"><span>${esc(g.name)}</span></div><div class="card">${cs.map(c => `<label class="li"><input type="checkbox" class="chk" data-c="pinChk" data-id="${c.id}" ${pins.has(c.id) ? 'checked' : ''}><span class="grow">${esc(catName(c.id))}</span></label>`).join('')}</div>`; }).join(''), `<button class="btn pri block" data-a="closeSheet">Done</button>`);
+  },
+  goalPick: () => {
+    const cs = A.plan.cats.filter(c => !c.hidden && !c.cc && c.target && c.target.amount);
+    openSheet('Current Goal', `<div class="small muted" style="margin-bottom:8px">Categories with a target.</div><div class="card">${cs.map(c => `<button class="li" data-a="goalSet" data-c="${c.id}"><span class="grow">${esc(catName(c.id))}</span>${A.plan.goalCat === c.id ? I.check : ''}<span class="small muted num">${fmt(c.target.amount)}</span></button>`).join('') || '<div class="li muted">No category has a target yet.</div>'}</div>`);
+  },
+  goalSet: el => { mutate('Current Goal set', () => { A.plan.goalCat = el.dataset.c; }, { silent: true }); closeSheet(); render(); },
+  moreMenu: el => {
+    const r = el.getBoundingClientRect();
+    popMenu(r.right - 240, r.bottom + 6,
+      mi(I.gear, 'Settings', 'nav', 'data-v="settings"') + mi(I.people, 'Manage Payees', 'payees') + mi(I.flag, 'Edit Flags', 'flagsEdit') + mi(I.eye, 'Display Options', 'displayOpts') +
+      msep + mi(I.bank, 'Bank Connections', 'bankSetup') + mi(I.upload, 'File Import', 'importSheet') + mi(I.download, 'Export Plan', 'exportJson') +
+      msep + mi(I.plan, 'View All Plans', 'switchPlan') + mi(I.repeat, 'Make a Fresh Start', 'freshStart'));
+  },
+});
+Object.assign(ACT, {
+  reflOpen: el => { A.ui.reflect = el.dataset.k; A.ui.reflDetail = true; if (el.dataset.k !== 'spending') A.ui.period = A.ui.period || '6m'; render(); window.scrollTo(0, 0); },
+  reflBack: () => { A.ui.reflDetail = false; render(); window.scrollTo(0, 0); },
+});
+
+/* mobile Plan: filter menu and ⋯ menu (YNAB app) */
+Object.assign(ACT, {
+  planFilterMenu: el => {
+    const r = el.getBoundingClientRect(), F = A.ui.filter || 'all';
+    const it = (f, l) => `<button class="pm-i ${F === f ? 'on' : ''}" data-a="filter" data-f="${f}"><span class="pm-ic">${F === f ? I.check : ''}</span><span class="grow">${l}</span></button>`;
+    popMenu(r.left, r.bottom + 6, it('all', 'All') + it('over', 'Overspent') + it('snoozed', 'Snoozed') + it('under', 'Underfunded') + it('overf', 'Overfunded') + it('avail', 'Money Available') +
+      ((A.plan.views || []).length ? msep + (A.plan.views || []).map(v => it('v:' + v.id, esc(v.name))).join('') : '') + msep + mi(I.edit, 'Manage Views', 'viewsManage'));
+  },
+  planMore: el => {
+    const r = el.getBoundingClientRect();
+    popMenu(r.right - 250, r.bottom + 6,
+      mi(I.plus, 'New Category Group', 'groupNew') + mi(I.undo, 'Undo', 'undo', '', '', !A.undo.length) + mi(I.redo || I.undo, 'Redo', 'redo', '', '', !A.redo.length) + mi(I.swap, 'Recent Moves', 'moves') +
+      msep + mi(I.wand, 'Auto-Assign', 'assignSheet') + mi(I.info, 'Ready to Assign Breakdown', 'rtaSheet') + mi(I.check, 'Approve categorized transactions', 'approveCat') + mi(I.wand, 'Auto-categorize', 'autoCat') +
+      msep + mi('', A.plan.groups.every(g => A.ui.collapsed[g.id]) ? 'Expand All' : 'Collapse All', 'collapseAll') + mi('', A.ui.compact ? 'Show Progress Bars' : 'Compact Rows', 'setCompact', `data-v="${A.ui.compact ? 0 : 1}"`) + mi(I.eye, 'Show Hidden Categories', 'toggleHidden') +
+      msep + mi(I.gear, 'Settings', 'nav', 'data-v="settings"'));
+  },
+});

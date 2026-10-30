@@ -116,7 +116,7 @@ const A = {
   index: { plans: [], current: null, updatedAt: 0 },
   plan: null,    // current plan core
   tx: [],        // current plan transactions
-  view: 'plan', month: curMonth(), acct: null, // acct: id | 'all'
+  view: 'home', month: curMonth(), acct: null, // acct: id | 'all'
   ui: { filter: 'all', edit: false, collapsed: {}, showHidden: false, regFilter: 'all', search: '', select: false, selected: new Set(), reflect: 'spending', period: '3m', groupBy: 'group' },
   undo: [], redo: [],
   sync: 'local', // local | syncing | synced | error
@@ -513,7 +513,7 @@ async function switchPlan(id) {
   if (!got) got = localGetPlan(id);
   if (!got) { toast('Plan not found'); return; }
   A.plan = got.plan; A.tx = got.tx; A.index.current = id; A.undo = []; A.redo = []; stampBaseline();
-  A.month = curMonth(); A.view = 'plan'; A.acct = null;
+  A.month = curMonth(); A.view = 'home'; A.acct = null;
   rebuildLookups(); A.calcV++; runScheduled(); scheduleSave(); watchCore(); render();
 }
 

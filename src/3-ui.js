@@ -1,6 +1,7 @@
 /* ================= Budget — UI: shell, plan, accounts, register ================= */
 const ico = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const I = {
+  home: ico('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>'), dots: ico('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'), pin: ico('<path d="M12 17v5"/><path d="M8 3h8l-1 6 3 4H6l3-4z"/>'),
   link: ico('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>'),
   left: ico('<path d="M15 18l-6-6 6-6"/>'), right: ico('<path d="M9 18l6-6-6-6"/>'), down: ico('<path d="M6 9l6 6 6-6"/>'),
   plan: ico('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 10h18M9 10v10"/>'),
@@ -54,6 +55,7 @@ function render() {
   const app = $('#app'); _wasDesk = DESK();
   if (!A.plan) { app.innerHTML = viewOnboarding(); $('#nav').innerHTML = ''; $('#fab').hidden = true; return; }
   let html = '';
+  if (A.view === 'home') { if (DESK()) A.view = 'plan'; else html = viewHome(); }
   if (A.view === 'plan') html = viewPlan();
   else if (A.view === 'accounts') html = A.acct ? viewRegister() : viewAccounts();
   else if (A.view === 'tx') { A.acct = 'all'; html = viewRegister(); }
@@ -64,13 +66,14 @@ function render() {
   app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''} ${A.ui.sideHide && DESK() ? 'noside' : ''}">${DESK() && !A.ui.sideHide ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}${DESK() && A.ui.sideHide ? `<button class="side-open" data-a="sideToggle" title="Show sidebar (shift .)" aria-label="Show sidebar">${I.right}</button>` : ''}<div class="main">${html}</div>${insp}</div>`;
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
-    ${navBtn('plan', 'Plan', I.plan)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('tx', 'Transactions', I.list)}${navBtn('reflect', 'Reflect', I.reflect)}${navBtn('settings', 'Settings', I.gear)}
+    ${navBtn('home', 'Home', I.home, homeBadge())}${navBtn('plan', 'Plan', I.plan)}${navBtn('tx', 'Spending', I.cash)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('reflect', 'Reflect', I.reflect)}
   </div>`;
-  const showFab = !DESK() && (A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
+  const showFab = !DESK() && (A.view === 'home' || A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
   $('#fab').hidden = !showFab;
   if (selOn() && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
 }
-const navBtn = (v, l, icn) => `<button data-a="nav" data-v="${v}" class="${A.view === v ? 'on' : ''}" aria-current="${A.view === v ? 'page' : 'false'}">${icn}<span>${l}</span></button>`;
+const navBtn = (v, l, icn, badge = 0) => `<button data-a="nav" data-v="${v}" class="${A.view === v || (v === 'home' && A.view === 'settings') ? 'on' : ''}" aria-current="${A.view === v ? 'page' : 'false'}">${icn}${badge ? `<i class="nbadge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${l}</span></button>`;
+const homeBadge = () => A.tx.filter(t => t.approved === false && L.acct[t.acct] && !L.acct[t.acct].closed).length;
 function topBar(title, sub, left = '', right = '') {
   return `<div class="top wrap"><div class="top-bar">${left || '<span style="width:44px"></span>'}<div class="top-title"><h1>${title}</h1>${sub ? `<div class="sub">${sub}</div>` : ''}</div>${right || '<span style="width:44px"></span>'}</div></div>`;
 }
@@ -186,20 +189,17 @@ function viewPlan() {
       <button class="rta d ${rtaCls}" data-a="rtaSheet"><div><div class="amt num">${fmt(rta)}</div><div class="lbl">${rtaLbl}</div></div>
         ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : ''}</button>
       <span></span></div>`;
-  } else {
-    h = topBar(monthLabel(m, false, true), esc(p.name),
-      `<button class="ibtn" data-a="month" data-d="-1" aria-label="Previous month">${I.left}</button>`,
-      `<button class="ibtn" data-a="month" data-d="1" aria-label="Next month">${I.right}</button>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}`);
-    h += `<div class="wrap"><button class="rta ${rtaCls}" data-a="rtaSheet">
-      <div><div class="lbl">${rtaLbl}</div><div class="amt num">${fmt(rta)}</div></div>
-      ${rta !== 0 ? `<span class="cta" data-a="${rta > 0 ? 'assignSheet' : 'fixOver'}">${rta > 0 ? 'Assign' : 'Fix This'}</span>` : `<span class="cta" data-a="assignSheet">Auto-Assign</span>`}
-    </button>
-    <div class="stats">
-      <button class="stat" data-a="statInfo" data-k="aom"><span>Age of Money</span><b class="num">${aom == null ? '—' : aom + (aom === 1 ? ' day' : ' days')}</b></button>
-      <button class="stat" data-a="statInfo" data-k="cost"><span>Cost to Be Me</span><b class="num">${fmt(st.cost)}</b></button>
-      <button class="stat" data-a="filter" data-f="under"><span>Underfunded</span><b class="num">${fmt(st.under)}</b></button>
-    </div>
-    <button class="asgbar" data-a="rtaSheet"><span class="grow"><span class="lbl">Assigned in ${esc(monthLabel(m))}</span><b class="num">${fmt(md.assigned)}</b></span>${(() => { const ck = budgetCheck(m); return `<span class="ck ${ck.gap ? 'bad' : 'ok'}">${ck.gap ? 'Gap ' + fmt(ck.gap) : '✓ matches accounts'}</span>`; })()}</button></div>`;
+  } else { // YNAB mobile: Edit · filter · month ▾ · ⋯, then the Ready to Assign bar
+    const F0 = A.ui.filter && A.ui.filter !== 'all';
+    h = `<div class="top wrap"><div class="top-bar mplan"><button class="tbtn ${A.ui.edit ? 'on' : ''}" data-a="toggleEdit">${A.ui.edit ? 'Done' : 'Edit'}</button><button class="ibtn ${F0 ? 'on' : ''}" data-a="planFilterMenu" aria-label="Filter categories">${ico('<path d="M4 6h16M7 12h10M10 18h4"/>')}</button>
+      <div class="top-title"><button class="mpick" data-a="monthPick" aria-label="Choose a month"><h1>${MSHORT[+m.slice(5, 7) - 1]} ${m.slice(0, 4)} <span class="caret">▾</span></h1></button></div>${m !== curMonth() ? `<button class="btn sm" data-a="monthToday">Today</button>` : ''}<button class="ibtn" data-a="planMore" aria-label="More">${I.dots}</button></div></div>`;
+    h += `<div class="wrap"><button class="rtabar ${rtaCls}" data-a="${rta > 0 ? 'assignSheet' : rta < 0 ? 'fixOver' : 'rtaSheet'}"><b class="num">${fmt(rta)}</b><span class="grow"></span><span>${rta < 0 ? 'Assigned too much' : 'Ready to Assign'}</span>${I.right}</button>`;
+    if (A.ui.edit) { const inc = A.plan.expectedIncome || 0, mx = Math.max(st.cost, inc, 1);
+      h += `<div class="card ctbm"><div class="ctbm-h"><b class="num">${fmt(st.cost)}</b><span class="small muted">Cost to Be Me</span></div>
+        <div class="li col"><div class="row"><span class="grow">${esc(cap(MONTHS[+m.slice(5) - 1]))}’s Targets</span><b class="num">${fmt(st.cost)}</b></div><div class="bar bad"><i style="width:${Math.round(st.cost / mx * 100)}%"></i></div></div>
+        <div class="li col"><div class="row"><label class="grow" for="expInc2">Monthly Income</label><input id="expInc2" class="mini num" inputmode="decimal" value="${inc ? fmtIn(inc) : ''}" placeholder="0,00" data-set="expectedIncome"></div><div class="bar"><i style="width:${Math.round(inc / mx * 100)}%"></i></div></div></div>
+        <div class="row" style="gap:8px; margin-top:8px"><button class="btn grow" data-a="groupNew">${I.plus} New Group</button><button class="btn grow" data-a="toggleReorder">⇅ Reorder</button></div>`; }
+    h += `</div>`;
   }
   h += `<div class="wrap">`;
   { // compact alert chips (YNAB-style), one line instead of stacked banners
@@ -208,10 +208,11 @@ function viewPlan() {
     if (unapproved) chips.push(`<span class="achip info"><button data-a="openAll" data-f="unapproved">${unapproved} to approve</button><button class="sub" data-a="approveCat" title="Approve every imported transaction that already has a category">✓ categorized</button></span>`);
     if (uncatN) chips.push(`<span class="achip warn"><button data-a="openAll" data-f="uncat">${uncatN} need${uncatN > 1 ? '' : 's'} a category</button><button class="sub" data-a="autoCat" title="Use your past choices for the same merchants">Auto</button></span>`);
     if (md.prevCashOver > 0 && m === curMonth()) chips.push(`<span class="achip warn" title="Cash overspending from ${esc(monthLabel(addMonths(m, -1)))} is taken from Ready to Assign"><button data-a="rtaSheet">${esc(MSHORT[+addMonths(m, -1).slice(5, 7) - 1] || '')} overspending −${fmt(md.prevCashOver)}</button></span>`);
-    if (chips.length) h += `<div class="achips">${chips.join('')}</div>`;
+    if (!desk) { if (st.overN && A.ui.filter !== 'over') h += `<div class="card" style="margin-top:8px"><div class="li"><span class="hnum bad">${st.overN}</span><span class="grow">Overspent categor${st.overN > 1 ? 'ies' : 'y'}</span><button class="btn sm soft" data-a="filter" data-f="over">Cover</button></div></div>`; if (A.ui.filter && A.ui.filter !== 'all') h += `<div class="chips"><button class="chip on" data-a="filter" data-f="all">${esc(({ over: 'Overspent', snoozed: 'Snoozed', under: 'Underfunded', overf: 'Overfunded', avail: 'Money Available' })[A.ui.filter] || (A.plan.views || []).find(v => 'v:' + v.id === A.ui.filter)?.name || 'Filter')} ✕</button></div>`; }
+    else if (chips.length) h += `<div class="achips">${chips.join('')}</div>`;
   }
   const F = A.ui.filter;
-  h += `<div class="chips" role="toolbar" aria-label="Filters">
+  if (desk) h += `<div class="chips" role="toolbar" aria-label="Filters">
     ${chip('all', 'All')}${chip('snoozed', 'Snoozed')}${chip('under', 'Underfunded')}${chip('overf', 'Overfunded')}${chip('avail', 'Money Available')}${(A.plan.views || []).map(v => chip('v:' + v.id, esc(v.name))).join('')}${F === 'over' ? chip('over', 'Overspent') : ''}<button class="chip" data-a="viewsMenu" aria-label="Views Menu" title="Views Menu">⋯</button></div>
     <div class="toolbar">
       <button class="tbtn" data-a="groupNew">${I.plus} Category Group</button>
@@ -353,7 +354,7 @@ function regRange(k) {
 }
 function regList() {
   const id = A.acct; const f = A.ui.regFilter; const q = A.ui.search.trim().toLowerCase();
-  let list = id === 'all' ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id);
+  let list = id === 'all' ? A.tx.filter(t => L.acct[t.acct] && (A.view !== 'tx' || DESK() || onBudget(L.acct[t.acct]))) : A.tx.filter(t => t.acct === id);
   if (f === 'unapproved') list = list.filter(t => t.approved === false);
   else if (f === 'uncleared') list = list.filter(t => t.cleared === 'u');
   else if (f === 'cleared') list = list.filter(t => t.cleared !== 'u');
@@ -463,17 +464,22 @@ function viewRegister() {
   const b = balances();
   const bal = all ? Object.entries(b).filter(([k]) => onBudget(L.acct[k])).map(([, v]) => v).reduce((s, x) => ({ cleared: s.cleared + x.cleared, uncleared: s.uncleared + x.uncleared, working: s.working + x.working }), { cleared: 0, uncleared: 0, working: 0 }) : b[id];
   const ago = d => { const n = daysBetween(d, todayISO()); return n < 1 ? 'today' : n < 31 ? n + ' day' + (n > 1 ? 's' : '') + ' ago' : n < 365 ? Math.round(n / 30) + ' month' + (Math.round(n / 30) > 1 ? 's' : '') + ' ago' : Math.round(n / 365) + ' year' + (Math.round(n / 365) > 1 ? 's' : '') + ' ago'; };
-  const sub2 = all ? 'Budget accounts' : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
-  let h = topBar(all ? 'All Accounts' : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
+  const sub2 = all ? (A.view === 'tx' && !desk ? 'Cash and credit accounts' : 'Budget accounts') : [ACCT[a.type].label, bankAcctOf(id) ? 'Connected' : '', a.lastRec ? 'Reconciled ' + ago(a.lastRec) : ''].filter(Boolean).join(' · ');
+  let h = topBar(all ? (A.view === 'tx' && !desk ? 'Spending' : 'All Accounts') : `${esc(a.name)} <button class="star ${a.star ? 'on' : ''}" data-a="acctStar" data-id="${id}" aria-label="${a.star ? 'Unstar' : 'Star'} this account" title="Toggle Starred">${a.star ? '★' : '☆'}</button>`, sub2,
     A.view === 'tx' || desk ? undoBtns() : `<button class="ibtn" data-a="backAccts" aria-label="Back to accounts">${I.left}</button>`,
-    all ? `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>` : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
+    all ? (A.view === 'tx' && !desk ? `<button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button>` : `<button class="ibtn" data-a="importSheet" aria-label="File Import">${I.upload}</button>`) : `<button class="ibtn" data-a="acctEdit" data-id="${id}" aria-label="Edit account">${I.edit}</button>`);
   h += `<div class="wrap">`;
   { const un = (all ? A.tx.filter(t => L.acct[t.acct]) : A.tx.filter(t => t.acct === id)).filter(t => t.approved === false).length;
-    if (un && A.ui.regFilter !== 'unapproved') h += `<div class="banner info" style="margin-top:8px">${I.info}<span>${un} new transaction${un > 1 ? 's' : ''} to approve or categorize</span><button class="btn sm pri" data-a="regFilter" data-f="unapproved">View</button></div>`; }
+    const spendTab = A.view === 'tx' && all && !desk;
+    if (spendTab) { // YNAB mobile Spending tab: "N New transactions · Review" and "Show N uncleared transactions"
+      const unc = A.tx.filter(t => L.acct[t.acct] && onBudget(L.acct[t.acct]) && t.cleared === 'u').length;
+      if (un) h += `<div class="card" style="margin-top:8px"><div class="li"><span class="hnum">${un}</span><span class="grow">New transaction${un > 1 ? 's' : ''}</span><button class="btn sm soft" data-a="cardMode">Review</button></div></div>`;
+      if (unc && A.ui.regFilter !== 'uncleared') h += `<button class="card li" style="margin-top:8px; width:100%" data-a="regFilter" data-f="uncleared"><span class="grow">Show <b class="hnum">${unc}</b> uncleared transactions</span>${I.right}</button>`;
+    } else if (un && A.ui.regFilter !== 'unapproved') h += `<div class="banner info" style="margin-top:8px">${I.info}<span>${un} new transaction${un > 1 ? 's' : ''} to approve or categorize</span><button class="btn sm pri" data-a="regFilter" data-f="unapproved">View</button></div>`; }
   let bk0 = all ? null : bankBalLine(id, bal);
   const bdup = all || !bankAcctOf(id) ? [] : bankDupes(id);
   if (bdup.length) bk0 = `<div class="banner warn" style="margin-top:8px">${I.info}<span>${bdup.length} bank transaction${bdup.length > 1 ? 's were' : ' was'} imported twice (they were already here from YNAB or typed by hand)</span><button class="btn sm" data-a="bankDupMerge" data-id="${id}">Merge</button></div>` + (bk0 || '');
-  h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>${bk0 || ''}`;
+  if (!(A.view === 'tx' && all && !desk)) h += `<div class="balbar"><div><span class="num">${fmt(bal.cleared)}</span><small>Cleared Balance</small></div><span class="op">+</span><div><span class="num">${fmt(bal.uncleared)}</span><small>Uncleared Balance</small></div><span class="op">=</span><div><span class="num strong">${fmt(bal.working)}</span><small>Working Balance</small></div></div>${bk0 || ''}`;
   if (!all && ACCT[a.type]?.grp === 'loan') { try { h += loanPanel(a); } catch (e) { console.warn('loan panel', e); } }
   const dups = all ? [] : cardDups(id);
   if (dups.length) h += `<div class="banner warn">${I.info}<span>${dups.length} card purchase${dups.length > 1 ? 's are' : ' is'} also entered by hand in ${esc(L.acct[dups[0].main.acct].name)}</span><button class="btn sm" data-a="dupReview" data-id="${id}">Review</button></div>`;

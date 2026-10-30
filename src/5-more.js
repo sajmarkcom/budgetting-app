@@ -223,7 +223,8 @@ function monthsBetween(a, b) { const out = []; for (let m = a; m <= b; m = addMo
 function viewReflect() {
   const tabs = [['spending', 'Spending Breakdown'], ['trends', 'Spending Trends'], ['networth', 'Net Worth'], ['ie', 'Income v Expense'], ['aom', 'Age of Money']];
   const per = [['m', 'This Month'], ['lm', 'Last Month'], ['3m', 'Last 3 Months'], ['6m', 'Last 6 Months'], ['ytd', 'Year to Date'], ['12m', 'Last 12 Months'], ['all', 'All Dates']];
-  let h = topBar('Reflect', esc(A.plan.name));
+  if (!DESK() && !A.ui.reflDetail) return reflectOverview();
+  let h = topBar('Reflect', esc(A.plan.name), !DESK() ? `<button class="ibtn" data-a="reflBack" aria-label="Back">${I.left}</button>` : '');
   h += `<div class="wrap"><div class="chips">${tabs.map(([k, l]) => `<button class="chip ${A.ui.reflect === k ? 'on' : ''}" data-a="reflectTab" data-k="${k}">${l}</button>`).join('')}</div>
     <div class="chips" style="padding-top:2px">${per.map(([k, l]) => `<button class="chip ${A.ui.period === k ? 'on' : ''}" data-a="period" data-k="${k}">${l}</button>`).join('')}</div>`;
   const [from, to] = periodRange(); const months = monthsBetween(from, to);
@@ -430,4 +431,88 @@ function buildDemo() {
   const extra = monthData(cm).rta - 32000;
   if (extra > 0) setAssigned(m2, byName('Emergency Fund').id, getAssigned(m2, byName('Emergency Fund').id) + extra);
   A.calcV++;
+}
+
+/* ---------- HOME (YNAB mobile): alerts, pinned categories, current goal, month summary, month ahead ---------- */
+function viewHome() {
+  const m = curMonth(), md = monthData(m), rta = md.rta;
+  const unap = A.tx.filter(t => t.approved === false && L.acct[t.acct] && !L.acct[t.acct].closed);
+  const over = A.plan.cats.filter(c => !c.hidden && catM(m, c.id).available < 0);
+  const first = (A.plan.ownerName || A.plan.name.replace(/['’]s budget$/i, '') || '').trim();
+  let h = `<div class="top wrap"><div class="top-bar"><span style="width:44px"></span><div class="top-title"><div class="sub" style="font-weight:700">${esc(A.plan.name)}</div></div><button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button></div></div>`;
+  h += `<div class="wrap home"><h1 class="home-h">${esc(A.plan.name)}</h1>`;
+  const todo = [];
+  if (unap.length) todo.push(`<div class="li"><span class="hnum">${unap.length}</span><span class="grow">New transaction${unap.length > 1 ? 's' : ''}</span><button class="btn sm soft" data-a="cardMode">Review</button></div>`);
+  if (over.length) todo.push(`<div class="li"><span class="hnum bad">${over.length}</span><span class="grow">Overspent categor${over.length > 1 ? 'ies' : 'y'}</span><button class="btn sm soft" data-a="homeOver">Cover</button></div>`);
+  if (rta > 0) todo.push(`<div class="li"><span class="pill good">${fmt(rta)}</span><span class="grow">Ready to assign</span><button class="btn sm soft" data-a="nav" data-v="plan">Assign</button></div>`);
+  if (rta < 0) todo.push(`<div class="li"><span class="pill bad">${fmt(rta)}</span><span class="grow">Assigned too much</span><button class="btn sm soft" data-a="nav" data-v="plan">Fix</button></div>`);
+  h += `<div class="card hhello"><div class="hh-t"><strong>${todo.length ? 'Lookin’ good' : 'All caught up'}${first ? ', ' + esc(first) : ''}</strong><span class="small muted">${todo.length ? 'Just a few things to do' : 'Every euro has a job.'}</span></div>${todo.join('')}</div>`;
+  // pinned categories
+  const pins = (A.plan.pins || []).filter(id => L.cat[id] && !L.cat[id].hidden);
+  h += `<details class="hsec" open><summary><span class="grow">Pinned</span><button class="btn sm soft" data-a="pinEdit">${pins.length ? 'Edit' : 'Add'}</button></summary>`;
+  h += pins.length ? `<div class="card">${pins.map(id => { const c = L.cat[id], st = catStatus(c, m), x = st.x; return `<button class="li" data-a="catSheet" data-c="${id}"><span class="grow ellip">${esc(catName(id))}</span><span class="pill ${st.cls}">${fmt(x.available)}</span></button>`; }).join('')}</div>`
+    : `<button class="card hempty" data-a="pinEdit">${I.pin} Pin the categories you check most often</button>`;
+  h += `</details>`;
+  // current goal
+  const gid = A.plan.goalCat && L.cat[A.plan.goalCat] && L.cat[A.plan.goalCat].target ? A.plan.goalCat : null;
+  h += `<details class="hsec" open><summary><span class="grow">Current Goal</span>${gid ? `<button class="btn sm soft" data-a="goalPick">Change</button>` : ''}</summary>`;
+  if (gid) { const c = L.cat[gid], x = catM(m, gid), ti = targetInfo(c, m, x), tot = c.target.amount, have = Math.max(0, ['yearly', 'date', 'balance'].includes(c.target.type) ? x.carry + x.assigned : x.available), pct = tot ? Math.min(1, have / tot) : 0;
+    h += `<button class="card hgoal" data-a="catSheet" data-c="${gid}"><div class="row"><strong class="grow ellip">${esc(catName(gid))}</strong><span class="num">${fmt(have)} / ${fmt(tot)}</span></div><div class="bar ${ti && ti.under > 0 ? 'warn' : ''}"><i style="width:${Math.round(pct * 100)}%"></i></div><div class="small muted">${esc(targetText(c, m, catStatus(c, m)) || '')} · ${Math.round(pct * 100)} %</div></button>`; }
+  else h += `<div class="card hgoal" style="text-align:center"><strong>What are you saving for?</strong><span class="small muted">Pick one category to track. We’ll show your progress here.</span><button class="btn sm soft" style="align-self:center" data-a="goalPick">${I.plus} Add Goal</button></div>`;
+  h += `</details>`;
+  // month summary (YNAB tiles)
+  let tTot = 0, under = 0; for (const c of A.plan.cats) { if (c.hidden) continue; const ti = targetInfo(c, m); if (ti) { tTot += ti.need; under += ti.under; } }
+  const spent = -A.plan.cats.reduce((sm, c) => sm + Math.min(0, catM(m, c.id).activity), 0);
+  const tile = (icn, l, v, a) => `<button class="htile" data-a="${a}">${icn}<span class="small muted">${l}</span><strong class="num">${fmt(v)}</strong></button>`;
+  h += `<details class="hsec" open><summary><span class="grow">${esc(MONTHS[+m.slice(5) - 1] ? cap(MONTHS[+m.slice(5) - 1]) : monthLabel(m))} Summary</span></summary><div class="htiles">
+    ${tile(I.target, 'Total Targets', tTot, 'costToBeMe')}${tile(I.reflect, 'Underfunded', under, 'homeUnder')}${tile(I.plan, 'Assigned', md.assigned, 'nav" data-v="plan')}${tile(I.cash, 'Spent', spent, 'goReflect')}</div></details>`;
+  // assigned in future months
+  const nm = addMonths(m, 1);
+  h += `<details class="hsec" open><summary><span class="grow">Assigned in Future Months</span></summary><div class="card"><button class="li" data-a="monthNext"><span class="grow">${esc(cap(MONTHS[+nm.slice(5) - 1]))}</span><span class="num">${fmt(monthData(nm).assigned || 0)}</span>${I.right}</button></div></details>`;
+  return h + `</div>`;
+}
+function cardModeSheet() {
+  const q = A.tx.filter(t => t.approved === false && L.acct[t.acct] && !L.acct[t.acct].closed && !(A.ui.cmSkip || new Set()).has(t.id)).sort((a, b) => a.date < b.date ? 1 : -1);
+  const t = q[0];
+  if (!t) { closeSheet(); A.ui.cmSkip = null; toast('All transactions reviewed'); render(); return; }
+  const cl = txCatLabel(t) || 'Category Needed', need = cl === 'Category Needed';
+  const body = `<div class="small muted" style="text-align:center">${q.length} left · swipe right to approve, left to skip</div>
+    <div class="cmcard" id="cmCard" data-id="${t.id}">
+      <div class="small muted">${esc(L.acct[t.acct]?.name || '')} · ${esc(fmtDate(t.date))}</div>
+      <div class="cm-amt num ${t.amount > 0 ? 'amt-pos' : ''}">${fmt(t.amount)}</div>
+      <div class="cm-payee">${esc(payeeName(t) || '—')}</div>
+      ${t.rawPayee && t.rawPayee !== payeeName(t) ? `<div class="small muted ellip">${esc(t.rawPayee)}</div>` : ''}
+      <button class="btn block ${need ? 'warn' : ''}" data-a="catPick" data-id="${t.id}" style="margin-top:12px">${esc(cl)}</button>
+      ${t.memo ? `<div class="small muted" style="margin-top:6px">${esc(t.memo)}</div>` : ''}
+    </div>
+    <div class="grid2"><button class="btn" data-a="cmSkip" data-id="${t.id}">Skip For Now</button><button class="btn pri" data-a="cmApprove" data-id="${t.id}">${I.check} Approve</button></div>
+    <button class="btn block" data-a="cmList" style="margin-top:6px">${I.list} List mode</button>`;
+  const open = $('#scrim .sheet'); if (open && open.dataset.cm) { $('#scrim .sheet-b').innerHTML = body; } else { const s = openSheet('Review', body); const sh = s && $('.sheet', s); if (sh) sh.dataset.cm = '1'; }
+  const card = $('#cmCard'); if (!card) return; let x0 = null, dx = 0;
+  card.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; dx = 0; card.style.transition = 'none'; }, { passive: true });
+  card.addEventListener('touchmove', e => { if (x0 == null) return; dx = e.touches[0].clientX - x0; card.style.transform = `translateX(${dx}px) rotate(${dx / 30}deg)`; card.style.background = dx > 40 ? 'var(--good-bg, rgba(34,197,94,.12))' : dx < -40 ? 'var(--surface-2, rgba(0,0,0,.05))' : ''; }, { passive: true });
+  card.addEventListener('touchend', () => { card.style.transition = 'transform .2s'; if (dx > 90) ACT.cmApprove({ dataset: { id: card.dataset.id } }); else if (dx < -90) ACT.cmSkip({ dataset: { id: card.dataset.id } }); else { card.style.transform = ''; card.style.background = ''; } x0 = null; });
+}
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c !== 'pinChk') return; mutate('Pinned categories updated', () => { const p = new Set(A.plan.pins || []); el.checked ? p.add(el.dataset.id) : p.delete(el.dataset.id); A.plan.pins = [...p]; }, { silent: true }); render._keepScroll = true; render(); });
+
+/* Reflect on a phone opens on summary cards, like YNAB's app */
+function reflectOverview() {
+  const m = curMonth(), lines = spendingLines(m, m), by = {};
+  for (const l of lines) by[l.cat] = (by[l.cat] || 0) - l.amount;
+  const uncat = -A.tx.filter(t => monthOf(t.date) === m && onBudget(L.acct[t.acct]) && !t.transferAcct && !t.cat && !(t.splits && t.splits.length) && t.amount < 0).reduce((s2, t) => s2 + t.amount, 0);
+  let items = Object.entries(by).filter(([, v]) => v > 0).map(([k, v]) => ({ n: catName(k), v })); if (uncat > 0) items.push({ n: 'Uncategorized Transactions', v: uncat });
+  items.sort((a, b) => b.v - a.v); const total = items.reduce((s2, x) => s2 + x.v, 0); const top = items.slice(0, 5), rest = items.slice(5).reduce((s2, x) => s2 + x.v, 0);
+  const seg = top.map((x, i) => `<i style="flex:${x.v};background:var(${COLORS[i % 8]})"></i>`).join('') + (rest ? `<i style="flex:${rest};background:var(--muted)"></i>` : '');
+  const acc = A.plan.accounts; let as = 0, de = 0; for (const a of acc) { const b = A.tx.filter(t => t.acct === a.id).reduce((s2, t) => s2 + t.amount, 0); if (b >= 0) as += b; else de += b; }
+  const months = monthsBetween(addMonths(m, -2), m); const inc = months.map(mm => A.tx.filter(t => monthOf(t.date) === mm && onBudget(L.acct[t.acct])).reduce((s2, t) => s2 + txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0), 0));
+  const exp = months.map(mm => -spendingLines(mm, mm).reduce((s2, l) => s2 + l.amount, 0)); const ai = inc.reduce((a, b) => a + b, 0), ae = exp.reduce((a, b) => a + b, 0);
+  const verdict = !ai ? 'No income recorded recently.' : ae > ai * 1.05 ? 'On average, you’re spending more than you make.' : ae < ai * 0.95 ? 'On average, you’re making more than you spend.' : 'On average, you’re spending about as much as you make.';
+  const card = (k, title, inner) => `<button class="card rcard" data-a="reflOpen" data-k="${k}"><div class="row"><span class="small rc-t">${title}</span><span class="grow"></span>${I.right}</div>${inner}</button>`;
+  let h = `<div class="top wrap"><div class="top-bar"><span style="width:44px"></span><div class="top-title"></div><button class="ibtn" data-a="moreMenu" aria-label="More">${I.dots}</button></div></div><div class="wrap home"><h1 class="home-h">Reflect</h1>`;
+  h += card('spending', 'Spending Breakdown', `<div class="small muted">${esc(monthLabel(m))}</div><div class="rc-big num">${fmt(total)}</div><div class="rc-seg">${seg}</div>
+    <div class="row small muted" style="margin-top:8px"><span class="grow">Top Categories</span><span>Spent</span></div>${top.map((x, i) => `<div class="row small"><span class="dot" style="background:var(${COLORS[i % 8]})"></span><span class="grow ellip">${esc(x.n)}</span><span class="num">${fmt(x.v)}</span></div>`).join('')}${rest ? `<div class="row small"><span class="dot" style="background:var(--muted)"></span><span class="grow">All Others</span><span class="num">${fmt(rest)}</span></div>` : ''}`);
+  h += card('networth', 'Net Worth', `<div class="rc-big num">${fmt(as + de)}</div><div class="row small"><span class="grow" style="color:var(--accent-strong)">Assets</span><span class="num">${fmt(as)}</span></div><div class="row small"><span class="grow" style="color:var(--bad)">Debts</span><span class="num">${fmt(de)}</span></div>`);
+  h += card('aom', 'Age of Money', `<div class="rc-big">${ageOfMoney().now ?? '—'} Days</div>`);
+  h += card('ie', 'Income vs. Spending', `<div style="font-weight:700; margin-top:4px">${verdict}</div><div class="small muted" style="margin-top:4px">Last 3 months: ${fmt(ai)} in · ${fmt(ae)} out</div>`);
+  return h + `</div>`;
 }

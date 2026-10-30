@@ -1,7 +1,7 @@
 function savePref(k, v) { try { const u = JSON.parse(localStorage.getItem('pecule.ui') || '{}'); u[k] = v; localStorage.setItem('pecule.ui', JSON.stringify(u)); } catch (e) { } }
 /* ================= Budget — events & boot ================= */
 const ACT = {
-  nav: el => { A.ui.catFilter = null; A.view = el.dataset.v; A.acct = null; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
+  nav: el => { A.ui.catFilter = null; A.view = el.dataset.v; A.acct = null; if (A.view === 'reflect') A.ui.reflDetail = false; if (A.view === 'tx') { A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; } A.ui.select = false; A.ui.selected.clear(); window.scrollTo(0, 0); render(); },
   undo: () => undo(), redo: () => redo(),
   closeSheet: () => closeSheet(),
   monthToday: () => { A.month = curMonth(); render(); },
