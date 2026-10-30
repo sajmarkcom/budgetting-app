@@ -383,7 +383,7 @@ body.nocolor .amt-bad, body.nocolor .amt-warn{text-decoration:underline dotted} 
 .colgrip{position:absolute; right:0; top:6px; bottom:6px; width:6px; cursor:col-resize; border-right:2px solid transparent} .colgrip:hover, body.colresize .colgrip{border-right-color:var(--accent)} body.colresize{cursor:col-resize; user-select:none}
 .rtable tr.leg td{border-top:none; padding-top:0; padding-bottom:2px; height:24px; font-size:13px} .leg-c{color:var(--muted); padding-left:18px!important}
 .legchips{display:flex; flex-wrap:wrap; gap:4px; margin-top:3px} .legchip{font-size:12px; background:var(--surface-2); border-radius:8px; padding:2px 7px; color:var(--muted)} .legchip b{color:var(--fg); font-weight:700}
-.sp-row{display:grid; grid-template-columns:minmax(0,1.6fr) 110px minmax(0,1fr) auto; gap:6px; align-items:center; margin-top:6px}
+.sp-row{min-width:0;} #scrim .sheet-b{overflow-x:hidden} .sp-row{display:grid; grid-template-columns:minmax(0,1.6fr) 110px minmax(0,1fr) auto; gap:6px; align-items:center; margin-top:6px}
 @media (max-width:640px){ .sp-row{grid-template-columns:1fr 100px auto} .sp-row [data-sp=memo]{grid-column:1 / -1} }
 .sp-last{white-space:normal!important; text-align:left; height:auto!important; min-height:44px; padding:10px 14px!important; line-height:1.35; justify-content:flex-start!important; background:var(--accent-soft)!important; color:var(--accent)!important; font-weight:700}
 /* compact alert chips on the plan */
@@ -4445,7 +4445,7 @@ function splitSheet(id) {
 function splitRender() {
   const left = SP.total - SP.rows.reduce((a, r) => a + r.amt, 0), last = lastSplitLike(A.tx.find(x => x.id === SP.id));
   const body = `<div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><span>Total</span><b class="num">${fmt(SP.sign * SP.total)}</b></div><div class="kpi"><span>Left to split</span><b class="num" style="color:${left ? 'var(--warn)' : 'var(--good)'}">${fmt(left)}</b></div></div>
-    ${last && txLegs(A.tx.find(x => x.id === SP.id)).length < 2 ? `<button class="btn block" data-a="splitLast">↺ Same as last time: ${last.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : ''}
+    ${last && txLegs(A.tx.find(x => x.id === SP.id)).length < 2 ? `<button class="btn block sp-last" data-a="splitLast">↺ Same as last time: ${last.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : ''}
     ${SP.rows.map((r, i) => `<div class="sp-row"><select class="in" data-sp="to" data-i="${i}">${splitTargets(r.to, SP.acct)}</select><input class="in num" inputmode="decimal" data-sp="amt" data-i="${i}" value="${r.amt ? fmtIn(r.amt) : ''}" placeholder="0,00"><input class="in" data-sp="memo" data-i="${i}" value="${esc(r.memo)}" placeholder="Memo">${SP.rows.length > 2 ? `<button class="ibtn" data-a="splitDel" data-i="${i}" aria-label="Remove line">${I.trash}</button>` : ''}</div>`).join('')}
     <button class="btn block" data-a="splitAdd">${I.plus} Add another split</button>`;
   if ($('#scrim') && $('.sp-row')) refreshSheetBody(body); else openSheet('Split Transaction', body, `<button class="btn pri block" data-a="splitSave">Save</button>`);

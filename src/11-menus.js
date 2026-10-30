@@ -539,7 +539,7 @@ function splitSheet(id) {
 function splitRender() {
   const left = SP.total - SP.rows.reduce((a, r) => a + r.amt, 0), last = lastSplitLike(A.tx.find(x => x.id === SP.id));
   const body = `<div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><span>Total</span><b class="num">${fmt(SP.sign * SP.total)}</b></div><div class="kpi"><span>Left to split</span><b class="num" style="color:${left ? 'var(--warn)' : 'var(--good)'}">${fmt(left)}</b></div></div>
-    ${last && txLegs(A.tx.find(x => x.id === SP.id)).length < 2 ? `<button class="btn block" data-a="splitLast">↺ Same as last time: ${last.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : ''}
+    ${last && txLegs(A.tx.find(x => x.id === SP.id)).length < 2 ? `<button class="btn block sp-last" data-a="splitLast">↺ Same as last time: ${last.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : ''}
     ${SP.rows.map((r, i) => `<div class="sp-row"><select class="in" data-sp="to" data-i="${i}">${splitTargets(r.to, SP.acct)}</select><input class="in num" inputmode="decimal" data-sp="amt" data-i="${i}" value="${r.amt ? fmtIn(r.amt) : ''}" placeholder="0,00"><input class="in" data-sp="memo" data-i="${i}" value="${esc(r.memo)}" placeholder="Memo">${SP.rows.length > 2 ? `<button class="ibtn" data-a="splitDel" data-i="${i}" aria-label="Remove line">${I.trash}</button>` : ''}</div>`).join('')}
     <button class="btn block" data-a="splitAdd">${I.plus} Add another split</button>`;
   if ($('#scrim') && $('.sp-row')) refreshSheetBody(body); else openSheet('Split Transaction', body, `<button class="btn pri block" data-a="splitSave">Save</button>`);
