@@ -103,7 +103,7 @@ const ACT = {
   inlSave: el => inlSave(el.dataset.again === '1'),
   kind: el => { D.kind = el.dataset.v; if (D.kind === 'transfer') { D.splits = null; } else D.transferAcct = ''; if (D.kind === 'in' && !D.cat) D.cat = 'rta'; if (D.kind === 'out' && D.cat === 'rta') D.cat = ''; txRefresh(); },
   dFlag: el => { D.flag = el.dataset.v || null; txRefresh(); },
-  spOn: () => { D.splits = [{ cat: D.cat || '', amount: D.amount, memo: '' }, { cat: '', amount: 0, memo: '' }]; txRefresh(); },
+  spOn: () => { if (D.id && A.tx.find(t => t.id === D.id)) { const id = D.id; closeSheet(); splitSheet(id); return; } D.splits = [{ cat: D.cat || '', amount: D.amount, memo: '' }, { cat: '', amount: 0, memo: '' }]; txRefresh(); }, // existing transactions: the split sheet that also handles transfers and “Same as last time”
   spOff: () => { D.cat = D.splits?.[0]?.cat || ''; D.splits = null; txRefresh(); },
   spAdd: () => { D.splits.push({ cat: '', amount: 0, memo: '' }); txRefresh(); },
   spDel: el => { D.splits.splice(+el.dataset.i, 1); if (D.splits.length < 2) { D.cat = D.splits[0]?.cat || ''; D.splits = null; } txRefresh(); },

@@ -552,6 +552,7 @@ Object.assign(ACT, {
   splitDel: el => { SP.rows.splice(+el.dataset.i, 1); splitRender(); },
   splitLast: () => { const g = lastSplitLike(A.tx.find(x => x.id === SP.id)); if (!g) return; SP.rows = g.map(l => ({ amt: Math.abs(l.amount), to: l.transferAcct ? 'tr:' + l.transferAcct : (l.cat || ''), memo: '' })); SP.pname = legPayee(g); splitRender(); },
   splitOpen: el => { closePop(); splitSheet(el.dataset.id); },
+  splitLastFor: el => { closeSheet(); splitSheet(el.dataset.id); ACT.splitLast(); ACT.splitSave(); },
   splitSave: () => {
     const rows = SP.rows.filter(r => r.amt); const sum = rows.reduce((a, r) => a + r.amt, 0);
     if (sum !== SP.total) { toast('The lines must add up to ' + fmt(SP.total) + ' (left: ' + fmt(SP.total - sum) + ')'); return; }

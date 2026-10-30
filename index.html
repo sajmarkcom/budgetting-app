@@ -385,6 +385,7 @@ body.nocolor .amt-bad, body.nocolor .amt-warn{text-decoration:underline dotted} 
 .legchips{display:flex; flex-wrap:wrap; gap:4px; margin-top:3px} .legchip{font-size:12px; background:var(--surface-2); border-radius:8px; padding:2px 7px; color:var(--muted)} .legchip b{color:var(--fg); font-weight:700}
 .sp-row{display:grid; grid-template-columns:minmax(0,1.6fr) 110px minmax(0,1fr) auto; gap:6px; align-items:center; margin-top:6px}
 @media (max-width:640px){ .sp-row{grid-template-columns:1fr 100px auto} .sp-row [data-sp=memo]{grid-column:1 / -1} }
+.sp-last{white-space:normal!important; text-align:left; height:auto!important; min-height:44px; padding:10px 14px!important; line-height:1.35; justify-content:flex-start!important; background:var(--accent-soft)!important; color:var(--accent)!important; font-weight:700}
 /* compact alert chips on the plan */
 .achips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
 .achip{display:inline-flex; align-items:center; border-radius:999px; font-weight:700; font-size:13px; overflow:hidden}
@@ -1961,7 +1962,8 @@ function txBody() {
         <input class="in" style="grid-column:1/-1; height:40px; font-size:14px" data-sp="memo" data-i="${i}" value="${esc(s.memo || '')}" placeholder="Memo (optional)" aria-label="Memo ${i + 1}"></div>`).join('')}
       <div class="row"><button class="btn sm" data-a="spAdd">${I.plus} Add split</button>${sum !== D.amount ? `<button class="btn sm" data-a="spFill">Put remainder on last line</button>` : ''}<button class="btn sm ghost" data-a="spOff">Remove split</button></div>`;
   }
-  return `<div class="seg" role="group" aria-label="Type">
+  const lastSp = (() => { try { const t = D.id && A.tx.find(x => x.id === D.id); if (!t || t.transferAcct || (t.splits && t.splits.length) || txLegs(t).length > 1 || (t.cat && t.approved !== false)) return null; return lastSplitLike(t); } catch (e) { return null; } })();
+  return (lastSp ? `<button class="btn block sp-last" data-a="splitLastFor" data-id="${D.id}">↺ Same as last time: ${lastSp.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : '') + `<div class="seg" role="group" aria-label="Type">
       <button class="${D.kind === 'out' ? 'on' : ''}" data-a="kind" data-v="out">Outflow</button>
       <button class="${D.kind === 'in' ? 'on' : ''}" data-a="kind" data-v="in">Inflow</button>
       <button class="${D.kind === 'transfer' ? 'on' : ''}" data-a="kind" data-v="transfer">Transfer</button></div>
@@ -3640,7 +3642,7 @@ const ACT = {
   inlSave: el => inlSave(el.dataset.again === '1'),
   kind: el => { D.kind = el.dataset.v; if (D.kind === 'transfer') { D.splits = null; } else D.transferAcct = ''; if (D.kind === 'in' && !D.cat) D.cat = 'rta'; if (D.kind === 'out' && D.cat === 'rta') D.cat = ''; txRefresh(); },
   dFlag: el => { D.flag = el.dataset.v || null; txRefresh(); },
-  spOn: () => { D.splits = [{ cat: D.cat || '', amount: D.amount, memo: '' }, { cat: '', amount: 0, memo: '' }]; txRefresh(); },
+  spOn: () => { if (D.id && A.tx.find(t => t.id === D.id)) { const id = D.id; closeSheet(); splitSheet(id); return; } D.splits = [{ cat: D.cat || '', amount: D.amount, memo: '' }, { cat: '', amount: 0, memo: '' }]; txRefresh(); }, // existing transactions: the split sheet that also handles transfers and “Same as last time”
   spOff: () => { D.cat = D.splits?.[0]?.cat || ''; D.splits = null; txRefresh(); },
   spAdd: () => { D.splits.push({ cat: '', amount: 0, memo: '' }); txRefresh(); },
   spDel: el => { D.splits.splice(+el.dataset.i, 1); if (D.splits.length < 2) { D.cat = D.splits[0]?.cat || ''; D.splits = null; } txRefresh(); },
@@ -4456,6 +4458,7 @@ Object.assign(ACT, {
   splitDel: el => { SP.rows.splice(+el.dataset.i, 1); splitRender(); },
   splitLast: () => { const g = lastSplitLike(A.tx.find(x => x.id === SP.id)); if (!g) return; SP.rows = g.map(l => ({ amt: Math.abs(l.amount), to: l.transferAcct ? 'tr:' + l.transferAcct : (l.cat || ''), memo: '' })); SP.pname = legPayee(g); splitRender(); },
   splitOpen: el => { closePop(); splitSheet(el.dataset.id); },
+  splitLastFor: el => { closeSheet(); splitSheet(el.dataset.id); ACT.splitLast(); ACT.splitSave(); },
   splitSave: () => {
     const rows = SP.rows.filter(r => r.amt); const sum = rows.reduce((a, r) => a + r.amt, 0);
     if (sum !== SP.total) { toast('The lines must add up to ' + fmt(SP.total) + ' (left: ' + fmt(SP.total - sum) + ')'); return; }

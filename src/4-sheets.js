@@ -222,7 +222,8 @@ function txBody() {
         <input class="in" style="grid-column:1/-1; height:40px; font-size:14px" data-sp="memo" data-i="${i}" value="${esc(s.memo || '')}" placeholder="Memo (optional)" aria-label="Memo ${i + 1}"></div>`).join('')}
       <div class="row"><button class="btn sm" data-a="spAdd">${I.plus} Add split</button>${sum !== D.amount ? `<button class="btn sm" data-a="spFill">Put remainder on last line</button>` : ''}<button class="btn sm ghost" data-a="spOff">Remove split</button></div>`;
   }
-  return `<div class="seg" role="group" aria-label="Type">
+  const lastSp = (() => { try { const t = D.id && A.tx.find(x => x.id === D.id); if (!t || t.transferAcct || (t.splits && t.splits.length) || txLegs(t).length > 1 || (t.cat && t.approved !== false)) return null; return lastSplitLike(t); } catch (e) { return null; } })();
+  return (lastSp ? `<button class="btn block sp-last" data-a="splitLastFor" data-id="${D.id}">↺ Same as last time: ${lastSp.map(l => esc(legLabel(l)) + ' ' + fmt(Math.abs(l.amount))).join(' + ')}</button>` : '') + `<div class="seg" role="group" aria-label="Type">
       <button class="${D.kind === 'out' ? 'on' : ''}" data-a="kind" data-v="out">Outflow</button>
       <button class="${D.kind === 'in' ? 'on' : ''}" data-a="kind" data-v="in">Inflow</button>
       <button class="${D.kind === 'transfer' ? 'on' : ''}" data-a="kind" data-v="transfer">Transfer</button></div>
