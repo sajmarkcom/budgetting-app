@@ -82,6 +82,7 @@ const ACT = {
   },
   acctClose: el => { const a = L.acct[el.dataset.id]; if (!a.closed && balances()[a.id].working !== 0) { toast('The balance must be 0 to close the account'); return; } mutate(a.closed ? 'Account reopened' : 'Account closed', () => { a.closed = !a.closed; }); closeSheet(); },
   acctDelete: el => confirmSheet('Delete Account', 'All its transactions will be deleted. You can undo right after.', 'Delete', 'acctDeleteDo', { id: el.dataset.id }),
+  acctUnlink: el => { const id = el.dataset.id; if (!confirm('Unlink this account from the bank? Your transactions stay; new bank lines stop coming in. You can link it again in Bank Connections.')) return; mutate('Account unlinked', () => { for (const c of A.plan.bank?.conns || []) for (const x of c.accounts) if (x.acct === id) x.acct = null; }); acctSheet(id); },
   acctDeleteDo: el => { const id = el.dataset.id; mutate('Account deleted', () => { deleteTx(A.tx.filter(t => t.acct === id).map(t => t.id)); A.plan.accounts = A.plan.accounts.filter(a => a.id !== id); A.plan.cats = A.plan.cats.filter(c => c.cc !== id); A.plan.scheduled = A.plan.scheduled.filter(s => s.acct !== id && s.transferAcct !== id); }); closeSheet(); A.acct = null; render(); },
   openAcctNav: el => { A.ui.catFilter = null; A.view = 'accounts'; A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; A.ui.select = false; A.ui.selected.clear(); render(); },
   collapseClosed: () => { A.ui.collapsed.s_closed = A.ui.collapsed.s_closed === false ? true : false; render._keepScroll = true; render(); },

@@ -178,9 +178,9 @@ function periodRange() {
 function spendingLines(from, to) {
   const out = [];
   for (const t of A.tx) {
-    const a = L.acct[t.acct]; if (!onBudget(a)) continue; const m = monthOf(t.date); if (m < from || m > to) continue;
+    const a = L.acct[t.acct]; if (!onBudget(a) || (A.ui.reflAx && A.ui.reflAx.has(t.acct))) continue; const m = monthOf(t.date); if (m < from || m > to) continue;
     if (t.transferAcct && onBudget(L.acct[t.transferAcct])) continue;
-    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat] || (A.ui.reflEx && A.ui.reflEx.has(ln.cat))) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount }); }
+    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat] || (A.ui.reflEx && A.ui.reflEx.has(ln.cat))) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount, tid: t.id, date: t.date }); }
   }
   return out;
 }
@@ -229,7 +229,7 @@ function viewReflect() {
   const [from, to] = periodRange(); const months = monthsBetween(from, to);
   { const lab = from === to ? monthLabel(from) : `${MSHORT[+from.slice(5, 7) - 1]} ${from.slice(0, 4)} – ${MSHORT[+to.slice(5, 7) - 1]} ${to.slice(0, 4)}`; const ex = A.ui.reflEx ? A.ui.reflEx.size : 0;
     h += `<div class="rnav"><button class="ibtn" data-a="reflNav" data-d="-1" aria-label="Previous date range" ${A.ui.period === 'all' ? 'disabled' : ''}>${I.left}</button><strong>${lab}</strong><button class="ibtn" data-a="reflNav" data-d="1" aria-label="Next date range" ${A.ui.period === 'all' || to >= curMonth() ? 'disabled' : ''}>${I.right}</button>
-      <span style="flex:1"></span><button class="tbtn" data-a="reflCats">${ex ? A.plan.cats.filter(c => !c.hidden).length - ex + ' Categories' : 'All Categories'} ▾</button><button class="tbtn" data-a="reflExport">${I.download} Export</button></div>`; }
+      <span style="flex:1"></span><button class="tbtn" data-a="reflCats">${ex ? A.plan.cats.filter(c => !c.hidden).length - ex + ' Categories' : 'All Categories'} ▾</button><button class="tbtn" data-a="reflAccts">${A.ui.reflAx && A.ui.reflAx.size ? A.plan.accounts.filter(a => onBudget(a) && !a.closed && !A.ui.reflAx.has(a.id)).length + ' Accounts' : 'All Accounts'} ▾</button><button class="tbtn" data-a="reflExport">${I.download} Export</button></div>`; }
   const R = A.ui.reflect;
   if (R === 'spending') {
     const lines = spendingLines(from, to); const by = {};
@@ -237,40 +237,55 @@ function viewReflect() {
     const nameOf = k => A.ui.groupBy === 'group' ? (L.group[k]?.name || '') : A.ui.groupBy === 'cat' ? catName(k) : (L.payee[k]?.name || 'No payee');
     for (const l of lines) { const k = keyOf(l); by[k] = (by[k] || 0) - l.amount; }
     let items = Object.entries(by).map(([k, v]) => ({ k, v, n: nameOf(k) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+    const full = items.slice(); // the list shows every line (like YNAB); only the donut groups the small ones
     if (items.length > 8) { const rest = items.slice(7).reduce((s, x) => s + x.v, 0); items = items.slice(0, 7).concat([{ k: '_o', v: rest, n: 'Other' }]); }
     const total = items.reduce((s, x) => s + x.v, 0);
     h += `<div class="seg" style="margin-top:6px"><button class="${A.ui.groupBy === 'group' ? 'on' : ''}" data-a="groupBy" data-k="group">Category Groups</button><button class="${A.ui.groupBy === 'cat' ? 'on' : ''}" data-a="groupBy" data-k="cat">Categories</button><button class="${A.ui.groupBy === 'payee' ? 'on' : ''}" data-a="groupBy" data-k="payee">Payees</button></div>
-      <div class="kpis" style="margin-top:10px"><div class="kpi"><span>Total Spending</span><b class="num">${fmt(total)}</b></div><div class="kpi"><span>Average Monthly</span><b class="num">${fmt(Math.round(total / months.length))}</b></div><div class="kpi"><span>Average Daily</span><b class="num">${fmt(Math.round(total / Math.max(1, months.length * 30.4)))}</b></div><div class="kpi"><span>Items</span><b>${items.length}</b></div></div>
+      ${(() => { const today = todayISO(), d0 = from + '-01', d1 = to === curMonth() ? today : addMonths(to, 1) + '-01'; const days = Math.max(1, daysBetween(d0, d1) + (to === curMonth() ? 1 : 0));
+        const cnt = {}; for (const l of lines) if (l.amount < 0) (cnt[l.cat] ||= new Set()).add(l.tid); const freq = Object.entries(cnt).sort((a, b) => b[1].size - a[1].size)[0];
+        const big = lines.filter(l => l.amount < 0).sort((a, b) => a.amount - b.amount)[0];
+        return `<div class="kpis refl-kpis" style="margin-top:10px"><div class="kpi"><span>Total Spending</span><b class="num">${fmt(total)}</b></div><div class="kpi"><span>Average Monthly Spending</span><b class="num">${fmt(Math.round(total / months.length))}</b></div><div class="kpi"><span>Average Daily Spending</span><b class="num">${fmt(Math.round(total / days))}</b></div>
+          <div class="kpi"><span>Most Frequent Category</span><b class="ellip" style="font-size:15px">${freq ? esc(catName(freq[0])) : '—'}</b><span class="small muted">${freq ? freq[1].size + ' transactions' : ''}</span></div><div class="kpi"><span>Largest Outflow</span><b class="ellip" style="font-size:15px">${big ? esc(L.payee[big.payee]?.name || '—') : '—'}</b><span class="small muted num">${big ? fmt(-big.amount) : ''}</span></div></div>`; })()}
       <div class="chartbox" style="margin-top:10px"><div style="max-width:260px; margin:0 auto">${donut(items, total)}</div>
-      <div class="legend">${items.map((x, i) => `<div class="li"><span class="dot" style="background:var(${COLORS[i % 8]})"></span><span class="grow ellip">${esc(x.n)}</span><span class="small muted">${total ? Math.round(x.v / total * 100) : 0} %</span><strong class="num" style="width:96px; text-align:right">${fmt(x.v)}</strong></div>`).join('') || '<div class="muted small" style="padding:8px">No spending in this period.</div>'}</div></div>`;
+      <div class="legend">${full.map((x, i) => `<div class="li"><span class="dot" style="background:var(${COLORS[Math.min(i, 7) % 8]})"></span><span class="grow ellip">${esc(x.n)}</span><span class="small muted">${total ? (x.v / total < 0.01 ? '<1' : Math.round(x.v / total * 100)) : 0} %</span><strong class="num" style="width:96px; text-align:right">${fmt(x.v)}</strong></div>`).join('') || '<div class="muted small" style="padding:8px">No spending in this period.</div>'}</div></div>`;
   } else if (R === 'trends') {
     const lines = spendingLines(from, to); const gids = A.plan.groups.map(g => g.id);
     const series = gids.map((gid, i) => ({ key: gid, label: L.group[gid].name, color: COLORS[i % 8], values: months.map(m => lines.filter(l => l.m === m && L.cat[l.cat].gid === gid).reduce((s, l) => s - l.amount, 0)) })).filter(s => s.values.some(v => v));
     const tot = months.map((_, i) => series.reduce((s, x) => s + x.values[i], 0));
     const avg = Math.round(tot.reduce((a, b) => a + b, 0) / months.length);
-    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Average Monthly</span><b class="num">${fmt(avg)}</b></div><div class="kpi"><span>Highest Month</span><b class="num">${fmt(Math.max(0, ...tot))}</b></div></div>
-      <div class="chartbox" style="margin-top:10px">${bars(months, series, { aria: 'Spending by month' })}<div class="legend">${series.map(s => `<div class="li"><span class="dot" style="background:var(${s.color})"></span><span class="grow">${esc(s.label)}</span><strong class="num">${fmt(s.values.reduce((a, b) => a + b, 0))}</strong></div>`).join('')}</div></div>`;
+    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Average Monthly Spending</span><b class="num">${fmt(avg)}</b></div><div class="kpi"><span>Total Spending</span><b class="num">${fmt(tot.reduce((a, b) => a + b, 0))}</b></div><div class="kpi"><span>Highest Month</span><b class="num">${fmt(Math.max(0, ...tot))}</b></div></div>
+      <div class="chartbox" style="margin-top:10px">${bars(months, series, { aria: 'Spending by month' })}<div class="legend">${series.map(s => `<div class="li"><span class="dot" style="background:var(${s.color})"></span><span class="grow">${esc(s.label)}</span><strong class="num">${fmt(s.values.reduce((a, b) => a + b, 0))}</strong></div>`).join('')}</div></div>
+      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th>Month</th><th>Total Spending</th><th>Compared to Average</th></tr></thead><tbody>
+        ${months.map((m, i) => ({ m, v: tot[i] })).reverse().map(({ m, v }) => { const d = v - avg; return `<tr><td>${esc(monthLabel(m))}</td><td>${fmt(v)}</td><td class="${d > 0 ? 'amt-bad' : 'amt-pos'}">${d >= 0 ? '+' : ''}${fmt(d)} (${avg ? Math.abs(Math.round(d / avg * 1000) / 10).toString().replace('.', ',') : 0}%)</td></tr>`; }).join('')}
+        <tr class="tot"><td>Total</td><td>${fmt(tot.reduce((a, b) => a + b, 0))}</td><td></td></tr></tbody></table></div>`;
   } else if (R === 'networth') {
     const acc = A.plan.accounts; const assets = [], debts = [], net = [];
     for (const m of months) { let as = 0, de = 0; for (const a of acc) { const b = A.tx.filter(t => t.acct === a.id && monthOf(t.date) <= m).reduce((s, t) => s + t.amount, 0); if (b >= 0) as += b; else de += b; } assets.push(as); debts.push(de); net.push(as + de); }
     const last = net.length - 1; const ch = net[last] - net[0];
-    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Net Worth</span><b class="num">${fmt(net[last])}</b></div><div class="kpi"><span>Change</span><b class="num" style="color:${ch >= 0 ? 'var(--accent-strong)' : 'var(--bad)'}">${ch >= 0 ? '+' : ''}${fmt(ch)}</b></div><div class="kpi"><span>Assets</span><b class="num">${fmt(assets[last])}</b></div><div class="kpi"><span>Debts</span><b class="num">${fmt(debts[last])}</b></div></div>
+    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Net Worth</span><b class="num">${fmt(net[last])}</b></div><div class="kpi"><span>Change in Net Worth</span><b class="num" style="color:${ch >= 0 ? 'var(--accent-strong)' : 'var(--bad)'}">${ch >= 0 ? '+' : ''}${fmt(ch)}</b></div><div class="kpi"><span>Assets</span><b class="num">${fmt(assets[last])}</b></div><div class="kpi"><span>Debts</span><b class="num">${fmt(debts[last])}</b></div></div>
       <div class="chartbox" style="margin-top:10px">${bars(months, [{ label: 'Assets', color: '--c1', values: assets }, { label: 'Debts', color: '--c5', values: debts }], { line: net, lineLabel: 'Net', aria: 'Net worth by month' })}
-      <div class="legend"><div class="li"><span class="dot" style="background:var(--c1)"></span><span class="grow">Assets</span></div><div class="li"><span class="dot" style="background:var(--c5)"></span><span class="grow">Debts</span></div><div class="li"><span class="dot" style="background:var(--fg); border-radius:99px"></span><span class="grow">Net Worth</span></div></div></div>`;
+      <div class="legend"><div class="li"><span class="dot" style="background:var(--c1)"></span><span class="grow">Assets</span></div><div class="li"><span class="dot" style="background:var(--c5)"></span><span class="grow">Debts</span></div><div class="li"><span class="dot" style="background:var(--fg); border-radius:99px"></span><span class="grow">Net Worth</span></div></div></div>
+      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th>Month</th><th>Net Worth</th><th>Monthly Change</th></tr></thead><tbody>
+        ${months.map((m, i) => ({ m, i })).reverse().map(({ m, i }) => { const prev = i ? net[i - 1] : null; const d = prev == null ? null : net[i] - prev; return `<tr><td>${esc(monthLabel(m))}</td><td>${fmt(net[i])}</td><td class="${d == null ? '' : d >= 0 ? 'amt-pos' : 'amt-bad'}">${d == null ? '—' : (d >= 0 ? '+' : '') + fmt(d) + (prev ? ' (' + (Math.round(d / Math.abs(prev) * 1000) / 10).toString().replace('.', ',') + '%)' : '')}</td></tr>`; }).join('')}</tbody></table></div>`;
   } else if (R === 'ie') {
     const lines = spendingLines(from, to);
     const notIncome = t => ['Solde initial', 'Ajustement de rapprochement', 'Starting Balance', 'Reconciliation Balance Adjustment'].includes(L.payee[t.payee]?.name);
-    const inc = months.map(m => A.tx.filter(t => monthOf(t.date) === m && onBudget(L.acct[t.acct]) && !notIncome(t)).reduce((s, t) => s + txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0), 0));
+    const inc = months.map(m => A.tx.filter(t => monthOf(t.date) === m && onBudget(L.acct[t.acct]) && !notIncome(t) && !(A.ui.reflAx && A.ui.reflAx.has(t.acct))).reduce((s, t) => s + txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0), 0));
     const rows = A.plan.groups.map(g => ({ g, v: months.map(m => lines.filter(l => l.m === m && L.cat[l.cat].gid === g.id).reduce((s, l) => s + l.amount, 0)) })).filter(r => r.v.some(x => x));
     const exp = months.map((_, i) => rows.reduce((s, r) => s + r.v[i], 0));
+    const srcBy = {}; for (const t of A.tx) { const mi = months.indexOf(monthOf(t.date)); if (mi < 0 || !onBudget(L.acct[t.acct]) || notIncome(t) || (A.ui.reflAx && A.ui.reflAx.has(t.acct))) continue; const v = txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0); if (!v) continue; const k = t.transferAcct ? trLabel(t.transferAcct, t.acct) : (L.payee[t.payee]?.name || 'No payee'); (srcBy[k] ||= months.map(() => 0))[mi] += v; }
+    const srcs = Object.entries(srcBy).sort((a, b) => a[0].localeCompare(b[0]));
     const sum = a => a.reduce((x, y) => x + y, 0);
     h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Income</span><b class="num">${fmt(sum(inc))}</b></div><div class="kpi"><span>Expenses</span><b class="num">${fmt(sum(exp))}</b></div><div class="kpi"><span>Net Income</span><b class="num">${fmt(sum(inc) + sum(exp))}</b></div><div class="kpi"><span>Savings Rate</span><b>${sum(inc) ? Math.round((sum(inc) + sum(exp)) / sum(inc) * 100) : 0} %</b></div></div>
       <div class="chartbox" style="margin-top:10px">${bars(months, [{ label: 'Income', color: '--c1', values: inc }, { label: 'Expenses', color: '--c3', values: exp }], { line: months.map((_, i) => inc[i] + exp[i]), lineLabel: 'Net', aria: 'Income and expenses' })}</div>
-      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th>Category Group</th>${months.map(m => `<th>${esc(monthLabel(m, true))}</th>`).join('')}<th>Total</th></tr></thead><tbody>
-        <tr class="tot"><td>Total Income</td>${inc.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(sum(inc))}</td></tr>
-        ${rows.map(r => `<tr><td>${esc(r.g.name)}</td>${r.v.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(sum(r.v))}</td></tr>`).join('')}
-        <tr class="tot"><td>Total Expenses</td>${exp.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(sum(exp))}</td></tr>
-        <tr class="tot"><td>Net Income</td>${months.map((_, i) => `<td>${fmt(inc[i] + exp[i])}</td>`).join('')}<td>${fmt(sum(inc) + sum(exp))}</td></tr></tbody></table></div>`;
+      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th></th>${months.map(m => `<th>${esc(monthLabel(m, true))}</th>`).join('')}<th>Average</th><th>Total</th></tr></thead><tbody>
+        <tr class="sub"><td colspan="${months.length + 3}"><strong>Income</strong></td></tr>
+        ${srcs.map(([k, v]) => `<tr><td class="ellip" style="max-width:260px" title="${esc(k)}">${esc(k)}</td>${v.map(x => `<td>${fmt(x)}</td>`).join('')}<td>${fmt(Math.round(sum(v) / months.length))}</td><td>${fmt(sum(v))}</td></tr>`).join('')}
+        <tr class="tot"><td>Total Income</td>${inc.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(Math.round(sum(inc) / months.length))}</td><td>${fmt(sum(inc))}</td></tr>
+        <tr class="sub"><td colspan="${months.length + 3}"><strong>Expenses</strong></td></tr>
+        ${rows.map(r => `<tr><td>${esc(r.g.name)}</td>${r.v.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(Math.round(sum(r.v) / months.length))}</td><td>${fmt(sum(r.v))}</td></tr>`).join('')}
+        <tr class="tot"><td>Total Expenses</td>${exp.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(Math.round(sum(exp) / months.length))}</td><td>${fmt(sum(exp))}</td></tr>
+        <tr class="tot"><td>Net Income</td>${months.map((_, i) => `<td>${fmt(inc[i] + exp[i])}</td>`).join('')}<td>${fmt(Math.round((sum(inc) + sum(exp)) / months.length))}</td><td>${fmt(sum(inc) + sum(exp))}</td></tr></tbody></table></div>`;
   } else {
     const ag = ageOfMoney(); const vals = months.map(m => ag.at(m === curMonth() ? '9999-12-31' : addMonths(m, 1) + '-00') || 0);
     h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Age of Money</span><b>${ag.now ?? '—'} days</b></div></div>

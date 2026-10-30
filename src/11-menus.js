@@ -485,6 +485,12 @@ Object.assign(ACT, {
     popMenu(Math.max(8, r.right - 300), r.bottom + 6, `<div class="pm-form" style="width:300px; max-height:60vh; overflow:auto"><div class="row" style="gap:6px; margin-bottom:6px"><button class="btn sm" data-a="reflCatsAll" data-v="1" data-keep="1">Select All</button><button class="btn sm" data-a="reflCatsAll" data-v="0" data-keep="1">Select None</button></div>
       ${A.plan.groups.map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden && !c.cc); if (!cs.length) return ''; return `<div class="pm-h" style="padding-left:0">${esc(g.name)}</div>` + cs.map(c => `<label class="pm-chk"><input type="checkbox" data-c="reflCat" data-id="${c.id}" ${ex.has(c.id) ? '' : 'checked'}> ${esc(catName(c.id))}</label>`).join(''); }).join('')}</div>`, 'pm-rcats');
   },
+  reflAccts: el => {
+    const ex = A.ui.reflAx || new Set(), r = el.getBoundingClientRect();
+    popMenu(Math.max(8, r.right - 280), r.bottom + 6, `<div class="pm-form" style="width:280px; max-height:60vh; overflow:auto"><div class="row" style="gap:6px; margin-bottom:6px"><button class="btn sm" data-a="reflAcctsAll" data-v="1" data-keep="1">Select All</button><button class="btn sm" data-a="reflAcctsAll" data-v="0" data-keep="1">Select None</button></div>
+      ${A.plan.accounts.filter(a => onBudget(a) && !a.closed).map(a => `<label class="pm-chk"><input type="checkbox" data-c="reflAcct" data-id="${a.id}" ${ex.has(a.id) ? '' : 'checked'}> ${esc(a.name)}</label>`).join('')}</div>`, 'pm-view');
+  },
+  reflAcctsAll: el => { A.ui.reflAx = el.dataset.v === '1' ? new Set() : new Set(A.plan.accounts.map(a => a.id)); $$('[data-c=reflAcct]').forEach(i => { i.checked = el.dataset.v === '1'; }); render._keepScroll = true; render(); },
   reflCatsAll: el => { A.ui.reflEx = el.dataset.v === '1' ? new Set() : new Set(A.plan.cats.map(c => c.id)); $$('[data-c=reflCat]').forEach(i => { i.checked = el.dataset.v === '1'; }); render._keepScroll = true; render(); },
   reflExport: () => {
     const [from, to] = periodRange(); const lines = spendingLines(from, to); const by = {};
@@ -494,7 +500,7 @@ Object.assign(ACT, {
     saveFile(`reflect-${from}_${to}.csv`, '﻿' + csv, 'text/csv');
   },
 });
-document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c !== 'reflCat') return; const ex = A.ui.reflEx || (A.ui.reflEx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); });
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'reflAcct') { const ex = A.ui.reflAx || (A.ui.reflAx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); return; } if (el.dataset?.c !== 'reflCat') return; const ex = A.ui.reflEx || (A.ui.reflEx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); });
 
 Object.assign(ACT, { dispBal: el => { A.ui.balStyle = el.dataset.v || ''; savePref('balStyle', A.ui.balStyle); render._keepScroll = true; render(); ACT.displayOpts(); } });
 document.addEventListener('change', e => { if (e.target.dataset?.c !== 'dispNoColor') return; document.body.classList.toggle('nocolor', e.target.checked); try { localStorage.setItem('budget.nocolor', e.target.checked ? '1' : ''); } catch (x) { } });

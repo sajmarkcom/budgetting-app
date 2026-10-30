@@ -446,6 +446,7 @@ body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
 html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .avb{padding:0}.avb>summary{cursor:pointer;list-style:none}.avb>summary::-webkit-details-marker{display:none}.avb>summary::after{content:'▾';margin-left:8px;opacity:.5}.avb[open]>summary::after{content:'▴'}
 .icoth{width:26px}.icoth .sortb{padding:0;opacity:.6}.icoth .sortb svg{width:13px;height:13px}.in.sm{padding:6px 8px;font-size:13px;min-height:0;flex:1}
+.refl-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 </style>
 </head><body>
 <div id="app"></div>
@@ -797,7 +798,7 @@ function ageOfMoney() {
     if (ta && onBudget(ta) && !isCredit(ta)) continue;
     if (startIds.has(t.payee)) continue;
     for (const ln of txLines(t)) {
-      if (ln.amount > 0) { if (ln.cat === 'rta') inflows.push({ date: t.date, left: ln.amount }); }
+      if (ln.amount > 0) inflows.push({ date: t.date, left: ln.amount }); // every cash inflow (income and refunds) is money that arrives
       else if (ln.amount < 0) outflows.push({ date: t.date, amt: -ln.amount });
     }
   }
@@ -2058,6 +2059,9 @@ function acctSheet(id) {
     <div class="field"><label for="aNote">Account notes</label><textarea id="aNote" class="in" rows="2" placeholder="Optional">${esc(a?.note || '')}</textarea></div>
     ${a && ['checking', 'savings', 'cash'].includes(a.type) ? `<div class="field"><label for="aOver">Authorized overdraft</label><input id="aOver" class="in" inputmode="decimal" value="${a.overdraft ? fmtIn(a.overdraft) : ''}" placeholder="0,00"><div class="small muted">How far below zero your bank lets this account go (e.g. 500). Used to warn you before a card debit.</div></div>` : ''}
     ${a ? `<div class="field"><label for="aWork">Working balance</label><input id="aWork" class="in" inputmode="decimal" value="${fmtIn(balances()[a.id].working)}"><div class="small muted">An adjustment transaction is created automatically if you change this amount.</div></div>` : ''}
+    ${a ? (() => { const lk = (A.plan.bank?.conns || []).flatMap(c => c.accounts.map(x => ({ c, x }))).find(o => o.x.acct === a.id); if (!lk) return ''; const mins = lk.x.lastSync ? Math.round((Date.now() - lk.x.lastSync) / 60000) : null; const ago = mins == null ? 'never' : mins < 60 ? mins + ' min ago' : mins < 1440 ? Math.round(mins / 60) + ' hours ago' : Math.round(mins / 1440) + ' days ago';
+      return `<div class="field"><span class="lbl2">Bank Connection</span><div class="small">Linked with ${esc(lk.x.name)}${lk.x.iban ? ' (' + esc(lk.x.iban.slice(-4)) + ')' : ''} at ${esc(lk.c.bank)}.</div><div class="small muted">Last updated ${ago}.</div>
+        <button class="btn sm" style="margin-top:6px; align-self:flex-start" data-a="acctUnlink" data-id="${a.id}">Unlink Account</button></div>`; })() : ''}
     ${a ? `<div class="row"><button class="btn grow" data-a="acctClose" data-id="${a.id}">${a.closed ? 'Reopen Account' : 'Close Account'}</button><button class="btn danger grow" data-a="acctDelete" data-id="${a.id}">${I.trash} Delete</button></div>` : ''}`;
   openSheet(a ? 'Edit Account' : 'Add Account', body, `<button class="btn pri block" data-a="acctSave" data-id="${id || ''}">${a ? 'Save' : 'Add Account'}</button>`, { focus: a ? null : '#aName' });
   if (!a) { const sel = $('#aType'); const upd = () => { $('#loanBox').hidden = !ACCT[sel.value].debt && !ACCT[sel.value].credit; }; sel.addEventListener('change', upd); upd(); }
@@ -2337,9 +2341,9 @@ function periodRange() {
 function spendingLines(from, to) {
   const out = [];
   for (const t of A.tx) {
-    const a = L.acct[t.acct]; if (!onBudget(a)) continue; const m = monthOf(t.date); if (m < from || m > to) continue;
+    const a = L.acct[t.acct]; if (!onBudget(a) || (A.ui.reflAx && A.ui.reflAx.has(t.acct))) continue; const m = monthOf(t.date); if (m < from || m > to) continue;
     if (t.transferAcct && onBudget(L.acct[t.transferAcct])) continue;
-    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat] || (A.ui.reflEx && A.ui.reflEx.has(ln.cat))) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount }); }
+    for (const ln of txLines(t)) { if (!ln.cat || ln.cat === 'rta' || ln.cat === '__start' || !L.cat[ln.cat] || (A.ui.reflEx && A.ui.reflEx.has(ln.cat))) continue; out.push({ m, cat: ln.cat, payee: t.payee, amount: ln.amount, tid: t.id, date: t.date }); }
   }
   return out;
 }
@@ -2388,7 +2392,7 @@ function viewReflect() {
   const [from, to] = periodRange(); const months = monthsBetween(from, to);
   { const lab = from === to ? monthLabel(from) : `${MSHORT[+from.slice(5, 7) - 1]} ${from.slice(0, 4)} – ${MSHORT[+to.slice(5, 7) - 1]} ${to.slice(0, 4)}`; const ex = A.ui.reflEx ? A.ui.reflEx.size : 0;
     h += `<div class="rnav"><button class="ibtn" data-a="reflNav" data-d="-1" aria-label="Previous date range" ${A.ui.period === 'all' ? 'disabled' : ''}>${I.left}</button><strong>${lab}</strong><button class="ibtn" data-a="reflNav" data-d="1" aria-label="Next date range" ${A.ui.period === 'all' || to >= curMonth() ? 'disabled' : ''}>${I.right}</button>
-      <span style="flex:1"></span><button class="tbtn" data-a="reflCats">${ex ? A.plan.cats.filter(c => !c.hidden).length - ex + ' Categories' : 'All Categories'} ▾</button><button class="tbtn" data-a="reflExport">${I.download} Export</button></div>`; }
+      <span style="flex:1"></span><button class="tbtn" data-a="reflCats">${ex ? A.plan.cats.filter(c => !c.hidden).length - ex + ' Categories' : 'All Categories'} ▾</button><button class="tbtn" data-a="reflAccts">${A.ui.reflAx && A.ui.reflAx.size ? A.plan.accounts.filter(a => onBudget(a) && !a.closed && !A.ui.reflAx.has(a.id)).length + ' Accounts' : 'All Accounts'} ▾</button><button class="tbtn" data-a="reflExport">${I.download} Export</button></div>`; }
   const R = A.ui.reflect;
   if (R === 'spending') {
     const lines = spendingLines(from, to); const by = {};
@@ -2396,40 +2400,55 @@ function viewReflect() {
     const nameOf = k => A.ui.groupBy === 'group' ? (L.group[k]?.name || '') : A.ui.groupBy === 'cat' ? catName(k) : (L.payee[k]?.name || 'No payee');
     for (const l of lines) { const k = keyOf(l); by[k] = (by[k] || 0) - l.amount; }
     let items = Object.entries(by).map(([k, v]) => ({ k, v, n: nameOf(k) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+    const full = items.slice(); // the list shows every line (like YNAB); only the donut groups the small ones
     if (items.length > 8) { const rest = items.slice(7).reduce((s, x) => s + x.v, 0); items = items.slice(0, 7).concat([{ k: '_o', v: rest, n: 'Other' }]); }
     const total = items.reduce((s, x) => s + x.v, 0);
     h += `<div class="seg" style="margin-top:6px"><button class="${A.ui.groupBy === 'group' ? 'on' : ''}" data-a="groupBy" data-k="group">Category Groups</button><button class="${A.ui.groupBy === 'cat' ? 'on' : ''}" data-a="groupBy" data-k="cat">Categories</button><button class="${A.ui.groupBy === 'payee' ? 'on' : ''}" data-a="groupBy" data-k="payee">Payees</button></div>
-      <div class="kpis" style="margin-top:10px"><div class="kpi"><span>Total Spending</span><b class="num">${fmt(total)}</b></div><div class="kpi"><span>Average Monthly</span><b class="num">${fmt(Math.round(total / months.length))}</b></div><div class="kpi"><span>Average Daily</span><b class="num">${fmt(Math.round(total / Math.max(1, months.length * 30.4)))}</b></div><div class="kpi"><span>Items</span><b>${items.length}</b></div></div>
+      ${(() => { const today = todayISO(), d0 = from + '-01', d1 = to === curMonth() ? today : addMonths(to, 1) + '-01'; const days = Math.max(1, daysBetween(d0, d1) + (to === curMonth() ? 1 : 0));
+        const cnt = {}; for (const l of lines) if (l.amount < 0) (cnt[l.cat] ||= new Set()).add(l.tid); const freq = Object.entries(cnt).sort((a, b) => b[1].size - a[1].size)[0];
+        const big = lines.filter(l => l.amount < 0).sort((a, b) => a.amount - b.amount)[0];
+        return `<div class="kpis refl-kpis" style="margin-top:10px"><div class="kpi"><span>Total Spending</span><b class="num">${fmt(total)}</b></div><div class="kpi"><span>Average Monthly Spending</span><b class="num">${fmt(Math.round(total / months.length))}</b></div><div class="kpi"><span>Average Daily Spending</span><b class="num">${fmt(Math.round(total / days))}</b></div>
+          <div class="kpi"><span>Most Frequent Category</span><b class="ellip" style="font-size:15px">${freq ? esc(catName(freq[0])) : '—'}</b><span class="small muted">${freq ? freq[1].size + ' transactions' : ''}</span></div><div class="kpi"><span>Largest Outflow</span><b class="ellip" style="font-size:15px">${big ? esc(L.payee[big.payee]?.name || '—') : '—'}</b><span class="small muted num">${big ? fmt(-big.amount) : ''}</span></div></div>`; })()}
       <div class="chartbox" style="margin-top:10px"><div style="max-width:260px; margin:0 auto">${donut(items, total)}</div>
-      <div class="legend">${items.map((x, i) => `<div class="li"><span class="dot" style="background:var(${COLORS[i % 8]})"></span><span class="grow ellip">${esc(x.n)}</span><span class="small muted">${total ? Math.round(x.v / total * 100) : 0} %</span><strong class="num" style="width:96px; text-align:right">${fmt(x.v)}</strong></div>`).join('') || '<div class="muted small" style="padding:8px">No spending in this period.</div>'}</div></div>`;
+      <div class="legend">${full.map((x, i) => `<div class="li"><span class="dot" style="background:var(${COLORS[Math.min(i, 7) % 8]})"></span><span class="grow ellip">${esc(x.n)}</span><span class="small muted">${total ? (x.v / total < 0.01 ? '<1' : Math.round(x.v / total * 100)) : 0} %</span><strong class="num" style="width:96px; text-align:right">${fmt(x.v)}</strong></div>`).join('') || '<div class="muted small" style="padding:8px">No spending in this period.</div>'}</div></div>`;
   } else if (R === 'trends') {
     const lines = spendingLines(from, to); const gids = A.plan.groups.map(g => g.id);
     const series = gids.map((gid, i) => ({ key: gid, label: L.group[gid].name, color: COLORS[i % 8], values: months.map(m => lines.filter(l => l.m === m && L.cat[l.cat].gid === gid).reduce((s, l) => s - l.amount, 0)) })).filter(s => s.values.some(v => v));
     const tot = months.map((_, i) => series.reduce((s, x) => s + x.values[i], 0));
     const avg = Math.round(tot.reduce((a, b) => a + b, 0) / months.length);
-    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Average Monthly</span><b class="num">${fmt(avg)}</b></div><div class="kpi"><span>Highest Month</span><b class="num">${fmt(Math.max(0, ...tot))}</b></div></div>
-      <div class="chartbox" style="margin-top:10px">${bars(months, series, { aria: 'Spending by month' })}<div class="legend">${series.map(s => `<div class="li"><span class="dot" style="background:var(${s.color})"></span><span class="grow">${esc(s.label)}</span><strong class="num">${fmt(s.values.reduce((a, b) => a + b, 0))}</strong></div>`).join('')}</div></div>`;
+    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Average Monthly Spending</span><b class="num">${fmt(avg)}</b></div><div class="kpi"><span>Total Spending</span><b class="num">${fmt(tot.reduce((a, b) => a + b, 0))}</b></div><div class="kpi"><span>Highest Month</span><b class="num">${fmt(Math.max(0, ...tot))}</b></div></div>
+      <div class="chartbox" style="margin-top:10px">${bars(months, series, { aria: 'Spending by month' })}<div class="legend">${series.map(s => `<div class="li"><span class="dot" style="background:var(${s.color})"></span><span class="grow">${esc(s.label)}</span><strong class="num">${fmt(s.values.reduce((a, b) => a + b, 0))}</strong></div>`).join('')}</div></div>
+      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th>Month</th><th>Total Spending</th><th>Compared to Average</th></tr></thead><tbody>
+        ${months.map((m, i) => ({ m, v: tot[i] })).reverse().map(({ m, v }) => { const d = v - avg; return `<tr><td>${esc(monthLabel(m))}</td><td>${fmt(v)}</td><td class="${d > 0 ? 'amt-bad' : 'amt-pos'}">${d >= 0 ? '+' : ''}${fmt(d)} (${avg ? Math.abs(Math.round(d / avg * 1000) / 10).toString().replace('.', ',') : 0}%)</td></tr>`; }).join('')}
+        <tr class="tot"><td>Total</td><td>${fmt(tot.reduce((a, b) => a + b, 0))}</td><td></td></tr></tbody></table></div>`;
   } else if (R === 'networth') {
     const acc = A.plan.accounts; const assets = [], debts = [], net = [];
     for (const m of months) { let as = 0, de = 0; for (const a of acc) { const b = A.tx.filter(t => t.acct === a.id && monthOf(t.date) <= m).reduce((s, t) => s + t.amount, 0); if (b >= 0) as += b; else de += b; } assets.push(as); debts.push(de); net.push(as + de); }
     const last = net.length - 1; const ch = net[last] - net[0];
-    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Net Worth</span><b class="num">${fmt(net[last])}</b></div><div class="kpi"><span>Change</span><b class="num" style="color:${ch >= 0 ? 'var(--accent-strong)' : 'var(--bad)'}">${ch >= 0 ? '+' : ''}${fmt(ch)}</b></div><div class="kpi"><span>Assets</span><b class="num">${fmt(assets[last])}</b></div><div class="kpi"><span>Debts</span><b class="num">${fmt(debts[last])}</b></div></div>
+    h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Net Worth</span><b class="num">${fmt(net[last])}</b></div><div class="kpi"><span>Change in Net Worth</span><b class="num" style="color:${ch >= 0 ? 'var(--accent-strong)' : 'var(--bad)'}">${ch >= 0 ? '+' : ''}${fmt(ch)}</b></div><div class="kpi"><span>Assets</span><b class="num">${fmt(assets[last])}</b></div><div class="kpi"><span>Debts</span><b class="num">${fmt(debts[last])}</b></div></div>
       <div class="chartbox" style="margin-top:10px">${bars(months, [{ label: 'Assets', color: '--c1', values: assets }, { label: 'Debts', color: '--c5', values: debts }], { line: net, lineLabel: 'Net', aria: 'Net worth by month' })}
-      <div class="legend"><div class="li"><span class="dot" style="background:var(--c1)"></span><span class="grow">Assets</span></div><div class="li"><span class="dot" style="background:var(--c5)"></span><span class="grow">Debts</span></div><div class="li"><span class="dot" style="background:var(--fg); border-radius:99px"></span><span class="grow">Net Worth</span></div></div></div>`;
+      <div class="legend"><div class="li"><span class="dot" style="background:var(--c1)"></span><span class="grow">Assets</span></div><div class="li"><span class="dot" style="background:var(--c5)"></span><span class="grow">Debts</span></div><div class="li"><span class="dot" style="background:var(--fg); border-radius:99px"></span><span class="grow">Net Worth</span></div></div></div>
+      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th>Month</th><th>Net Worth</th><th>Monthly Change</th></tr></thead><tbody>
+        ${months.map((m, i) => ({ m, i })).reverse().map(({ m, i }) => { const prev = i ? net[i - 1] : null; const d = prev == null ? null : net[i] - prev; return `<tr><td>${esc(monthLabel(m))}</td><td>${fmt(net[i])}</td><td class="${d == null ? '' : d >= 0 ? 'amt-pos' : 'amt-bad'}">${d == null ? '—' : (d >= 0 ? '+' : '') + fmt(d) + (prev ? ' (' + (Math.round(d / Math.abs(prev) * 1000) / 10).toString().replace('.', ',') + '%)' : '')}</td></tr>`; }).join('')}</tbody></table></div>`;
   } else if (R === 'ie') {
     const lines = spendingLines(from, to);
     const notIncome = t => ['Solde initial', 'Ajustement de rapprochement', 'Starting Balance', 'Reconciliation Balance Adjustment'].includes(L.payee[t.payee]?.name);
-    const inc = months.map(m => A.tx.filter(t => monthOf(t.date) === m && onBudget(L.acct[t.acct]) && !notIncome(t)).reduce((s, t) => s + txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0), 0));
+    const inc = months.map(m => A.tx.filter(t => monthOf(t.date) === m && onBudget(L.acct[t.acct]) && !notIncome(t) && !(A.ui.reflAx && A.ui.reflAx.has(t.acct))).reduce((s, t) => s + txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0), 0));
     const rows = A.plan.groups.map(g => ({ g, v: months.map(m => lines.filter(l => l.m === m && L.cat[l.cat].gid === g.id).reduce((s, l) => s + l.amount, 0)) })).filter(r => r.v.some(x => x));
     const exp = months.map((_, i) => rows.reduce((s, r) => s + r.v[i], 0));
+    const srcBy = {}; for (const t of A.tx) { const mi = months.indexOf(monthOf(t.date)); if (mi < 0 || !onBudget(L.acct[t.acct]) || notIncome(t) || (A.ui.reflAx && A.ui.reflAx.has(t.acct))) continue; const v = txLines(t).filter(l => l.cat === 'rta').reduce((x, l) => x + l.amount, 0); if (!v) continue; const k = t.transferAcct ? trLabel(t.transferAcct, t.acct) : (L.payee[t.payee]?.name || 'No payee'); (srcBy[k] ||= months.map(() => 0))[mi] += v; }
+    const srcs = Object.entries(srcBy).sort((a, b) => a[0].localeCompare(b[0]));
     const sum = a => a.reduce((x, y) => x + y, 0);
     h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Income</span><b class="num">${fmt(sum(inc))}</b></div><div class="kpi"><span>Expenses</span><b class="num">${fmt(sum(exp))}</b></div><div class="kpi"><span>Net Income</span><b class="num">${fmt(sum(inc) + sum(exp))}</b></div><div class="kpi"><span>Savings Rate</span><b>${sum(inc) ? Math.round((sum(inc) + sum(exp)) / sum(inc) * 100) : 0} %</b></div></div>
       <div class="chartbox" style="margin-top:10px">${bars(months, [{ label: 'Income', color: '--c1', values: inc }, { label: 'Expenses', color: '--c3', values: exp }], { line: months.map((_, i) => inc[i] + exp[i]), lineLabel: 'Net', aria: 'Income and expenses' })}</div>
-      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th>Category Group</th>${months.map(m => `<th>${esc(monthLabel(m, true))}</th>`).join('')}<th>Total</th></tr></thead><tbody>
-        <tr class="tot"><td>Total Income</td>${inc.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(sum(inc))}</td></tr>
-        ${rows.map(r => `<tr><td>${esc(r.g.name)}</td>${r.v.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(sum(r.v))}</td></tr>`).join('')}
-        <tr class="tot"><td>Total Expenses</td>${exp.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(sum(exp))}</td></tr>
-        <tr class="tot"><td>Net Income</td>${months.map((_, i) => `<td>${fmt(inc[i] + exp[i])}</td>`).join('')}<td>${fmt(sum(inc) + sum(exp))}</td></tr></tbody></table></div>`;
+      <div class="chartbox" style="margin-top:10px; padding:0"><table class="tbl"><thead><tr><th></th>${months.map(m => `<th>${esc(monthLabel(m, true))}</th>`).join('')}<th>Average</th><th>Total</th></tr></thead><tbody>
+        <tr class="sub"><td colspan="${months.length + 3}"><strong>Income</strong></td></tr>
+        ${srcs.map(([k, v]) => `<tr><td class="ellip" style="max-width:260px" title="${esc(k)}">${esc(k)}</td>${v.map(x => `<td>${fmt(x)}</td>`).join('')}<td>${fmt(Math.round(sum(v) / months.length))}</td><td>${fmt(sum(v))}</td></tr>`).join('')}
+        <tr class="tot"><td>Total Income</td>${inc.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(Math.round(sum(inc) / months.length))}</td><td>${fmt(sum(inc))}</td></tr>
+        <tr class="sub"><td colspan="${months.length + 3}"><strong>Expenses</strong></td></tr>
+        ${rows.map(r => `<tr><td>${esc(r.g.name)}</td>${r.v.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(Math.round(sum(r.v) / months.length))}</td><td>${fmt(sum(r.v))}</td></tr>`).join('')}
+        <tr class="tot"><td>Total Expenses</td>${exp.map(v => `<td>${fmt(v)}</td>`).join('')}<td>${fmt(Math.round(sum(exp) / months.length))}</td><td>${fmt(sum(exp))}</td></tr>
+        <tr class="tot"><td>Net Income</td>${months.map((_, i) => `<td>${fmt(inc[i] + exp[i])}</td>`).join('')}<td>${fmt(Math.round((sum(inc) + sum(exp)) / months.length))}</td><td>${fmt(sum(inc) + sum(exp))}</td></tr></tbody></table></div>`;
   } else {
     const ag = ageOfMoney(); const vals = months.map(m => ag.at(m === curMonth() ? '9999-12-31' : addMonths(m, 1) + '-00') || 0);
     h += `<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Age of Money</span><b>${ag.now ?? '—'} days</b></div></div>
@@ -3665,6 +3684,7 @@ const ACT = {
   },
   acctClose: el => { const a = L.acct[el.dataset.id]; if (!a.closed && balances()[a.id].working !== 0) { toast('The balance must be 0 to close the account'); return; } mutate(a.closed ? 'Account reopened' : 'Account closed', () => { a.closed = !a.closed; }); closeSheet(); },
   acctDelete: el => confirmSheet('Delete Account', 'All its transactions will be deleted. You can undo right after.', 'Delete', 'acctDeleteDo', { id: el.dataset.id }),
+  acctUnlink: el => { const id = el.dataset.id; if (!confirm('Unlink this account from the bank? Your transactions stay; new bank lines stop coming in. You can link it again in Bank Connections.')) return; mutate('Account unlinked', () => { for (const c of A.plan.bank?.conns || []) for (const x of c.accounts) if (x.acct === id) x.acct = null; }); acctSheet(id); },
   acctDeleteDo: el => { const id = el.dataset.id; mutate('Account deleted', () => { deleteTx(A.tx.filter(t => t.acct === id).map(t => t.id)); A.plan.accounts = A.plan.accounts.filter(a => a.id !== id); A.plan.cats = A.plan.cats.filter(c => c.cc !== id); A.plan.scheduled = A.plan.scheduled.filter(s => s.acct !== id && s.transferAcct !== id); }); closeSheet(); A.acct = null; render(); },
   openAcctNav: el => { A.ui.catFilter = null; A.view = 'accounts'; A.acct = el.dataset.id; A.ui.regFilter = 'all'; A.ui.search = ''; A.ui.regLimit = 150; A.ui.select = false; A.ui.selected.clear(); render(); },
   collapseClosed: () => { A.ui.collapsed.s_closed = A.ui.collapsed.s_closed === false ? true : false; render._keepScroll = true; render(); },
@@ -4445,6 +4465,12 @@ Object.assign(ACT, {
     popMenu(Math.max(8, r.right - 300), r.bottom + 6, `<div class="pm-form" style="width:300px; max-height:60vh; overflow:auto"><div class="row" style="gap:6px; margin-bottom:6px"><button class="btn sm" data-a="reflCatsAll" data-v="1" data-keep="1">Select All</button><button class="btn sm" data-a="reflCatsAll" data-v="0" data-keep="1">Select None</button></div>
       ${A.plan.groups.map(g => { const cs = A.plan.cats.filter(c => c.gid === g.id && !c.hidden && !c.cc); if (!cs.length) return ''; return `<div class="pm-h" style="padding-left:0">${esc(g.name)}</div>` + cs.map(c => `<label class="pm-chk"><input type="checkbox" data-c="reflCat" data-id="${c.id}" ${ex.has(c.id) ? '' : 'checked'}> ${esc(catName(c.id))}</label>`).join(''); }).join('')}</div>`, 'pm-rcats');
   },
+  reflAccts: el => {
+    const ex = A.ui.reflAx || new Set(), r = el.getBoundingClientRect();
+    popMenu(Math.max(8, r.right - 280), r.bottom + 6, `<div class="pm-form" style="width:280px; max-height:60vh; overflow:auto"><div class="row" style="gap:6px; margin-bottom:6px"><button class="btn sm" data-a="reflAcctsAll" data-v="1" data-keep="1">Select All</button><button class="btn sm" data-a="reflAcctsAll" data-v="0" data-keep="1">Select None</button></div>
+      ${A.plan.accounts.filter(a => onBudget(a) && !a.closed).map(a => `<label class="pm-chk"><input type="checkbox" data-c="reflAcct" data-id="${a.id}" ${ex.has(a.id) ? '' : 'checked'}> ${esc(a.name)}</label>`).join('')}</div>`, 'pm-view');
+  },
+  reflAcctsAll: el => { A.ui.reflAx = el.dataset.v === '1' ? new Set() : new Set(A.plan.accounts.map(a => a.id)); $$('[data-c=reflAcct]').forEach(i => { i.checked = el.dataset.v === '1'; }); render._keepScroll = true; render(); },
   reflCatsAll: el => { A.ui.reflEx = el.dataset.v === '1' ? new Set() : new Set(A.plan.cats.map(c => c.id)); $$('[data-c=reflCat]').forEach(i => { i.checked = el.dataset.v === '1'; }); render._keepScroll = true; render(); },
   reflExport: () => {
     const [from, to] = periodRange(); const lines = spendingLines(from, to); const by = {};
@@ -4454,7 +4480,7 @@ Object.assign(ACT, {
     saveFile(`reflect-${from}_${to}.csv`, '﻿' + csv, 'text/csv');
   },
 });
-document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c !== 'reflCat') return; const ex = A.ui.reflEx || (A.ui.reflEx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); });
+document.addEventListener('change', e => { const el = e.target; if (el.dataset?.c === 'reflAcct') { const ex = A.ui.reflAx || (A.ui.reflAx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); return; } if (el.dataset?.c !== 'reflCat') return; const ex = A.ui.reflEx || (A.ui.reflEx = new Set()); el.checked ? ex.delete(el.dataset.id) : ex.add(el.dataset.id); render._keepScroll = true; render(); });
 
 Object.assign(ACT, { dispBal: el => { A.ui.balStyle = el.dataset.v || ''; savePref('balStyle', A.ui.balStyle); render._keepScroll = true; render(); ACT.displayOpts(); } });
 document.addEventListener('change', e => { if (e.target.dataset?.c !== 'dispNoColor') return; document.body.classList.toggle('nocolor', e.target.checked); try { localStorage.setItem('budget.nocolor', e.target.checked ? '1' : ''); } catch (x) { } });

@@ -342,7 +342,7 @@ function ageOfMoney() {
     if (ta && onBudget(ta) && !isCredit(ta)) continue;
     if (startIds.has(t.payee)) continue;
     for (const ln of txLines(t)) {
-      if (ln.amount > 0) { if (ln.cat === 'rta') inflows.push({ date: t.date, left: ln.amount }); }
+      if (ln.amount > 0) inflows.push({ date: t.date, left: ln.amount }); // every cash inflow (income and refunds) is money that arrives
       else if (ln.amount < 0) outflows.push({ date: t.date, amt: -ln.amount });
     }
   }
