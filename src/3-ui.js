@@ -264,7 +264,7 @@ function catRow(c, m) {
   const s = catStatus(c, m), x = s.x, ti = s.ti;
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
   const note = targetText(c, m, s);
-  const pillIcon = s.cls === 'good' && ti ? '✓ ' : s.cls === 'warn' ? '! ' : '';
+  const pillIcon = s.cls === 'good' && ti ? '<i class="picon">✓ </i>' : s.cls === 'warn' ? '<i class="picon">! </i>' : s.cls === 'bad' ? '<i class="picon">✕ </i>' : ''; // shown only with Display Options → Differentiate Without Color, like YNAB
   const ck = (A.ui.selCats || new Set()).has(c.id);
   return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id || ck ? 'sel' : ''}" data-a="catSel" data-c="${c.id}" ${DESK() && !c.cc ? `draggable="true" data-cdrag="${c.id}"` : ''}>${DESK() ? `<input type="checkbox" class="cchk" data-c="catChk" data-id="${c.id}" ${ck ? 'checked' : ''} aria-label="Select ${esc(c.name)}">` : ''}
     <div class="cname">
