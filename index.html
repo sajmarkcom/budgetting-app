@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#1E3A8A"><meta name="apple-mobile-web-app-status-bar-style" content="default"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>html{color-scheme:light}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://api.ynab.com https://script.google.com https://script.googleusercontent.com https://cdnjs.cloudflare.com; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer">
@@ -443,6 +443,7 @@ body.hideamt .num, body.hideamt .amt, body.hideamt .rta-amt{filter:blur(7px)}
 .tx[data-tid]{-webkit-user-select:none;user-select:none}
 .pmenu{max-height:calc(100vh - 16px);overflow-y:auto}
 .pmenu.touch{min-width:220px}.pmenu.touch .pm-i{min-height:46px;font-size:16px}
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 </style>
 </head><body>
 <div id="app"></div>
@@ -3918,6 +3919,10 @@ document.addEventListener('keydown', e => {
 });
 // choosing a payee fills its default category, like YNAB
 document.addEventListener('change', e => { if (e.target.id !== 'inlPayee') return; const v = e.target.value.trim(), c = $('#inlCat'); if (!c || c.value) return; const y = L.payeeByName[v.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat]) c.value = y.lastCat; });
+
+// no zoom, like a real app: block iOS pinch gestures and double-tap zoom
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
 /* ================= Budget — menus: right-click on transactions, plan menu, quick category rename ================= */
 let POP_TRIGGER = null, POP_SWALLOW = false;
 function closePop() { $$('.pmenu').forEach(e => e.remove()); POP_TRIGGER = null; }

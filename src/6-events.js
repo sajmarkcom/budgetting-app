@@ -365,3 +365,7 @@ document.addEventListener('keydown', e => {
 });
 // choosing a payee fills its default category, like YNAB
 document.addEventListener('change', e => { if (e.target.id !== 'inlPayee') return; const v = e.target.value.trim(), c = $('#inlCat'); if (!c || c.value) return; const y = L.payeeByName[v.toLowerCase()]; if (y?.lastCat && L.cat[y.lastCat]) c.value = y.lastCat; });
+
+// no zoom, like a real app: block iOS pinch gestures and double-tap zoom
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
