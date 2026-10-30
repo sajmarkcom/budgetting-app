@@ -261,11 +261,16 @@ function viewPlan() {
   return h;
 }
 const chip = (f, l) => `<button class="chip ${A.ui.filter === f ? 'on' : ''}" data-a="filter" data-f="${f}">${l}</button>`;
+function pieIcon(p) {
+  if (p >= 1) return `<svg class="picon pie done" viewBox="-1 -1 2 2" aria-hidden="true"><circle r=".9" class="o"/><path d="M-.42 0 L-.12 .3 L.45 -.3" class="ck"/></svg>`;
+  const a = Math.max(0, Math.min(.999, p)) * 2 * Math.PI, x = Math.cos(a - Math.PI / 2), y = Math.sin(a - Math.PI / 2);
+  return `<svg class="picon pie" viewBox="-1 -1 2 2" aria-hidden="true"><circle r=".9" class="o"/>${p > 0 ? `<path d="M0 0 L0 -.65 A.65 .65 0 ${a > Math.PI ? 1 : 0} 1 ${(x * .65).toFixed(3)} ${(y * .65).toFixed(3)} Z" class="i"/>` : ''}</svg>`;
+}
 function catRow(c, m) {
   const s = catStatus(c, m), x = s.x, ti = s.ti;
   const barCls = s.cls === 'bad' || s.cls === 'credit' ? 'bad' : s.cls === 'warn' ? 'warn' : '';
   const note = targetText(c, m, s);
-  const pillIcon = s.cls === 'good' && ti ? '<i class="picon">✓ </i>' : s.cls === 'warn' ? '<i class="picon">! </i>' : ''; // shown only with Display Options → Differentiate Without Color, like YNAB
+  const pillIcon = ti && !ti.snoozed && s.cls !== 'bad' ? pieIcon(ti.under > 0 ? ti.pct : 1) : ''; // YNAB web: target progress circle (check when funded) inside the pill
   const ck = (A.ui.selCats || new Set()).has(c.id);
   return `<div class="cat ${c.hidden ? 'muted' : ''} ${A.ui.selCat === c.id || ck ? 'sel' : ''}" data-a="catSel" data-c="${c.id}" ${DESK() && !c.cc ? `draggable="true" data-cdrag="${c.id}"` : ''}>${DESK() ? `<input type="checkbox" class="cchk" data-c="catChk" data-id="${c.id}" ${ck ? 'checked' : ''} aria-label="Select ${esc(c.name)}">` : ''}
     <div class="cname">
