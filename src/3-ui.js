@@ -69,6 +69,7 @@ function render() {
   $('#nav').innerHTML = DESK() ? '' : `<div>
     ${navBtn('home', 'Home', I.home, homeBadge())}${navBtn('plan', 'Plan', I.plan)}${navBtn('tx', 'Spending', I.cash)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('reflect', 'Reflect', I.reflect)}
   </div>`;
+  navPill();
   const showFab = !DESK() && (A.view === 'home' || A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
   $('#fab').hidden = !showFab;
   if (selOn() && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
@@ -88,6 +89,25 @@ function animateRender() {
     }
   }
   animateRender.seen = all; animateRender.key = key;
+}
+/* sliding glass pill behind the active tab (like YNAB / iOS 26) */
+function navPill() {
+  const row = $('#nav > div'), on = row && $('#nav button.on');
+  if (!on) { navPill.x = null; return; }
+  const pill = document.createElement('i'); pill.className = 'navpill'; row.prepend(pill);
+  const x = on.offsetLeft, w = on.offsetWidth;
+  pill.style.cssText = `left:${x}px;width:${w}px`;
+  const from = navPill.x;
+  if (from != null && from !== x && pill.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const d = from - x;
+    pill.animate([
+      { transform: `translateX(${d}px) scale(1,1)` },
+      { transform: `translateX(${d * .45}px) scale(1.18,.9)`, offset: .45 },
+      { transform: 'translateX(0) scale(1,1)' }
+    ], { duration: 420, easing: 'cubic-bezier(.3,1.35,.5,1)' });
+    on.animate([{ transform: 'scale(.86)' }, { transform: 'scale(1.06)', offset: .6 }, { transform: 'scale(1)' }], { duration: 360, easing: 'ease-out' });
+  }
+  navPill.x = x;
 }
 const navBtn = (v, l, icn, badge = 0) => `<button data-a="nav" data-v="${v}" class="${A.view === v || (v === 'home' && A.view === 'settings') ? 'on' : ''}" aria-current="${A.view === v ? 'page' : 'false'}">${icn}${badge ? `<i class="nbadge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${l}</span></button>`;
 const homeBadge = () => A.tx.filter(t => t.approved === false && L.acct[t.acct] && !L.acct[t.acct].closed).length;

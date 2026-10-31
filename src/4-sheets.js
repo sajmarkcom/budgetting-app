@@ -12,7 +12,14 @@ function openSheet(title, body, foot = '', opts = {}) {
   const f = opts.focus && $(opts.focus, s); if (f) setTimeout(() => { f.focus(); if (f.select) f.select(); }, 60);
   return s;
 }
-function closeSheet(silent) { const s = $('#scrim'); if (s) s.remove(); document.body.style.overflow = ''; SH = null; }
+function closeSheet(silent) {
+  const s = $('#scrim');
+  if (s) {
+    if (silent || matchMedia('(prefers-reduced-motion: reduce)').matches) s.remove();
+    else { s.id = ''; s.classList.add('closing'); const done = () => s.remove(); s.addEventListener('animationend', e => { if (e.target === s) done(); }); setTimeout(done, 400); }
+  }
+  document.body.style.overflow = ''; SH = null;
+}
 function refreshSheetBody(html) { const b = $('#scrim .sheet-b'); if (b) b.innerHTML = html; }
 
 function catOptions(sel, { rta = true, none = true, m = A.month, noneLabel = 'Category Needed', amounts = true } = {}) {
