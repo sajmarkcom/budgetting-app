@@ -64,6 +64,7 @@ function render() {
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
   const insp = A.view === 'plan' && DESK() && !A.ui.inspHide ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
   app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''} ${A.ui.sideHide && DESK() ? 'noside' : ''}">${DESK() && !A.ui.sideHide ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}${DESK() && A.ui.sideHide ? `<button class="side-open" data-a="sideToggle" title="Show sidebar (shift .)" aria-label="Show sidebar">${I.right}</button>` : ''}<div class="main">${html}</div>${insp}</div>`;
+  animateRender();
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
     ${navBtn('home', 'Home', I.home, homeBadge())}${navBtn('plan', 'Plan', I.plan)}${navBtn('tx', 'Spending', I.cash)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('reflect', 'Reflect', I.reflect)}
@@ -71,6 +72,22 @@ function render() {
   const showFab = !DESK() && (A.view === 'home' || A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
   $('#fab').hidden = !showFab;
   if (selOn() && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
+}
+/* YNAB-style entrance animations: screen content rises in on navigation, new transactions slide up from the bottom */
+function animateRender() {
+  const key = A.view + '|' + (A.acct || '');
+  const seen = animateRender.seen;
+  const all = new Set(A.tx.map(t => t.id));
+  if (seen && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (animateRender.key !== key) {
+      const kids = [...($('.main')?.children || [])].filter(el => !el.matches('.top,.dhead,.colhead')).slice(0, 12);
+      kids.forEach((el, i) => { el.style.animationDelay = Math.min(i * 35, 280) + 'ms'; el.classList.add('anim-in'); });
+    } else {
+      const fresh = [...document.querySelectorAll('.main [data-tid]')].filter(el => !seen.has(el.dataset.tid)).slice(0, 15);
+      fresh.forEach((el, i) => { el.style.animationDelay = (i * 45) + 'ms'; el.classList.add('tx-in'); });
+    }
+  }
+  animateRender.seen = all; animateRender.key = key;
 }
 const navBtn = (v, l, icn, badge = 0) => `<button data-a="nav" data-v="${v}" class="${A.view === v || (v === 'home' && A.view === 'settings') ? 'on' : ''}" aria-current="${A.view === v ? 'page' : 'false'}">${icn}${badge ? `<i class="nbadge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${l}</span></button>`;
 const homeBadge = () => A.tx.filter(t => t.approved === false && L.acct[t.acct] && !L.acct[t.acct].closed).length;

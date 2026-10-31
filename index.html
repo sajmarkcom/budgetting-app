@@ -301,6 +301,13 @@ button.li:hover{background:var(--surface-2)}
 .sheet-f{padding-block:10px; border-top:1px solid var(--line); display:flex; gap:10px}
 @keyframes up{from{transform:translateY(40px); opacity:.4}to{transform:none; opacity:1}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
+.bankrow .grow{min-width:0}.bankbtns{display:flex;align-items:center;gap:2px;flex:none}.bankbtns .ibtn{width:38px;height:38px}.bankrow.wide{flex-wrap:wrap;row-gap:6px}.bankrow.wide .grow{flex-basis:calc(100% - 60px)}.bankrow.wide .bankbtns{margin-left:48px}
+@keyframes animin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes txin{0%{opacity:0;transform:translateY(46px)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes txflash{0%,40%{background:color-mix(in srgb,var(--accent) 22%,transparent)}100%{background:transparent}}
+.anim-in{animation:animin .34s cubic-bezier(.2,.9,.3,1) both}
+.tx.tx-in{animation:txin .45s cubic-bezier(.2,.9,.3,1) both,txflash 1.6s ease-out .1s both}
+@media (prefers-reduced-motion:reduce){ .anim-in,.tx.tx-in{animation:none} }
 @media (prefers-reduced-motion:reduce){ .sheet,.scrim{animation:none} .ghead .gname svg{transition:none} }
 .bigamt{font-family:var(--f-display); font-size:38px; font-weight:700; text-align:center; border:none; background:transparent; width:100%; height:58px; font-variant-numeric:tabular-nums}
 .bigamt:focus{outline:none}
@@ -1430,6 +1437,7 @@ function render() {
   const y = window.scrollY; const mainY = $('.main')?.scrollTop || 0;
   const insp = A.view === 'plan' && DESK() && !A.ui.inspHide ? `<aside class="insp" aria-label="Month summary">${inspector()}</aside>` : '';
   app.innerHTML = `<div class="shell ${insp ? 'with-insp' : ''} ${A.ui.compact ? 'compact' : ''} ${A.ui.sideHide && DESK() ? 'noside' : ''}">${DESK() && !A.ui.sideHide ? `<aside class="side" aria-label="Navigation">${sidebar()}</aside>` : ''}${DESK() && A.ui.sideHide ? `<button class="side-open" data-a="sideToggle" title="Show sidebar (shift .)" aria-label="Show sidebar">${I.right}</button>` : ''}<div class="main">${html}</div>${insp}</div>`;
+  animateRender();
   if (render._keepScroll) { window.scrollTo(0, y); const mn = $('.main'); if (mn) mn.scrollTop = mainY; } render._keepScroll = false;
   $('#nav').innerHTML = DESK() ? '' : `<div>
     ${navBtn('home', 'Home', I.home, homeBadge())}${navBtn('plan', 'Plan', I.plan)}${navBtn('tx', 'Spending', I.cash)}${navBtn('accounts', 'Accounts', I.accts)}${navBtn('reflect', 'Reflect', I.reflect)}
@@ -1437,6 +1445,22 @@ function render() {
   const showFab = !DESK() && (A.view === 'home' || A.view === 'plan' || A.view === 'accounts' || A.view === 'tx') && !A.ui.select && A.plan.accounts.some(a => !a.closed);
   $('#fab').hidden = !showFab;
   if (selOn() && A.ui.selected.size) $('#actionbar').innerHTML = actionBar(); else $('#actionbar').innerHTML = '';
+}
+/* YNAB-style entrance animations: screen content rises in on navigation, new transactions slide up from the bottom */
+function animateRender() {
+  const key = A.view + '|' + (A.acct || '');
+  const seen = animateRender.seen;
+  const all = new Set(A.tx.map(t => t.id));
+  if (seen && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (animateRender.key !== key) {
+      const kids = [...($('.main')?.children || [])].filter(el => !el.matches('.top,.dhead,.colhead')).slice(0, 12);
+      kids.forEach((el, i) => { el.style.animationDelay = Math.min(i * 35, 280) + 'ms'; el.classList.add('anim-in'); });
+    } else {
+      const fresh = [...document.querySelectorAll('.main [data-tid]')].filter(el => !seen.has(el.dataset.tid)).slice(0, 15);
+      fresh.forEach((el, i) => { el.style.animationDelay = (i * 45) + 'ms'; el.classList.add('tx-in'); });
+    }
+  }
+  animateRender.seen = all; animateRender.key = key;
 }
 const navBtn = (v, l, icn, badge = 0) => `<button data-a="nav" data-v="${v}" class="${A.view === v || (v === 'home' && A.view === 'settings') ? 'on' : ''}" aria-current="${A.view === v ? 'page' : 'false'}">${icn}${badge ? `<i class="nbadge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${l}</span></button>`;
 const homeBadge = () => A.tx.filter(t => t.approved === false && L.acct[t.acct] && !L.acct[t.acct].closed).length;
@@ -3612,9 +3636,9 @@ function bankSettingsHtml() {
   const rows = b.conns.map(c => {
     const days = Math.round((new Date(c.validUntil) - Date.now()) / 86400000);
     const accs = c.accounts.filter(x => x.acct).map(x => esc(L.acct[x.acct]?.name || x.name)).join(', ') || 'No account linked';
-    return `<div class="li" style="flex-wrap:wrap"><span class="ic">${I.bank}</span><span class="grow" style="min-width:160px"><strong>${esc(c.bank)}</strong><div class="small muted">${accs}</div>
+    return `<div class="li bankrow${days < 30 ? ' wide' : ''}"><span class="ic">${I.bank}</span><span class="grow"><strong>${esc(c.bank)}</strong><div class="small muted">${accs}</div>
       <div class="small ${days < 14 ? 'amt-bad' : 'muted'}">${days > 0 ? 'Access valid for ' + days + ' days' : 'Access expired: reconnect'}${c.lastSync ? ' · last import ' + new Date(c.lastSync).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</div></span>
-      <button class="btn sm" data-a="bankMap" data-id="${c.id}">Accounts</button>${days < 30 ? `<button class="btn sm" data-a="bankLink" data-bank="${esc(c.bank)}">Reconnect</button>` : ''}<button class="ibtn" data-a="bankRemove" data-id="${c.id}" aria-label="Disconnect ${esc(c.bank)}">${I.trash}</button></div>`;
+      <span class="bankbtns"><button class="btn sm" data-a="bankMap" data-id="${c.id}">Accounts</button>${days < 30 ? `<button class="btn sm" data-a="bankLink" data-bank="${esc(c.bank)}">Reconnect</button>` : ''}<button class="ibtn" data-a="bankRemove" data-id="${c.id}" aria-label="Disconnect ${esc(c.bank)}">${I.trash}</button></span></div>`;
   }).join('');
   return `<div class="sec-t"><span>Bank Connections</span></div><div class="card">${rows}
     ${pendList().length ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(pendList().slice(-1)[0].bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCheck">Check now</button><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}

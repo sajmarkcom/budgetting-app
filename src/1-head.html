@@ -298,6 +298,13 @@ button.li:hover{background:var(--surface-2)}
 .sheet-f{padding-block:10px; border-top:1px solid var(--line); display:flex; gap:10px}
 @keyframes up{from{transform:translateY(40px); opacity:.4}to{transform:none; opacity:1}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
+.bankrow .grow{min-width:0}.bankbtns{display:flex;align-items:center;gap:2px;flex:none}.bankbtns .ibtn{width:38px;height:38px}.bankrow.wide{flex-wrap:wrap;row-gap:6px}.bankrow.wide .grow{flex-basis:calc(100% - 60px)}.bankrow.wide .bankbtns{margin-left:48px}
+@keyframes animin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes txin{0%{opacity:0;transform:translateY(46px)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes txflash{0%,40%{background:color-mix(in srgb,var(--accent) 22%,transparent)}100%{background:transparent}}
+.anim-in{animation:animin .34s cubic-bezier(.2,.9,.3,1) both}
+.tx.tx-in{animation:txin .45s cubic-bezier(.2,.9,.3,1) both,txflash 1.6s ease-out .1s both}
+@media (prefers-reduced-motion:reduce){ .anim-in,.tx.tx-in{animation:none} }
 @media (prefers-reduced-motion:reduce){ .sheet,.scrim{animation:none} .ghead .gname svg{transition:none} }
 .bigamt{font-family:var(--f-display); font-size:38px; font-weight:700; text-align:center; border:none; background:transparent; width:100%; height:58px; font-variant-numeric:tabular-nums}
 .bigamt:focus{outline:none}

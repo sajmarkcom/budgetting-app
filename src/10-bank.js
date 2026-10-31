@@ -25,9 +25,9 @@ function bankSettingsHtml() {
   const rows = b.conns.map(c => {
     const days = Math.round((new Date(c.validUntil) - Date.now()) / 86400000);
     const accs = c.accounts.filter(x => x.acct).map(x => esc(L.acct[x.acct]?.name || x.name)).join(', ') || 'No account linked';
-    return `<div class="li" style="flex-wrap:wrap"><span class="ic">${I.bank}</span><span class="grow" style="min-width:160px"><strong>${esc(c.bank)}</strong><div class="small muted">${accs}</div>
+    return `<div class="li bankrow${days < 30 ? ' wide' : ''}"><span class="ic">${I.bank}</span><span class="grow"><strong>${esc(c.bank)}</strong><div class="small muted">${accs}</div>
       <div class="small ${days < 14 ? 'amt-bad' : 'muted'}">${days > 0 ? 'Access valid for ' + days + ' days' : 'Access expired: reconnect'}${c.lastSync ? ' · last import ' + new Date(c.lastSync).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</div></span>
-      <button class="btn sm" data-a="bankMap" data-id="${c.id}">Accounts</button>${days < 30 ? `<button class="btn sm" data-a="bankLink" data-bank="${esc(c.bank)}">Reconnect</button>` : ''}<button class="ibtn" data-a="bankRemove" data-id="${c.id}" aria-label="Disconnect ${esc(c.bank)}">${I.trash}</button></div>`;
+      <span class="bankbtns"><button class="btn sm" data-a="bankMap" data-id="${c.id}">Accounts</button>${days < 30 ? `<button class="btn sm" data-a="bankLink" data-bank="${esc(c.bank)}">Reconnect</button>` : ''}<button class="ibtn" data-a="bankRemove" data-id="${c.id}" aria-label="Disconnect ${esc(c.bank)}">${I.trash}</button></span></div>`;
   }).join('');
   return `<div class="sec-t"><span>Bank Connections</span></div><div class="card">${rows}
     ${pendList().length ? (setTimeout(bankWatchPending, 0), '') + `<div class="li"><span class="ic">${I.sync}</span><span class="grow"><strong>Waiting for ${esc(pendList().slice(-1)[0].bank)}…</strong><div class="small muted">Finish the login at your bank, then come back here.</div></span><button class="btn sm" data-a="bankCheck">Check now</button><button class="btn sm" data-a="bankCancel">Cancel</button></div>` : ''}
